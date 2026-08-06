@@ -107,17 +107,52 @@ export function emit(event, data) {
 
 /* ---------- 设置读写（带默认值） ---------- */
 const DEFAULT_SETTINGS = {
-  theme: 'dark',            // dark | light | auto
+  theme: 'auto',            // dark | light | auto（默认跟随系统）
   lang: 'zh-CN',
   readerFontSize: 17,
   readerLineHeight: 1.7,
-  readerTheme: 'night',     // day | night | eye | paper
+  readerTheme: 'night',     // day | night | eye | paper | blue | green
   readerFlip: 'slide',      // slide | cover | sim | none | scroll
-  comicMode: 'gallery',     // gallery | scroll
+  comicMode: 'gallery',     // gallery | scroll（旧键，与 comicLayout 同步）
   comicDir: 'ltr',          // ltr | rtl
   proxyMode: 'auto',        // auto | backend | direct
   proxyUrl: '',             // 自建后端代理地址
   ttsRate: 1.0,
+
+  /* ---- v1.5 语音引擎 ---- */
+  ttsEngine: 'system',      // system | xiaomi | volc | edge
+  ttsCustomUrl: '',
+  asrEngine: 'system',      // system | custom
+  asrCustomUrl: '',
+
+  /* ---- v1.5 小说阅读 ---- */
+  readerFont: 'system',     // system | serif | sans | kai
+  readerFontWeight: 400,    // 300 | 400 | 600
+  readerPadding: 20,
+  readerParaGap: 0.6,       // em
+  readerTextColor: '',      // 自定义文字色（空 = 跟随主题）
+  readerBgColor: '',        // 自定义背景色
+  readerBrightness: 1.0,
+  readerFullscreen: false,
+  readerVolumeFlip: false,
+  readerAutoScroll: 0,      // 0=关闭，否则 px/s
+  readerIllust: true,       // 插图小说：显示正文插图
+  readerTapFlip: true,
+  readerInfoBar: true,
+
+  /* ---- v1.5 漫画阅读 ---- */
+  comicLayout: 'paged',     // paged 单页 | webtoon 条漫 | double 双页
+  comicFit: 'width',        // width | height | original
+  comicGap: true,
+  comicBrightness: 1.0,
+  comicCropBorder: false,
+  comicPreload: 3,
+
+  /* ---- v1.5 多端导航 ---- */
+  navDesktop: 'bottom',     // top | bottom | fold
+  navMobile: 'bottom',      // top | bottom
+  navWatch: 'bottom',       // top | bottom
+  aiDrawerSide: 'left',     // AI 抽屉拉出方向
 };
 
 export async function getSetting(k) {

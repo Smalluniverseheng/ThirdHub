@@ -1,10 +1,11 @@
 /* ===== ThirdHub app.js — 应用入口 / 路由 / 初始化 ===== */
-export const APP_VERSION = '1.0';
+export const APP_VERSION = '1.1';
 
 import { $, $$, icon, toast } from './ui.js';
 import { getSetting, setSetting, on, emit, openDB } from './store.js';
 import { initCloud } from './supabase.js';
 import { initAuth } from './auth.js';
+import { initSync } from './engine/sync-service.js';
 import { checkUpdate } from './update-checker.js';
 import { renderDiscover } from './modules/discover.js';
 import { renderAIChat } from './modules/ai-chat.js';
@@ -96,6 +97,7 @@ async function boot() {
   initSW();
   try { await initCloud(); } catch (e) { console.warn('cloud 初始化失败', e); }
   try { await initAuth(); } catch (e) { console.warn('auth 初始化失败', e); }
+  try { initSync(); } catch (e) { console.warn('sync 初始化失败', e); }
 
   $$('#tabbar .tab').forEach((b) => {
     b.addEventListener('click', () => switchTab(b.dataset.tab));

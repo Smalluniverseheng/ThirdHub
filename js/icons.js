@@ -66,6 +66,15 @@ const ICONS = {
   moon: P('<path d="M20 13.5A8 8 0 0 1 10.5 4 8 8 0 1 0 20 13.5z"/>'),
   sun: P('<circle cx="12" cy="12" r="4.5"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6l1.4 1.4M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4L6 18M18 6l1.4-1.4"/>'),
   wifi: P('<path d="M2.5 9a15 15 0 0 1 19 0M5.5 12.5a10 10 0 0 1 13 0M8.5 16a5 5 0 0 1 7 0"/><circle cx="12" cy="19" r="1.2" fill="currentColor" stroke="none"/>'),
+  menu: P('<path d="M4 7h16M4 12h16M4 17h16"/>'),
+  cpu: P('<rect x="6" y="6" width="12" height="12" rx="2"/><rect x="10" y="10" width="4" height="4"/><path d="M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3"/>'),
+  camera: P('<path d="M4 8h3l2-2.5h6L17 8h3a1.5 1.5 0 0 1 1.5 1.5V18a1.5 1.5 0 0 1-1.5 1.5H4A1.5 1.5 0 0 1 2.5 18V9.5A1.5 1.5 0 0 1 4 8z"/><circle cx="12" cy="13.5" r="3.2"/>'),
+  file: P('<path d="M6 3h8l4 4v13a1.5 1.5 0 0 1-1.5 1.5h-10A1.5 1.5 0 0 1 5 20V4.5A1.5 1.5 0 0 1 6.5 3z"/><path d="M14 3v4h4"/>'),
+  brush: P('<path d="M9.5 13.5L17 6l1.5 1.5-7.5 7.5"/><path d="M4 20c2.5 0 4-1 4.5-2.5l-2-2C5 16 4 17.5 4 20z"/>'),
+  clear: P('<path d="M5 8h14M10 8V5.5h4V8M7 8l1 12.5h8L17 8"/>'),
+  game: P('<path d="M6.5 8h11a4.5 4.5 0 0 1 4.4 5.4l-.9 4A3 3 0 0 1 16 19.6l-1.8-2.1H9.8L8 19.6a3 3 0 0 1-5-2.2l-.9-4A4.5 4.5 0 0 1 6.5 8z"/><path d="M8 11v3M6.5 12.5h3"/><circle cx="15.5" cy="11.5" r=".9" fill="currentColor" stroke="none"/><circle cx="17.5" cy="13.5" r=".9" fill="currentColor" stroke="none"/>'),
+  phone: P('<rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M10.5 5h3"/><circle cx="12" cy="18" r="1" fill="currentColor" stroke="none"/>'),
+  rocket: P('<path d="M12 15c-1.5-1-2.5-2-3-3 .8-3.5 2.6-6.6 6-8 1.5-.7 3.4-1 5-1 0 1.6-.3 3.5-1 5-1.4 3.4-4.5 5.2-8 6z"/><path d="M9 12c-2 .5-3.5 2-4 5 3-.5 4.5-2 5-4"/><circle cx="14.5" cy="9.5" r="1.4"/>'),
 };
 
 export function icon(name, filled = false) {

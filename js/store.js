@@ -16,7 +16,24 @@ const STORES = ['kv', 'sources', 'shelf', 'history', 'favorites', 'chats', 'cach
 
 let _db = null;
 
+/* 内存降级：隐私模式 / 内嵌 WebView 等 IndexedDB 不可用时保证应用可用（数据不持久化） */
+const MEM_MODE = typeof indexedDB === 'undefined' || /[?&]mem=1/.test(location.search || '');
+const MEM = {};
+const memKey = (store, val) => {
+  const kp = { kv: 'k', sources: 'id', shelf: 'id', history: 'id', favorites: 'id', chats: 'id', cache: 'k' }[store] || 'id';
+  return val && typeof val === 'object' ? val[kp] : val;
+};
+const memDb = {
+  get: async (s, k) => (MEM[s] || (MEM[s] = new Map())).get(k),
+  put: async (s, v) => (MEM[s] || (MEM[s] = new Map())).set(memKey(s, v), v),
+  del: async (s, k) => (MEM[s] || (MEM[s] = new Map())).delete(k),
+  all: async (s) => [...(MEM[s] || (MEM[s] = new Map())).values()],
+  clear: async (s) => (MEM[s] = new Map()),
+  byIndex: async (s, idx, v) => [...(MEM[s] || (MEM[s] = new Map())).values()].filter((x) => x[idx] === v),
+};
+
 export function openDB() {
+  if (MEM_MODE) return Promise.resolve(null);
   if (_db) return Promise.resolve(_db);
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
@@ -56,7 +73,7 @@ function reqVal(req) {
   });
 }
 
-export const db = {
+export const db = MEM_MODE ? memDb : {
   async get(store, key) { const db = await openDB(); return reqVal(db.transaction(store).objectStore(store).get(key)); },
   async put(store, val) { const db = await openDB(); return reqVal(db.transaction(store, 'readwrite').objectStore(store).put(val)); },
   async del(store, key) { const db = await openDB(); return reqVal(db.transaction(store, 'readwrite').objectStore(store).delete(key)); },

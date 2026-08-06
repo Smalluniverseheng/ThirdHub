@@ -3,6 +3,7 @@ export const APP_VERSION = '1.0';
 
 import { $, $$, icon, toast } from './ui.js';
 import { getSetting, setSetting, on, emit, openDB } from './store.js';
+import { initCloud } from './supabase.js';
 import { initAuth } from './auth.js';
 import { checkUpdate } from './update-checker.js';
 import { renderDiscover } from './modules/discover.js';
@@ -67,10 +68,8 @@ export function refreshTab(tab) {
 
 /* ---------- 图标注入 ---------- */
 function injectTabIcons() {
-  const map = { compass: 'compass', robot: 'robot', books: 'books', grid: 'grid', user: 'user' };
   $$('#tabbar .tab-ico').forEach((s) => {
-    const name = s.dataset.ico;
-    if (map[name]) s.innerHTML = icon(map[name]);
+    s.innerHTML = icon(s.dataset.ico);
   });
 }
 
@@ -95,6 +94,7 @@ async function boot() {
   injectTabIcons();
   await initTheme();
   initSW();
+  try { await initCloud(); } catch (e) { console.warn('cloud 初始化失败', e); }
   try { await initAuth(); } catch (e) { console.warn('auth 初始化失败', e); }
 
   $$('#tabbar .tab').forEach((b) => {
@@ -104,7 +104,6 @@ async function boot() {
   const startTab = (location.hash || '').replace('#', '');
   await switchTab(TABS.includes(startTab) ? startTab : 'discover');
 
-  // 延迟检查更新（不阻塞启动）
   setTimeout(() => checkUpdate().catch(() => {}), 3000);
 
   window.__THIRDHUB__ = { version: APP_VERSION, switchTab, refreshTab };

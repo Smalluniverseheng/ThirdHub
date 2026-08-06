@@ -1,8 +1,8 @@
 {
-  "version": "1.2",
+  "version": "1.3",
   "type": "optional",
-  "title": "ThirdHub v1.2",
-  "content": "修复宽屏设备导航栏位置问题：所有设备统一为底部导航",
+  "title": "ThirdHub v1.3",
+  "content": "AI 厂商图标升级为官方品牌图标；配套安卓版 v1.3 发布（开屏动画 / 滑动手势 / 自动更新）",
   "downloadUrl": "",
   "releaseDate": "2026-08-06"
 }

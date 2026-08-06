@@ -87,8 +87,31 @@ export function refreshTab(tab) {
 export async function rebuildTabs(preferTab = null) {
   const tabs = await loadEnabledTabs();
   buildChrome(tabs);
+  await applyNavPos();
   await switchTab(preferTab && tabs.includes(preferTab) ? preferTab : tabs[0], true);
 }
+
+/* ---------- 多端导航位置（桌面 / 移动 / 手表 · 个性化设置） ---------- */
+const isWatchScreen = () => screen.width < 380 && 'ontouchstart' in window;
+const isMobileScreen = () => /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) && !isWatchScreen();
+export async function applyNavPos() {
+  const key = isWatchScreen() ? 'navWatch' : isMobileScreen() ? 'navMobile' : 'navDesktop';
+  const pos = await getSetting(key);
+  document.body.dataset.navpos = pos || 'bottom';
+  // 桌面端「可折叠」：底部悬浮折叠钮
+  $('#tab-fold-handle')?.remove();
+  if (pos === 'fold' && !isMobileScreen() && !isWatchScreen()) {
+    const h = document.createElement('button');
+    h.id = 'tab-fold-handle';
+    h.title = '折叠 / 展开导航栏';
+    h.innerHTML = icon('menu');
+    h.onclick = () => document.body.classList.toggle('nav-folded');
+    document.body.appendChild(h);
+  } else {
+    document.body.classList.remove('nav-folded');
+  }
+}
+window.addEventListener('th:navpos', applyNavPos);
 
 /* ---------- Service Worker ---------- */
 function initSW() {
@@ -124,6 +147,7 @@ async function boot() {
 
   const tabs = await loadEnabledTabs();
   buildChrome(tabs);
+  await applyNavPos();
 
   const startTab = (location.hash || '').replace('#', '');
   await switchTab(tabs.includes(startTab) || startTab === 'profile' ? startTab : tabs[0]);

@@ -161,7 +161,7 @@ export async function refreshFreeModels() {
   try {
     const { getSupabase, hasCloud } = await import('../supabase.js');
     if (!hasCloud()) return;
-    const { data } = await getSupabase().from('configs').select('value').eq('key', 'free_models').maybeSingle();
+    const { data } = await getSupabase().from('th_configs').select('value').eq('key', 'free_models').maybeSingle();
     if (data && data.value) await kvSet('ai:free-models', JSON.parse(data.value));
   } catch (e) {}
 }

@@ -1,8 +1,8 @@
 {
-  "version": "1.0",
+  "version": "1.1",
   "type": "optional",
-  "title": "ThirdHub v1.0",
-  "content": "首个版本发布",
+  "title": "ThirdHub v1.1",
+  "content": "新增本地书籍导入（TXT/EPUB）与云端同步（书架/历史/收藏/阅读进度多设备合并）",
   "downloadUrl": "",
   "releaseDate": "2026-08-06"
 }

@@ -1,0 +1,43 @@
+/* ===== ThirdHub novel-reader.css — 小说阅读器 ===== */
+.nr-overlay { background: var(--reader-bg); }
+.nr-top {
+  display: flex; align-items: center; gap: 10px;
+  padding: calc(10px + env(safe-area-inset-top)) 14px 10px;
+  flex-shrink: 0;
+}
+.nr-top .icon-btn { background: rgba(128,128,128,.12); box-shadow: none; color: inherit; }
+.nr-body {
+  flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  padding: 8px 22px 40px;
+  font-size: 17px; line-height: 1.7;
+}
+.nr-chapter-title { font-size: 1.25em; font-weight: 800; margin: 12px 0 22px; }
+.nr-p { margin-bottom: 1em; text-indent: 2em; }
+.nr-bottom {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+  flex-shrink: 0;
+}
+.nr-nav {
+  padding: 9px 20px; border-radius: 999px;
+  background: rgba(128,128,128,.12); font-size: 14px;
+  color: inherit; transition: opacity .15s;
+}
+.nr-nav:active { opacity: .6; }
+.nr-catalog {
+  position: absolute; top: 0; left: 0; bottom: 0; width: min(320px, 82vw);
+  background: var(--bg-elevated); z-index: 30; overflow-y: auto;
+  box-shadow: 4px 0 24px rgba(0,0,0,.3);
+  animation: cat-in .24s ease;
+}
+@keyframes cat-in { from { transform: translateX(-40%); opacity: 0; } }
+.nr-catalog-head { position: sticky; top: 0; padding: 16px; font-weight: 700; font-size: 15px; background: var(--bg-elevated); border-bottom: 1px solid var(--border); z-index: 2; }
+.nr-catalog-item {
+  display: block; width: 100%; text-align: left;
+  padding: 12px 16px; font-size: 14px; color: var(--text-secondary);
+  border-bottom: 1px solid var(--border);
+}
+.nr-catalog-item.on { color: var(--primary); font-weight: 700; background: rgba(59,91,253,.08); }
+.nr-theme-dot { width: 44px; height: 44px; border-radius: 12px; border: 2px solid var(--border); transition: transform .15s; }
+.nr-theme-dot:active { transform: scale(.9); }
+input[type="range"] { accent-color: var(--primary); }

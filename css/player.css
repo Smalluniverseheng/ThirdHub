@@ -1,0 +1,70 @@
+/* ===== ThirdHub player.css — 视频/音频播放器 ===== */
+.vp-overlay { background: #000; }
+.vp-stage { position: relative; flex: 1; background: #000; display: flex; align-items: center; }
+.vp-video { width: 100%; max-height: 100%; }
+.vp-top {
+  position: absolute; top: 0; left: 0; right: 0;
+  display: flex; align-items: center; gap: 10px;
+  padding: calc(10px + env(safe-area-inset-top)) 14px 10px;
+  background: linear-gradient(rgba(0,0,0,.65), transparent);
+}
+.vp-top .icon-btn { background: rgba(255,255,255,.14); color: #fff; box-shadow: none; }
+.vp-controls {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  padding: 10px 16px calc(14px + env(safe-area-inset-bottom));
+  background: linear-gradient(transparent, rgba(0,0,0,.75));
+}
+.vp-progress-row { display: flex; align-items: center; gap: 10px; }
+.vp-seek { flex: 1; accent-color: var(--primary); }
+.vp-time { color: rgba(255,255,255,.8); font-size: 11px; min-width: 40px; text-align: center; font-variant-numeric: tabular-nums; }
+.vp-btn-row { display: flex; align-items: center; justify-content: space-around; margin-top: 8px; }
+.vp-btn {
+  min-width: 44px; height: 44px; border-radius: 50%;
+  display: grid; place-items: center; color: #fff;
+  font-size: 13px; font-weight: 600;
+  transition: transform .15s, background .2s;
+}
+.vp-btn:active { transform: scale(.85); background: rgba(255,255,255,.12); }
+.vp-btn svg { width: 24px; height: 24px; }
+.vp-play { background: var(--primary); width: 56px; height: 56px; box-shadow: 0 4px 16px rgba(59,91,253,.5); }
+.vp-episodes {
+  position: absolute; right: 0; top: 0; bottom: 0; width: min(300px, 78vw);
+  background: rgba(18,20,28,.97); z-index: 25; overflow-y: auto;
+  animation: cat-in-r .24s ease;
+}
+@keyframes cat-in-r { from { transform: translateX(40%); opacity: 0; } }
+.vp-ep-head { position: sticky; top: 0; padding: 16px; font-weight: 700; color: #fff; background: rgba(18,20,28,.97); border-bottom: 1px solid rgba(255,255,255,.08); z-index: 2; }
+.vp-ep-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 12px; }
+.vp-ep {
+  padding: 10px 4px; border-radius: 8px; font-size: 12px;
+  background: rgba(255,255,255,.08); color: #cfd4e2;
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
+.vp-ep.on { background: var(--primary); color: #fff; font-weight: 700; }
+
+/* 音频播放器 */
+.ap-overlay { background: linear-gradient(180deg, #1a1d2e 0%, var(--bg-page) 60%); }
+.ap-top { display: flex; align-items: center; gap: 10px; padding: calc(10px + env(safe-area-inset-top)) 14px 10px; }
+.ap-main { padding: 12px 28px 8px; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.ap-cover {
+  width: min(220px, 56vw); aspect-ratio: 1; border-radius: 20px;
+  background: var(--bg-card); display: grid; place-items: center;
+  box-shadow: 0 12px 40px rgba(0,0,0,.4); overflow: hidden;
+  color: var(--text-tertiary);
+}
+.ap-cover img { width: 100%; height: 100%; object-fit: cover; }
+.ap-cover svg { width: 64px; height: 64px; }
+.ap-track { font-size: 16px; font-weight: 700; max-width: 100%; }
+.ap-progress-row { display: flex; align-items: center; gap: 10px; width: 100%; }
+.ap-controls { display: flex; align-items: center; justify-content: space-around; width: 100%; }
+.ap-controls .vp-btn { color: var(--text-primary); }
+.ap-play { background: var(--primary); color: #fff !important; width: 60px; height: 60px; box-shadow: 0 6px 20px rgba(59,91,253,.45); }
+.ap-list { flex: 1; overflow-y: auto; padding: 8px 16px calc(16px + env(safe-area-inset-bottom)); }
+.ap-list .vp-ep-head { background: transparent; color: var(--text-primary); border-color: var(--border); padding: 10px 4px; }
+.ap-item {
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+  padding: 12px 10px; border-radius: 10px; font-size: 14px;
+  color: var(--text-secondary);
+}
+.ap-item.on { color: var(--primary); font-weight: 700; background: rgba(59,91,253,.08); }
+.ap-item-idx { width: 26px; text-align: center; color: var(--text-tertiary); font-size: 12px; flex-shrink: 0; }

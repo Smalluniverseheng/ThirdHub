@@ -1,5 +1,6 @@
-/* ===== ThirdHub ui.js — Toast / Modal / 覆盖层 / 工具函数 ===== */
+/* ===== ThirdHub js/ui.js — Toast / Modal / 覆盖层 / 工具函数 ===== */
 import { icon } from './icons.js';
+export { icon } from './icons.js';
 
 export const $ = (s, el = document) => el.querySelector(s);
 export const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -16,6 +17,7 @@ export function debounce(fn, ms = 300) {
 }
 export function fmtBytes(n) {
   if (!n || n <= 0) return '0 B';
+  if (n === Infinity) return '无限';
   const u = ['B', 'KB', 'MB', 'GB', 'TB']; let i = 0;
   while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
   return n.toFixed(n >= 100 ? 0 : 1) + ' ' + u[i];
@@ -84,7 +86,6 @@ export function confirmDialog(title, text, okText = '确定', danger = false) {
 }
 
 export function actionSheet(title, actions) {
-  // actions: [{label, icon?, danger?, value}]
   return new Promise((resolve) => {
     const wrap = el(`<div class="col gap8"></div>`);
     actions.forEach((a) => {

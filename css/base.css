@@ -165,3 +165,68 @@ textarea.input { resize: none; line-height: 1.6; }
 /* SVG 图标基础 */
 svg.ico { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
 svg.ico.fill { fill: currentColor; stroke: none; }
+
+/* ===== 首次启动引导（v1.4） ===== */
+.ob {
+  position: fixed; inset: 0; z-index: 9500;
+  background: var(--bg-page);
+  display: flex; align-items: center; justify-content: center;
+  overflow-y: auto;
+  animation: fade-in .25s ease;
+}
+.ob.ob-out { opacity: 0; transition: opacity .25s ease; }
+.ob-inner {
+  width: 100%; max-width: 420px; padding: 40px 26px calc(30px + env(safe-area-inset-bottom));
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+}
+.ob-wide { max-width: 560px; }
+.ob-hero {
+  width: 120px; height: 120px; border-radius: 34px;
+  display: grid; place-items: center; color: #fff;
+  background: linear-gradient(135deg, var(--ob-accent, var(--primary)), color-mix(in srgb, var(--ob-accent, var(--primary)) 55%, #000));
+  box-shadow: 0 16px 40px color-mix(in srgb, var(--ob-accent, var(--primary)) 40%, transparent);
+  margin-bottom: 26px; animation: pop-in .3s ease;
+}
+.ob-hero-ico, .ob-hero svg { width: 58px; height: 58px; }
+.ob-logo {
+  width: 76px; height: 76px; border-radius: 24px;
+  display: grid; place-items: center; color: #fff;
+  background: linear-gradient(135deg, var(--primary), var(--primary-deep));
+  box-shadow: 0 12px 30px rgba(59,91,253,.35);
+  margin-bottom: 20px;
+}
+.ob-logo svg { width: 38px; height: 38px; }
+.ob-title { font-size: 23px; font-weight: 800; margin-bottom: 12px; }
+.ob-desc { font-size: 13.5px; color: var(--text-secondary); line-height: 1.9; margin-bottom: 26px; }
+.ob-dots { display: flex; gap: 7px; margin-bottom: 26px; }
+.ob-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--bg-input); transition: all .2s; }
+.ob-dot.on { width: 20px; border-radius: 99px; background: var(--primary); }
+.ob-btn { width: 100%; max-width: 300px; padding: 13px; font-size: 15px; border-radius: 14px; }
+.ob-skip { margin-top: 16px; font-size: 13px; color: var(--text-tertiary); padding: 6px 12px; }
+.ob-form { width: 100%; max-width: 320px; display: flex; flex-direction: column; gap: 10px; }
+.ob-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 100%; margin-bottom: 16px; }
+@media (max-width: 400px) { .ob-grid { grid-template-columns: repeat(2, 1fr); } }
+.ob-board {
+  position: relative;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 5px;
+  padding: 13px 12px; border-radius: 14px; text-align: left;
+  background: var(--bg-card); border: 1.5px solid var(--border);
+  transition: all .15s;
+}
+.ob-board.on { border-color: var(--primary); background: rgba(59,91,253,.08); }
+.ob-board-ico { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: var(--bg-input); color: var(--text-secondary); }
+.ob-board.on .ob-board-ico { background: rgba(59,91,253,.16); color: var(--primary); }
+.ob-board-ico svg { width: 19px; height: 19px; }
+.ob-board-name { font-size: 13.5px; font-weight: 700; color: var(--text-primary); }
+.ob-board-desc { font-size: 10.5px; color: var(--text-tertiary); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ob-board-check {
+  position: absolute; top: 8px; right: 8px;
+  width: 19px; height: 19px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--primary); color: #fff;
+  opacity: 0; transform: scale(.5); transition: all .15s;
+}
+.ob-board.on .ob-board-check { opacity: 1; transform: scale(1); }
+.ob-board-check svg { width: 11px; height: 11px; }
+.ob-count { font-size: 12.5px; color: var(--text-tertiary); margin-bottom: 14px; }
+.ob-count b { color: var(--primary); }

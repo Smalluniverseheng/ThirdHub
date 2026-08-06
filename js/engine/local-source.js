@@ -113,7 +113,7 @@ export async function importLocalBook(file) {
     type: 'novel',
     title, author,
     coverUrl: '',
-    bookUrl: 'local:' + bookId,
+    bookUrl: bookId,
     sourceName: '本地导入',
     addedAt: Date.now(),
     top: false,
@@ -126,13 +126,19 @@ export async function getLocalBook(bookUrl) {
   if (!row) throw new Error('本地书籍不存在（可能已被清理缓存删除）');
   return row.v;
 }
+export async function localBookInfo(bookUrl) {
+  const book = await getLocalBook(bookUrl);
+  return { name: book.title, author: book.author || '', intro: '本地文件：' + (book.fileName || '未知文件'), lastUpdate: '' };
+}
 export async function localChapterList(bookUrl) {
   const book = await getLocalBook(bookUrl);
-  return book.chapters.map((c, i) => ({ name: c.name, url: String(i), index: i }));
+  return book.chapters.map((c, i) => ({ name: c.name, url: bookUrl + '#' + i, index: i }));
 }
-export async function localChapterContent(bookUrl, chapterUrl) {
+export async function localChapterContent(chapterUrl) {
+  const hash = chapterUrl.lastIndexOf('#');
+  const bookUrl = hash > -1 ? chapterUrl.slice(0, hash) : chapterUrl;
+  const i = parseInt(hash > -1 ? chapterUrl.slice(hash + 1) : chapterUrl, 10);
   const book = await getLocalBook(bookUrl);
-  const i = parseInt(chapterUrl, 10);
   if (!book.chapters[i]) throw new Error('章节不存在');
   return book.chapters[i].content;
 }

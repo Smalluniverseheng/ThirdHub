@@ -30,4 +30,12 @@ export const CHANGELOG = [
       '细节优化',
     ],
   },
+  {
+    version: '1.3',
+    date: '2026-08-06',
+    items: [
+      'AI 厂商图标全部升级为官方品牌图标（Simple Icons 官方字形 + 彩色官方 Logo CDN）',
+      '配套安卓版 v1.3：开屏动画、OmniHub 式左右滑动手势会话、应用内自动更新',
+    ],
+  },
 ];

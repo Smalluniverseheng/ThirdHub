@@ -1,11 +1,7 @@
-/* ===== ThirdHub js/engine/worker.js — Web Worker 沙箱 =====
-   用户导入的连接器脚本（.js）在此隔离执行。
-   注入 legado API：http / dom / base64 / hash / url / json / log / config
-   限制：无 DOM 文档访问、无本地文件系统、网络请求经代理策略管控 */
-
+/* ===== ThirdHub js/engine/worker.js — Web Worker 沙箱（修正版） ===== */
 'use strict';
 
-/* ---------- 哈希实现（纯 JS，无依赖） ---------- */
+/* ---------- 哈希实现 ---------- */
 function md5cycle(x, k) {
   let a = x[0], b = x[1], c = x[2], d = x[3];
   const ff = (a, b, c, d, x, s, t) => cmn((b & c) | (~b & d), a, b, x, s, t);
@@ -68,11 +64,10 @@ async function rawFetch(url, options = {}) {
     redirect: 'follow',
   });
   const text = await resp.text();
-  return { status: resp.status, body: text, headers: {}, url: resp.url };
+  return { status: resp.status, body: text, url: resp.url };
 }
 
 async function httpRequest(url, options = {}) {
-  // 1. 后端代理
   if (PROXY.backend && PROXY.mode !== 'direct') {
     try {
       const resp = await fetch(PROXY.backend + (PROXY.backend.includes('?') ? '&' : '?') + 'url=' + encodeURIComponent(url), {
@@ -80,23 +75,19 @@ async function httpRequest(url, options = {}) {
         headers: options.body ? { 'Content-Type': 'application/octet-stream' } : {},
         body: options.body ? JSON.stringify({ body: options.body, headers: options.headers }) : undefined,
       });
-      if (resp.ok) return { status: resp.status, body: await resp.text(), headers: {}, url };
+      if (resp.ok) return { status: resp.status, body: await resp.text(), url };
     } catch (e) {}
   }
-  // 2. 直接请求
   try { return await rawFetch(url, options); } catch (e) {}
-  // 3. 公共 CORS 代理
   if (PROXY.mode !== 'direct') {
     for (const p of PROXY.publics) {
-      try {
-        return await rawFetch(p.replace(/\/?$/, '/') + encodeURIComponent(url), options);
-      } catch (e) {}
+      try { return await rawFetch(p + encodeURIComponent(url), options); } catch (e) {}
     }
   }
   throw new Error('网络请求失败：' + url);
 }
 
-/* ---------- DOM 解析（Worker 内置 DOMParser） ---------- */
+/* ---------- DOM 解析 ---------- */
 const domApi = {
   parse(html) { return new DOMParser().parseFromString(String(html), 'text/html'); },
   select(doc, selector) { return doc.querySelector(selector); },
@@ -106,15 +97,11 @@ const domApi = {
   attr(el, name) { return el ? (el.getAttribute(name) || '') : ''; },
 };
 
-/* ---------- JSONPath（简化实现：a.b[0].c） ---------- */
 function jsonPath(obj, path) {
   try {
     const parts = String(path).replace(/^\$\.?/, '').replace(/\[(\d+)\]/g, '.$1').split('.').filter(Boolean);
     let cur = obj;
-    for (const p of parts) {
-      if (cur == null) return null;
-      cur = cur[p];
-    }
+    for (const p of parts) { if (cur == null) return null; cur = cur[p]; }
     return cur;
   } catch (e) { return null; }
 }
@@ -129,9 +116,7 @@ const legado = {
   dom: domApi,
   base64Encode: (s) => btoa(unescape(encodeURIComponent(String(s)))),
   base64Decode: (s) => decodeURIComponent(escape(atob(String(s)))),
-  md5,
-  sha1,
-  sha256,
+  md5, sha1, sha256,
   urlEncode: (s) => encodeURIComponent(String(s)),
   urlDecode: (s) => decodeURIComponent(String(s)),
   jsonPath,
@@ -149,34 +134,37 @@ const legado = {
 
 /* ---------- 消息处理 ---------- */
 let loaded = false;
+const FN_NAMES = ['search', 'bookInfo', 'chapterList', 'chapterContent'];
 
 onmessage = async (e) => {
   const { type, id } = e.data;
   try {
     if (type === 'init') {
       PROXY = e.data.proxy || PROXY;
-      postMessage({ type: 'inited' });
+      postMessage({ type: 'inited', id });
       return;
     }
     if (type === 'load') {
-      const fn = new Function('legado', e.data.code + '\n;return {meta: (typeof SRC_META !== "undefined") ? SRC_META : null};');
-      // 元信息注释解析
       const meta = {};
-      String(e.data.code).split('\n').forEach((line) => {
+      String(e.data.code).split('\n').slice(0, 40).forEach((line) => {
         const m = line.match(/^\s*\/\/\s*@([\w-]+)\s+(.+)$/);
         if (m) meta[m[1].toLowerCase()] = m[2].trim();
       });
-      fn(legado);
+      // 在全局作用域执行，函数挂载到 self 上
+      const runner = new Function('legado', 'self',
+        e.data.code +
+        '\n;self.__srcFns = {};' +
+        FN_NAMES.map((n) => `if (typeof ${n} === 'function') self.__srcFns.${n} = ${n};`).join(''));
+      runner(legado, self);
+      if (!self.__srcFns || !self.__srcFns.search) throw new Error('连接器缺少 search() 函数');
       loaded = true;
       postMessage({ type: 'loaded', id, meta });
       return;
     }
     if (type === 'call') {
-      if (!loaded) throw new Error('书源未加载');
-      const fnName = e.data.fn;
-      const fn = self.__srcFns && self.__srcFns[fnName];
-      const target = fn || self[fnName];
-      if (typeof target !== 'function') throw new Error('书源缺少函数：' + fnName);
+      if (!loaded) throw new Error('连接器未加载');
+      const target = self.__srcFns[e.data.fn];
+      if (typeof target !== 'function') throw new Error('连接器缺少函数：' + e.data.fn);
       const result = await target(...(e.data.args || []));
       postMessage({ type: 'result', id, result: result === undefined ? null : result });
       return;

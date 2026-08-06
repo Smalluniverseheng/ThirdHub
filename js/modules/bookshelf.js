@@ -1,7 +1,9 @@
 /* ===== ThirdHub js/modules/bookshelf.js — 书架页（书架/历史/收藏/圈子） ===== */
 import { $, $$, esc, icon, toast, actionSheet, confirmDialog, fmtDate } from '../ui.js';
-import { db, kvGet, kvSet, on } from '../store.js';
+import { db, kvGet, kvSet, on, emit } from '../store.js';
 import { removeFromShelf } from '../engine/content-service.js';
+import { importLocalBook, deleteLocalBook } from '../engine/local-source.js';
+import { pushRow } from '../engine/sync-service.js';
 import { getSource } from '../engine/source-service.js';
 import { openDetail } from './detail.js';
 
@@ -60,9 +62,11 @@ export async function renderBookshelf(page) {
   };
   $('[data-a="more"]', page).onclick = async () => {
     const v = await actionSheet('书架管理', [
+      { label: '导入本地书籍（TXT / EPUB）', value: 'import-local', icon: 'import' },
       { label: '多选编辑', value: 'select', icon: 'check' },
       { label: '清空历史记录', value: 'clear-history', icon: 'trash', danger: true },
     ]);
+    if (v === 'import-local') importLocalFlow();
     if (v === 'select') enterSelectMode();
     if (v === 'clear-history') {
       if (await confirmDialog('清空历史', '确定清空所有历史记录吗？', '清空', true)) {
@@ -72,6 +76,28 @@ export async function renderBookshelf(page) {
       }
     }
   };
+
+  function importLocalFlow() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.txt,.epub,text/plain';
+    input.onchange = async () => {
+      const f = input.files && input.files[0];
+      if (!f) return;
+      try {
+        toast('正在导入，请稍候…');
+        const item = await importLocalBook(f);
+        await db.put('shelf', item);
+        pushRow('shelf', item);
+        emit('shelf:changed');
+        activeTab = 'shelf';
+        toast('已导入《' + item.title + '》', 'ok');
+      } catch (e) {
+        toast('导入失败：' + e.message, 'err');
+      }
+    };
+    input.click();
+  }
 
   function enterSelectMode() {
     selectMode = true;
@@ -94,7 +120,10 @@ export async function renderBookshelf(page) {
     if (!selected.size) return toast('请先选择条目');
     if (!(await confirmDialog('删除', `确定删除 ${selected.size} 个条目吗？`, '删除', true))) return;
     const storeName = activeTab === 'history' ? 'history' : activeTab === 'favorites' ? 'favorites' : 'shelf';
-    for (const id of selected) await db.del(storeName, id);
+    for (const id of selected) {
+      await db.del(storeName, id);
+      if (id.startsWith('local:')) deleteLocalBook(id.slice(6)).catch(() => {});
+    }
     exitSelectMode();
     toast('已删除', 'ok');
   };
@@ -143,7 +172,7 @@ export async function renderBookshelf(page) {
       box.innerHTML = `<div class="empty">
         <div class="empty-ico">${icon(TABS.find((t) => t.id === activeTab).icon)}</div>
         <div class="empty-title">${activeTab === 'shelf' ? '书架空空如也' : activeTab === 'history' ? '暂无历史记录' : '暂无收藏'}</div>
-        <div class="muted">${activeTab === 'shelf' ? '去「发现」页搜索并收藏一些内容吧' : ''}</div>
+        <div class="muted">${activeTab === 'shelf' ? '去「发现」页搜索收藏内容，或点右上角导入本地书籍' : ''}</div>
       </div>`;
       return;
     }

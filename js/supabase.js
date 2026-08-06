@@ -25,9 +25,11 @@ async function loadLib() {
   return window.supabase;
 }
 
+const DEFAULT_CLOUD = { url: 'https://mxvxlgjzeboktufumxbp.supabase.co', anon: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im14dnhsZ2p6ZWJva3R1ZnVteGJwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQzODM5OTcsImV4cCI6MjA5OTk1OTk5N30.QjSLfYAFhwX72YSeAcbTN5O2_PDLaNcv76HhdGJsqpo' };
+
 export async function initCloud() {
-  const url = await kvGet('cloud:url', '');
-  const key = await kvGet('cloud:anonKey', '');
+  const url = (await kvGet('cloud:url', '')) || DEFAULT_CLOUD.url;
+  const key = (await kvGet('cloud:anonKey', '')) || DEFAULT_CLOUD.anon;
   if (!url || !key) { _ready = false; return false; }
   try {
     const lib = await loadLib();
@@ -50,15 +52,17 @@ export async function configureCloud(url, anonKey) {
 }
 
 /* ---------- 通用同步表读写（带版本号防冲突） ---------- */
-const SYNC_TABLES = ['bookshelf', 'reading_progress', 'history', 'favorites'];
+const SYNC_TABLES = ['th_bookshelf', 'th_reading_progress', 'th_history', 'th_favorites'];
 
-export async function syncPush(table, row) {
+export async function syncPush(table, row, userId) {
   if (!hasCloud()) return false;
   if (!SYNC_TABLES.includes(table)) return false;
   try {
-    row.updated_at = new Date().toISOString();
-    row.version = (row.version || 0) + 1;
-    const { error } = await _sb.from(table).upsert(row);
+    const { data: sess } = await _sb.auth.getSession();
+    const uid = userId || (sess && sess.session && sess.session.user.id);
+    if (!uid) return false;
+    const payload = { user_id: uid, id: row.id, data: row.data || row, updated_at: new Date().toISOString() };
+    const { error } = await _sb.from(table).upsert(payload);
     return !error;
   } catch (e) { return false; }
 }

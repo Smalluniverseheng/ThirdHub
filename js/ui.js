@@ -90,7 +90,7 @@ export function actionSheet(title, actions) {
     const wrap = el(`<div class="col gap8"></div>`);
     actions.forEach((a) => {
       const b = el(`<button class="btn btn-block ${a.danger ? 'btn-danger' : ''}" style="justify-content:flex-start;padding:14px 16px">${a.icon ? icon(a.icon) : ''}${esc(a.label)}</button>`);
-      b.onclick = () => { m.close(); resolve(a.value); };
+      b.onclick = () => { resolve(a.value); m.mask.remove(); };
       wrap.appendChild(b);
     });
     const m = modal({ title, body: wrap, onClose: () => resolve(null) });

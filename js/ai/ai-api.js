@@ -191,3 +191,85 @@ export async function drawImage({ providerId, model, prompt, size = '1024x1024' 
 export function supportsWebSearch(providerId) {
   return ['perplexity', 'zhipu', 'aliyun', 'xai', 'google'].includes(providerId);
 }
+
+/* ---------- Key 验证与自动识别（v1.4） ----------
+   识别原则：不轻信 Key 前缀，必须向厂商发送真实对话请求，
+   成功返回对话结果才算匹配成功。 */
+
+/* 对指定厂商做一次真实对话验证（最小开销：max_tokens=1） */
+export async function testProviderKey(providerId, key, timeoutMs = 15000) {
+  const p = providerById(providerId);
+  const model = (p.models || [])[0];
+  if (!model) throw new Error('该厂商没有预置对话模型');
+  const base = ((await getBaseOverride(providerId)) || p.base || '').replace(/\/$/, '');
+  if (!base) throw new Error('该厂商未配置接口地址');
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), timeoutMs);
+  try {
+    let resp;
+    if (p.type === 'anthropic') {
+      resp = await fetch(base + '/messages', {
+        method: 'POST', signal: ctl.signal,
+        headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+        body: JSON.stringify({ model, max_tokens: 1, messages: [{ role: 'user', content: 'hi' }] }),
+      });
+    } else {
+      resp = await fetch(base + '/chat/completions', {
+        method: 'POST', signal: ctl.signal,
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },
+        body: JSON.stringify({ model, messages: [{ role: 'user', content: 'hi' }], max_tokens: 1, stream: false }),
+      });
+    }
+    if (!resp.ok) {
+      const t = await resp.text().catch(() => '');
+      throw new Error(`HTTP ${resp.status}`);
+    }
+    const data = await resp.json().catch(() => ({}));
+    const txt = p.type === 'anthropic'
+      ? (data.content && data.content[0] && data.content[0].text)
+      : (data.choices && data.choices[0] && (data.choices[0].message ? data.choices[0].message.content : data.choices[0].text));
+    if (txt === undefined || txt === null) throw new Error('返回格式异常');
+    return { provider: p, model, reply: String(txt) };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/* 自动识别 Key 属于哪家厂商：前缀仅用于排序候选，最终以真实对话成功为准 */
+export async function identifyApiKey(key, onProgress = null) {
+  const { PROVIDERS } = await import('./ai-models.js');
+  const usable = PROVIDERS.filter((p) => p.base && (p.models || []).length && (p.type === 'openai' || p.type === 'anthropic'));
+  const HINTS = [
+    [/^sk-ant-/i, 'anthropic'], [/^sk-or-/i, 'openrouter'], [/^xai-/i, 'xai'], [/^gsk_/i, 'groq'],
+    [/^AIza/, 'google'], [/^pplx-/i, 'perplexity'], [/^nvapi-/i, 'nvidia'], [/^sk-proj-/i, 'openai'],
+    [/^tvly-/i, null],
+  ];
+  const first = [];
+  for (const [re, id] of HINTS) {
+    if (id && re.test(key)) {
+      const p = usable.find((x) => x.id === id);
+      if (p) first.push(p);
+    }
+  }
+  // 带小数点的 Key 多为智谱
+  if (/^[a-f0-9]{32}\./i.test(key)) {
+    const p = usable.find((x) => x.id === 'zhipu');
+    if (p) first.push(p);
+  }
+  const rest = usable.filter((p) => !first.includes(p));
+  const candidates = [...first, ...rest];
+
+  let lastErr = null;
+  for (const p of candidates) {
+    onProgress && onProgress(`正在用真实对话验证「${p.name}」…`);
+    try {
+      const r = await testProviderKey(p.id, key);
+      onProgress && onProgress(`✓ ${p.name} 对话验证通过`);
+      return r;
+    } catch (e) {
+      lastErr = e;
+      onProgress && onProgress(`✗ ${p.name}：${e.name === 'AbortError' ? '超时' : e.message}`);
+    }
+  }
+  throw new Error('所有厂商对话验证均未通过' + (lastErr ? `（最后错误：${lastErr.message}）` : ''));
+}

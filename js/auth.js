@@ -52,13 +52,16 @@ export async function refreshProfile() {
     const { data } = await sb.from('th_profiles').select('*').eq('id', uid).maybeSingle();
     profile = data;
   } catch (e) {}
+  const meta = sess.session.user.user_metadata || {};
   const user = {
     id: uid,
     email,
     level: (profile && profile.level) || 'satellite',
     role: (profile && profile.role) || 'user',
-    nickname: (profile && profile.nickname) || (email ? email.split('@')[0] : '用户'),
-    avatar: (profile && profile.avatar) || '',
+    nickname: (profile && profile.nickname) || meta.nickname || (email ? email.split('@')[0] : '用户'),
+    avatar: (profile && profile.avatar) || meta.avatar || '',
+    phone: (profile && profile.phone) || '',
+    bio: (profile && profile.bio) || '',
     expireAt: (profile && profile.expire_at) || null,
     storageUsed: (profile && profile.storage_used) || 0,
   };
@@ -76,12 +79,58 @@ export async function signIn(email, password) {
   return refreshProfile();
 }
 
-export async function signUp(email, password) {
+export async function signUp(email, password, nickname = '') {
   if (!hasCloud()) throw new Error('云端未配置');
   const sb = getSupabase();
-  const { error } = await sb.auth.signUp({ email, password });
+  const { data, error } = await sb.auth.signUp({
+    email, password,
+    options: { data: { nickname: nickname || email.split('@')[0] } },
+  });
   if (error) throw new Error(error.message);
-  toast('注册成功，请查收验证邮件', 'ok');
+  // 写入资料行（失败静默：触发器可能已建行）
+  try {
+    if (data && data.user) {
+      await sb.from('th_profiles').upsert({ id: data.user.id, nickname: nickname || email.split('@')[0] });
+    }
+  } catch (e) {}
+  await refreshProfile().catch(() => {});
+  toast('注册成功', 'ok');
+}
+
+/* ---------- 个人资料修改 ---------- */
+export async function updateProfile(patch) {
+  const u = await currentUser();
+  if (!u) throw new Error('请先登录');
+  const sb = hasCloud() ? getSupabase() : null;
+  if (sb) {
+    const row = { id: u.id };
+    if (patch.nickname !== undefined) row.nickname = patch.nickname;
+    if (patch.avatar !== undefined) row.avatar = patch.avatar;
+    if (patch.phone !== undefined) row.phone = patch.phone;
+    if (patch.bio !== undefined) row.bio = patch.bio;
+    let { error } = await sb.from('th_profiles').upsert(row);
+    // 老库可能缺 phone/bio 列：降级只更新昵称/头像
+    if (error && /phone|bio|column/i.test(error.message || '')) {
+      delete row.phone; delete row.bio;
+      ({ error } = await sb.from('th_profiles').upsert(row));
+    }
+    if (error) throw new Error(error.message);
+    try { await sb.auth.updateUser({ data: { nickname: row.nickname, avatar: row.avatar } }); } catch (e) {}
+  }
+  const next = { ...u, ...patch };
+  await kvSet('auth:user', next);
+  state.user = next;
+  emit('auth:changed');
+  return next;
+}
+
+/* 修改邮箱（Supabase 会发确认邮件到新邮箱） */
+export async function changeEmail(newEmail) {
+  if (!hasCloud()) throw new Error('云端未配置');
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(newEmail)) throw new Error('邮箱格式不正确');
+  const sb = getSupabase();
+  const { error } = await sb.auth.updateUser({ email: newEmail });
+  if (error) throw new Error(error.message);
 }
 
 export async function signOut() {

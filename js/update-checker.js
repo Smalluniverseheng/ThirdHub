@@ -23,7 +23,7 @@ export async function checkUpdate(manual = false) {
   try {
     const { getSupabase, hasCloud } = await import('./supabase.js');
     if (hasCloud()) {
-      const { data } = await getSupabase().from('app_updates')
+      const { data } = await getSupabase().from('th_app_updates')
         .select('*').order('created_at', { ascending: false }).limit(1).maybeSingle();
       if (data) info = { version: data.version, type: data.type, title: data.title, content: data.content, downloadUrl: data.download_url };
     }

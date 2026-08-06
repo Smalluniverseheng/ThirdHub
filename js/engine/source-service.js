@@ -54,7 +54,10 @@ export async function listSources(type = null) {
   const all = await db.all('sources');
   return type ? all.filter((s) => s.type === type) : all;
 }
-export async function getSource(id) { return db.get('sources', id); }
+export async function getSource(id) {
+  if (id === 'local') { const { LOCAL_SOURCE } = await import('./local-source.js'); return LOCAL_SOURCE; }
+  return db.get('sources', id);
+}
 export async function removeSource(id) { await db.del('sources', id); emit('sources:changed'); }
 export async function toggleSource(id, enabled) {
   const s = await db.get('sources', id);

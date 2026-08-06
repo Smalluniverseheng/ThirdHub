@@ -32,7 +32,9 @@ export function renderMarkdown(src) {
     if (cb) {
       closeList();
       const { lang, code } = codeBlocks[+cb[1]];
-      out.push(`<div class="md-pre"><div class="md-pre-head"><span>${escHtml(lang || 'code')}</span><button class="md-copy" data-code="${encodeURIComponent(code)}">复制</button></div><pre><code>${escHtml(code.replace(/\n$/, ''))}</code></pre></div>`);
+      const l = (lang || '').toLowerCase();
+      const canPreview = ['html', 'xml', 'svg', 'xhtml'].includes(l);
+      out.push(`<div class="md-pre"><div class="md-pre-head"><span class="md-lang">${escHtml(lang || 'code')}</span><span class="md-pre-btns">${canPreview ? `<button class="md-preview" data-code="${encodeURIComponent(code)}">预览网页</button>` : ''}<button class="md-copy" data-code="${encodeURIComponent(code)}">复制</button></span></div><pre><code>${escHtml(code.replace(/\n$/, ''))}</code></pre></div>`);
       continue;
     }
     const h = line.match(/^(#{1,4})\s+(.*)$/);
@@ -55,6 +57,11 @@ export function renderMarkdown(src) {
 }
 
 export function bindCopyButtons(root) {
+  root.querySelectorAll('.md-preview').forEach((b) => {
+    b.onclick = () => {
+      document.dispatchEvent(new CustomEvent('th:preview-code', { detail: { code: decodeURIComponent(b.dataset.code) } }));
+    };
+  });
   root.querySelectorAll('.md-copy').forEach((b) => {
     b.onclick = async () => {
       try {

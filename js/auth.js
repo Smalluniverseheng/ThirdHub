@@ -49,7 +49,7 @@ export async function refreshProfile() {
   const email = sess.session.user.email;
   let profile = null;
   try {
-    const { data } = await sb.from('profiles').select('*').eq('id', uid).maybeSingle();
+    const { data } = await sb.from('th_profiles').select('*').eq('id', uid).maybeSingle();
     profile = data;
   } catch (e) {}
   const user = {
@@ -102,7 +102,7 @@ export async function redeemCard(cardKey) {
   const u = await currentUser();
   if (!u) throw new Error('请先登录');
   const sb = getSupabase();
-  const { data, error } = await sb.rpc('redeem_card', { p_card: cardKey, p_user: u.id });
+  const { data, error } = await sb.rpc('th_redeem_card', { p_card: cardKey, p_user: u.id });
   if (error) throw new Error(error.message);
   if (data && data.error) throw new Error(data.error);
   await refreshProfile();

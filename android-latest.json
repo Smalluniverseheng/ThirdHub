@@ -1,0 +1,9 @@
+{
+  "version": "1.3",
+  "build": 4,
+  "notes": "ThirdHub 安卓版 v1.3 更新公告\n\n1. 全新开屏动画（第三方科技品牌页）；\n2. AI 对话页升级：左边缘右滑打开会话列表，手势实时跟随、平滑回弹；\n3. 厂商图标全部换成官方品牌图标；\n4. 新增应用内自动更新：检测新版本后弹出公告，可后台下载并安装；\n5. 整体 UI 与网页版统一风格。",
+  "apks": {
+    "universal": "https://github.com/Smalluniverseheng/ThirdHub-Android/releases/download/v1.3/ThirdHub-Android-v1.3.apk"
+  },
+  "releasePage": "https://github.com/Smalluniverseheng/ThirdHub-Android/releases"
+}

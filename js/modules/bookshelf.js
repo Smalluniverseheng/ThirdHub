@@ -177,7 +177,7 @@ export async function renderBookshelf(page) {
         }
         const it = items.find((x) => x.id === id);
         openDetail({ sourceId: it.sourceId, bookUrl: it.bookUrl, seed: { name: it.title, coverUrl: it.coverUrl, author: it.author } });
-      });
+      };
       let pressTimer;
       b.addEventListener('touchstart', () => { pressTimer = setTimeout(() => { if (!selectMode) enterSelectMode(); selected.add(b.dataset.id); renderContent(); }, 550); }, { passive: true });
       b.addEventListener('touchend', () => clearTimeout(pressTimer));

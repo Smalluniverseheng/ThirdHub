@@ -32,7 +32,7 @@ export class SourceEngine {
       else p.resolve(d.result);
     };
     const proxyCfg = {
-      backend: await kvGet('proxy:backend', ''),
+      backend: await kvGet('proxy:backend', 'https://thirdhub-proxy.1829487897.workers.dev/'),
       publics: DEFAULT_PUBLICS,
       mode: await kvGet('proxy:mode', 'auto'),
     };

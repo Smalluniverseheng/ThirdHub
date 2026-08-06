@@ -67,19 +67,12 @@
 .overlay-title { font-size: 16px; font-weight: 700; flex: 1; min-width: 0; }
 .overlay-body { flex: 1; overflow: hidden; position: relative; display: flex; flex-direction: column; }
 
-/* 平板/桌面响应式 */
+/* 平板/桌面响应式（导航栏始终在底部） */
 @media (min-width: 768px) {
-  #app { flex-direction: row; }
   .safe-top { display: none; }
-  #tabbar {
-    flex-direction: column; justify-content: flex-start; gap: 6px;
-    width: 84px; height: 100dvh;
-    border-top: none; border-right: 1px solid var(--border);
-    padding: calc(14px + env(safe-area-inset-top)) 8px 14px;
-  }
-  .tab { padding: 10px 0; border-radius: 14px; }
-  .tab-ico { width: 46px; height: 30px; }
-  #pages { height: 100dvh; }
+  #tabbar { justify-content: center; gap: 8px; }
+  .tab { flex: 0 1 110px; }
+  #pages { height: auto; }
   .page { padding: 0 max(24px, calc((100% - 860px) / 2)) 40px; }
   .page-head { padding-top: 20px; }
 }

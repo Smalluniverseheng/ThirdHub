@@ -1,26 +1,24 @@
-/* ===== ThirdHub js/modules/profile.js — 我的页 ===== */
-import { $, $$, el, esc, icon, toast, modal, actionSheet, confirmDialog, formRow, fmtBytes, fmtDate } from '../ui.js';
+/* ===== ThirdHub js/modules/profile.js — 我的页（v1.5 全量重写） =====
+   用户卡 → 个人资料子页面（头像/昵称/邮箱/手机号/简介 + 会员中心）
+   个性化设置（桌面/移动/手表导航）· 完整阅读设置（小说 + 漫画）· 数据统计（含花费估算） */
+import { $, $$, el, esc, icon, toast, modal, actionSheet, confirmDialog, openOverlay, formRow, fmtBytes } from '../ui.js';
 import { kvGet, kvSet, db, on, setSetting, getSetting } from '../store.js';
-import { currentUser, signIn, signUp, signOut, redeemCard, levelById, LEVELS, isAdmin } from '../auth.js';
-import { hasCloud, configureCloud } from '../supabase.js';
-import { getTotalStats, getDailyStats, fmtTokens } from '../token-meter.js';
+import { currentUser, signIn, signOut, redeemCard, levelById, LEVELS, isAdmin, updateProfile, changeEmail } from '../auth.js';
+import { hasCloud } from '../supabase.js';
+import { getTotalStats, getDailyStats, getCostBreakdown, fmtTokens } from '../token-meter.js';
+import { fmtUsd, usdToCnyRate } from '../ai/ai-pricing.js';
 import { APP_VERSION } from '../app.js';
 import { CHANGELOG } from '../changelog.js';
 import { checkUpdate } from '../update-checker.js';
 import { showKeySettings } from './ai-chat.js';
+import { showRegisterPage } from './register-page.js';
 
 export async function renderProfile(page) {
-  const user = await currentUser();
   const admin = await isAdmin();
 
   page.innerHTML = `
     <div class="page-head"><div class="page-title">我的</div></div>
     <div data-role="usercard"></div>
-
-    <div class="profile-section">
-      <div class="section-title">会员中心</div>
-      <div data-role="member"></div>
-    </div>
 
     <div class="profile-section">
       <div class="section-title">数据管理</div>
@@ -37,19 +35,18 @@ export async function renderProfile(page) {
     <div class="profile-foot">第三方科技 · ThirdHub v${APP_VERSION}</div>`;
 
   renderUserCard();
-  renderMember();
   renderData();
   renderSettings();
   if (admin) renderAdmin();
-  on('auth:changed', () => { renderUserCard(); renderMember(); });
+  on('auth:changed', renderUserCard);
 
-  /* ---------- 用户卡 ---------- */
+  /* ================= 用户卡（点击 → 个人资料子页面） ================= */
   async function renderUserCard() {
     const u = await currentUser();
     const lv = levelById(u ? u.level : 'guest');
     const box = $('[data-role="usercard"]', page);
     box.innerHTML = `
-      <div class="user-card card">
+      <div class="user-card card" data-a="profile" style="cursor:pointer">
         <div class="user-avatar">${u && u.avatar ? `<img src="${esc(u.avatar)}">` : icon('user')}</div>
         <div class="grow" style="min-width:0">
           <div class="row gap8">
@@ -60,9 +57,20 @@ export async function renderProfile(page) {
           ${u ? `<div class="muted mt8">云存储：${fmtBytes(u.storageUsed || 0)} / ${lv.storage === Infinity ? '无限' : fmtBytes(lv.storage)}</div>
           <div class="storage-bar"><div class="storage-fill" style="width:${lv.storage === Infinity ? 0 : Math.min(100, ((u.storageUsed || 0) / lv.storage) * 100)}%"></div></div>` : ''}
         </div>
-        <button class="btn btn-sm ${u ? '' : 'btn-primary'}" data-a="auth">${u ? '退出' : '登录'}</button>
-      </div>`;
-    $('[data-a="auth"]', box).onclick = () => u ? doSignOut() : showAuthDialog();
+        <span class="list-arrow">${icon('arrowR')}</span>
+      </div>
+      ${u ? '' : '<button class="btn btn-primary btn-block mt8" data-a="login">登录</button>'}
+      ${u ? `<button class="btn btn-block mt8" data-a="logout">退出登录</button>` : ''}`;
+    $('[data-a="profile"]', box).onclick = () => u ? showProfileSubpage() : showAuthDialog();
+    const loginBtn = $('[data-a="login"]', box);
+    if (loginBtn) loginBtn.onclick = showAuthDialog;
+    const logoutBtn = $('[data-a="logout"]', box);
+    if (logoutBtn) logoutBtn.onclick = async () => {
+      if (await confirmDialog('退出登录', '退出后云端同步将停止，本地数据保留。', '退出')) {
+        await signOut();
+        toast('已退出');
+      }
+    };
   }
 
   function showAuthDialog() {
@@ -78,8 +86,8 @@ export async function renderProfile(page) {
       ${formRow('密码', '<input class="input" type="password" data-f="pwd" placeholder="至少 6 位">')}
     </div>`);
     const m = modal({
-      title: '登录 / 注册', body,
-      footer: '<button class="btn grow" data-a="reg">注册</button><button class="btn btn-primary grow" data-a="login">登录</button>',
+      title: '登录', body,
+      footer: '<button class="btn grow" data-a="goreg">注册新账号</button><button class="btn btn-primary grow" data-a="login">登录</button>',
     });
     $('[data-a="login"]', m.mask).onclick = async () => {
       try {
@@ -87,48 +95,171 @@ export async function renderProfile(page) {
         m.close(); toast('登录成功', 'ok');
       } catch (e) { toast(e.message, 'err'); }
     };
-    $('[data-a="reg"]', m.mask).onclick = async () => {
-      try {
-        await signUp($('[data-f="email"]', body).value.trim(), $('[data-f="pwd"]', body).value);
-        m.close();
-      } catch (e) { toast(e.message, 'err'); }
+    $('[data-a="goreg"]', m.mask).onclick = () => {
+      m.close();
+      showRegisterPage({});
     };
   }
 
-  async function doSignOut() {
-    if (await confirmDialog('退出登录', '退出后云端同步将停止，本地数据保留。', '退出')) {
-      await signOut();
-      toast('已退出');
-    }
+  /* ================= 个人资料子页面（含会员中心） ================= */
+  async function showProfileSubpage() {
+    const u = await currentUser();
+    if (!u) return;
+    const lv = levelById(u.level);
+    const ref = openOverlay({
+      title: '个人资料',
+      build: (body) => {
+        body.innerHTML = `
+          <div class="profile-hero">
+            <div class="user-avatar lg" id="pf-avatar" style="position:relative">
+              ${u.avatar ? `<img src="${esc(u.avatar)}">` : icon('user')}
+              <span class="avatar-edit-badge">${icon('camera')}</span>
+            </div>
+            <div style="font-size:17px;font-weight:800">${esc(u.nickname)}</div>
+            <div class="muted">${esc(u.email || '')}</div>
+            <span class="tag ${lv.tag}">${lv.name}</span>
+          </div>
+          <div class="profile-section">
+            <div class="section-title">账号资料</div>
+            <div id="pf-rows"></div>
+          </div>
+          <div class="profile-section">
+            <div class="section-title">会员中心</div>
+            <div id="pf-member"></div>
+          </div>`;
+        renderRows();
+        renderMemberBox($('#pf-member', body));
+
+        function renderRows() {
+          const rows = [
+            { k: 'nickname', name: '昵称', val: u.nickname || '未设置' },
+            { k: 'email', name: '邮箱', val: u.email || '未设置' },
+            { k: 'phone', name: '手机号', val: u.phone || '未设置' },
+            { k: 'bio', name: '简介', val: u.bio || '这个人很懒，什么都没写' },
+          ];
+          $('#pf-rows', body).innerHTML = rows.map((r) => `
+            <button class="profile-row" data-k="${r.k}">
+              <span class="profile-row-name">${r.name}</span>
+              <span class="profile-row-val ellipsis">${esc(r.val)}</span>
+              <span class="list-arrow">${icon('arrowR')}</span>
+            </button>`).join('');
+          $$('.profile-row', body).forEach((b) => b.onclick = () => {
+            const k = b.dataset.k;
+            if (k === 'email') editEmail();
+            else editField(k, rows.find((x) => x.k === k).name);
+          });
+        }
+
+        function editField(k, name) {
+          const long = k === 'bio';
+          const b2 = el(`<div>${formRow(name, long
+            ? `<textarea class="input" rows="3" data-f="v" maxlength="120">${esc(u[k] || '')}</textarea>`
+            : `<input class="input" data-f="v" value="${esc(u[k] || '')}" maxlength="${k === 'phone' ? 15 : 24}">`)}</div>`);
+          const m2 = modal({
+            title: '修改' + name, body: b2,
+            footer: '<button class="btn grow" data-a="c">取消</button><button class="btn btn-primary grow" data-a="ok">保存</button>',
+          });
+          $('[data-a="c"]', m2.mask).onclick = m2.close;
+          $('[data-a="ok"]', m2.mask).onclick = async () => {
+            const v = $('[data-f="v"]', b2).value.trim();
+            if (!v && k !== 'bio') { toast(name + '不能为空'); return; }
+            if (k === 'phone' && v && !/^1\d{10}$/.test(v)) { toast('手机号格式不正确'); return; }
+            try {
+              await updateProfile({ [k]: v });
+              u[k] = v;
+              m2.close();
+              toast('已保存', 'ok');
+              renderRows();
+            } catch (e) { toast(e.message, 'err'); }
+          };
+        }
+
+        function editEmail() {
+          const b2 = el(`<div>
+            ${formRow('新邮箱', '<input class="input" type="email" data-f="v" placeholder="new@example.com">')}
+            <div class="muted">修改后需到新邮箱中点击确认链接才会生效。</div>
+          </div>`);
+          const m2 = modal({
+            title: '修改邮箱', body: b2,
+            footer: '<button class="btn grow" data-a="c">取消</button><button class="btn btn-primary grow" data-a="ok">发送确认邮件</button>',
+          });
+          $('[data-a="c"]', m2.mask).onclick = m2.close;
+          $('[data-a="ok"]', m2.mask).onclick = async () => {
+            const v = $('[data-f="v"]', b2).value.trim();
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) { toast('邮箱格式不正确'); return; }
+            try {
+              await changeEmail(v);
+              m2.close();
+              toast('确认邮件已发送，请查收', 'ok');
+            } catch (e) { toast(e.message, 'err'); }
+          };
+        }
+
+        $('#pf-avatar', body).onclick = () => {
+          const input = document.createElement('input');
+          input.type = 'file';
+          input.accept = 'image/*';
+          input.onchange = async () => {
+            const f = input.files[0];
+            if (!f) return;
+            try {
+              const url = await downscaleImage(f, 128);
+              await updateProfile({ avatar: url });
+              u.avatar = url;
+              $('#pf-avatar', body).innerHTML = `<img src="${url}"><span class="avatar-edit-badge">${icon('camera')}</span>`;
+              toast('头像已更新', 'ok');
+            } catch (e) { toast(e.message, 'err'); }
+          };
+          input.click();
+        };
+      },
+    });
   }
 
-  /* ---------- 会员中心 ---------- */
-  async function renderMember() {
-    const u = await currentUser();
-    const lv = levelById(u ? u.level : 'guest');
-    const box = $('[data-role="member"]', page);
-    box.innerHTML = `
-      <div class="card member-card">
-        <div class="row gap8 mb8">
-          <span style="font-size:15px;font-weight:800" class="${lv.cls}">${lv.name}等级</span>
-          ${lv.storage === Infinity ? '<span class="tag tag-gold">无限存储</span>' : `<span class="tag tag-blue">${fmtBytes(lv.storage)}</span>`}
-        </div>
-        <div class="muted" style="line-height:1.7;margin-bottom:12px">会员只扩容云存储，AI 对话使用你自己的 API Key。</div>
-        <div class="row gap8">
-          <button class="btn btn-primary btn-sm grow" data-a="levels">升级会员</button>
-          <button class="btn btn-sm grow" data-a="card">${icon('ticket')} 卡密激活</button>
-          <button class="btn btn-sm grow" data-a="agent">${icon('users')} 代理中心</button>
-        </div>
-      </div>
-      <button class="list-item mt8" data-a="stats" style="width:100%">
-        <span class="list-ico">${icon('chart')}</span>
-        <div class="grow" style="text-align:left"><div style="font-size:14px;font-weight:600">数据统计</div><div class="muted">Token 用量 / 使用记录</div></div>
-        <span class="list-arrow">${icon('arrowR')}</span>
-      </button>`;
-    $('[data-a="levels"]', box).onclick = showLevels;
-    $('[data-a="card"]', box).onclick = showCardDialog;
-    $('[data-a="agent"]', box).onclick = showAgent;
-    $('[data-a="stats"]', box).onclick = showStats;
+  function downscaleImage(file, size) {
+    return new Promise((resolve, reject) => {
+      const rd = new FileReader();
+      rd.onload = () => {
+        const img = new Image();
+        img.onload = () => {
+          const cv = document.createElement('canvas');
+          cv.width = size; cv.height = size;
+          const ctx = cv.getContext('2d');
+          const s = Math.min(img.width, img.height);
+          ctx.drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, size, size);
+          resolve(cv.toDataURL('image/jpeg', 0.85));
+        };
+        img.onerror = reject;
+        img.src = rd.result;
+      };
+      rd.onerror = reject;
+      rd.readAsDataURL(file);
+    });
+  }
+
+  /* ================= 会员中心（渲染到指定容器） ================= */
+  function renderMemberBox(box) {
+    const u2p = currentUser();
+    box.innerHTML = '';
+    u2p.then((u) => {
+      const lv = levelById(u ? u.level : 'guest');
+      box.innerHTML = `
+        <div class="card member-card">
+          <div class="row gap8 mb8">
+            <span style="font-size:15px;font-weight:800" class="${lv.cls}">${lv.name}等级</span>
+            ${lv.storage === Infinity ? '<span class="tag tag-gold">无限存储</span>' : `<span class="tag tag-blue">${fmtBytes(lv.storage)}</span>`}
+          </div>
+          <div class="muted" style="line-height:1.7;margin-bottom:12px">会员只扩容云存储，AI 对话使用你自己的 API Key。</div>
+          <div class="row gap8">
+            <button class="btn btn-primary btn-sm grow" data-a="levels">升级会员</button>
+            <button class="btn btn-sm grow" data-a="card">${icon('ticket')} 卡密激活</button>
+            <button class="btn btn-sm grow" data-a="agent">${icon('users')} 代理中心</button>
+          </div>
+        </div>`;
+      $('[data-a="levels"]', box).onclick = showLevels;
+      $('[data-a="card"]', box).onclick = showCardDialog;
+      $('[data-a="agent"]', box).onclick = showAgent;
+    });
   }
 
   function showLevels() {
@@ -166,7 +297,7 @@ export async function renderProfile(page) {
         const r = await redeemCard($('[data-f="card"]', body).value);
         m.close();
         toast('激活成功' + (r && r.level ? '：' + levelById(r.level).name : ''), 'ok');
-        renderUserCard(); renderMember();
+        renderUserCard();
       } catch (e) { toast(e.message, 'err'); }
     };
   }
@@ -182,30 +313,59 @@ export async function renderProfile(page) {
     });
   }
 
+  /* ================= 数据统计（Token + 缓存 + 花费估算） ================= */
   async function showStats() {
     const total = await getTotalStats();
     const daily = await getDailyStats();
+    const { usd, rows } = await getCostBreakdown();
+    const rate = await usdToCnyRate().catch(() => 7.2);
     const days = Object.keys(daily).sort().slice(-14);
     const max = Math.max(1, ...days.map((d) => daily[d].prompt + daily[d].completion));
-    modal({
+    const cacheTotal = total.prompt || 0;
+    const cacheRate = cacheTotal ? Math.round(((total.cacheHit || 0) / cacheTotal) * 100) : 0;
+    openOverlay({
       title: '数据统计',
-      body: `
-        <div class="row gap16 mb16">
-          <div class="card grow" style="text-align:center"><div style="font-size:20px;font-weight:800;color:var(--primary)">${fmtTokens(total.prompt + total.completion)}</div><div class="muted">总 Tokens</div></div>
-          <div class="card grow" style="text-align:center"><div style="font-size:20px;font-weight:800;color:var(--primary)">${total.requests}</div><div class="muted">总请求</div></div>
-        </div>
-        <div class="muted mb8">近 14 天用量</div>
-        <div class="stats-chart">${days.map((d) => {
-          const v = daily[d].prompt + daily[d].completion;
-          return `<div class="stats-bar-wrap" title="${d}: ${fmtTokens(v)}"><div class="stats-bar" style="height:${Math.max(3, (v / max) * 100)}%"></div><div class="stats-day">${d.slice(8)}</div></div>`;
-        }).join('')}</div>`,
+      build: (body) => {
+        body.innerHTML = `
+          <div class="row gap8 mb16">
+            <div class="card grow" style="text-align:center"><div style="font-size:20px;font-weight:800;color:var(--primary)">${fmtTokens(total.prompt + total.completion)}</div><div class="muted">总 Tokens</div></div>
+            <div class="card grow" style="text-align:center"><div style="font-size:20px;font-weight:800;color:var(--primary)">${total.requests}</div><div class="muted">总请求</div></div>
+            <div class="card grow" style="text-align:center"><div style="font-size:20px;font-weight:800;color:#3dd68c">${cacheRate}%</div><div class="muted">缓存命中率</div></div>
+          </div>
+          <div class="section-title">花费估算</div>
+          <div class="card mb16">
+            <div class="row gap16" style="align-items:baseline">
+              <div><div style="font-size:24px;font-weight:800;color:var(--primary)">${fmtUsd(usd)}</div><div class="muted">累计估算（美元）</div></div>
+              <div><div style="font-size:18px;font-weight:700">≈ ¥${(usd * rate).toFixed(2)}</div><div class="muted">按实时汇率 ${rate.toFixed(4)} 折算</div></div>
+            </div>
+            <div class="muted mt8" style="font-size:12px">按各厂商公开报价估算（输入 / 输出 / 缓存命中分别计价），仅供参考，实际以厂商账单为准。</div>
+          </div>
+          ${rows.length ? `<div class="section-title">分模型明细</div>
+          <div class="col gap8 mb16">${rows.slice(0, 12).map((r) => `
+            <div class="list-item">
+              <div class="grow" style="min-width:0">
+                <div style="font-size:13px;font-weight:600" class="ellipsis">${esc(r.key)}</div>
+                <div class="muted">${fmtTokens(r.prompt)} 入 · ${fmtTokens(r.completion)} 出 · ${r.requests} 次${r.cacheHit ? ' · 缓存 ' + fmtTokens(r.cacheHit) : ''}</div>
+              </div>
+              <div style="text-align:right;flex-shrink:0">
+                <div style="font-size:13px;font-weight:700;color:var(--primary)">${r.priced ? fmtUsd(r.cost) : '—'}</div>
+                ${r.priced ? `<div class="muted" style="font-size:11px">≈¥${(r.cost * rate).toFixed(3)}</div>` : '<div class="muted" style="font-size:11px">暂无报价</div>'}
+              </div>
+            </div>`).join('')}</div>` : ''}
+          <div class="section-title">近 14 天用量</div>
+          <div class="card"><div class="stats-chart">${days.map((d) => {
+            const v = daily[d].prompt + daily[d].completion;
+            return `<div class="stats-bar-wrap" title="${d}: ${fmtTokens(v)}"><div class="stats-bar" style="height:${Math.max(3, (v / max) * 100)}%"></div><div class="stats-day">${d.slice(8)}</div></div>`;
+          }).join('')}</div></div>`;
+      },
     });
   }
 
-  /* ---------- 数据管理 ---------- */
+  /* ================= 数据管理 ================= */
   function renderData() {
     const box = $('[data-role="data"]', page);
     box.innerHTML = [
+      { a: 'stats', ico: 'chart', name: '数据统计', desc: 'Token 用量 / 缓存命中 / 花费估算' },
       { a: 'cloud', ico: 'cloud', name: '云端同步', desc: hasCloud() ? '已配置' : '未配置（纯本地模式）' },
       { a: 'backup', ico: 'download', name: '本地备份 / 恢复', desc: '导出或导入全部本地数据' },
       { a: 'cache', ico: 'trash', name: '清理缓存', desc: '清空章节内容缓存' },
@@ -219,43 +379,50 @@ export async function renderProfile(page) {
         <span class="list-arrow">${icon('arrowR')}</span>
       </button>`).join('');
 
+    $('[data-a="stats"]', box).onclick = showStats;
+
     $('[data-a="cloud"]', box).onclick = async () => {
       const url = await kvGet('cloud:url', '');
-      const key = await kvGet('cloud:anonKey', '');
+      const key = await kvGet('cloud:key', '');
       const body = el(`<div>
         ${formRow('Supabase URL', `<input class="input" data-f="url" value="${esc(url)}" placeholder="https://xxx.supabase.co">`)}
-        ${formRow('Anon Key', `<textarea class="input" rows="3" data-f="key">${esc(key)}</textarea>`)}
+        ${formRow('Anon Key', `<input class="input" data-f="key" value="${esc(key)}" placeholder="eyJ...">`)}
+        <div class="muted">配置后重启应用生效。留空则保持纯本地模式。</div>
       </div>`);
       const m = modal({
         title: '云端同步配置', body,
-        footer: '<button class="btn grow" data-a="cancel">取消</button><button class="btn btn-primary grow" data-a="save">保存并连接</button>',
+        footer: '<button class="btn grow" data-a="cancel">取消</button><button class="btn btn-primary grow" data-a="save">保存</button>',
       });
       $('[data-a="cancel"]', m.mask).onclick = m.close;
       $('[data-a="save"]', m.mask).onclick = async () => {
-        const ok = await configureCloud($('[data-f="url"]', body).value, $('[data-f="key"]', body).value);
+        await kvSet('cloud:url', $('[data-f="url"]', body).value.trim());
+        await kvSet('cloud:key', $('[data-f="key"]', body).value.trim());
         m.close();
-        toast(ok ? '云端已连接' : '连接失败，请检查配置', ok ? 'ok' : 'err');
-        renderData();
+        toast('已保存，即将刷新', 'ok');
+        setTimeout(() => location.reload(), 800);
       };
     };
 
     $('[data-a="backup"]', box).onclick = async () => {
-      const v = await actionSheet('本地备份', [
-        { label: '导出全部数据（JSON）', value: 'export', icon: 'export' },
-        { label: '从备份文件恢复', value: 'import', icon: 'import' },
+      const v = await actionSheet('本地备份 / 恢复', [
+        { label: '导出备份（JSON）', value: 'export', icon: 'download' },
+        { label: '从备份恢复', value: 'import', icon: 'import' },
       ]);
       if (v === 'export') {
         const data = {};
-        for (const s of ['kv', 'sources', 'shelf', 'history', 'favorites', 'chats']) data[s] = await db.all(s);
+        for (const store of ['kv', 'sources', 'shelf', 'history', 'favorites', 'chats']) {
+          data[store] = await db.all(store);
+        }
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = 'thirdhub-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+        a.download = `thirdhub-backup-${new Date().toISOString().slice(0, 10)}.json`;
         a.click();
         toast('备份已导出', 'ok');
       } else if (v === 'import') {
         const input = document.createElement('input');
-        input.type = 'file'; input.accept = '.json';
+        input.type = 'file';
+        input.accept = '.json';
         input.onchange = async () => {
           try {
             const data = JSON.parse(await input.files[0].text());
@@ -279,16 +446,17 @@ export async function renderProfile(page) {
     };
   }
 
-  /* ---------- 设置 ---------- */
+  /* ================= 设置 ================= */
   async function renderSettings() {
     const theme = await getSetting('theme');
     const box = $('[data-role="settings"]', page);
     box.innerHTML = [
+      { a: 'personalize', ico: 'palette', name: '个性化设置', desc: '桌面 / 移动 / 手表端导航栏样式' },
       { a: 'tabs', ico: 'grid', name: '导航栏管理', desc: '选择底部导航显示的板块（1-5 个）' },
-      { a: 'theme', ico: 'palette', name: '主题外观', desc: { dark: '深色', light: '浅色', auto: '跟随系统' }[theme] },
-      { a: 'aikeys', ico: 'key', name: 'AI 设置 / API 管理', desc: '配置各厂商 API Key' },
+      { a: 'theme', ico: 'moon', name: '主题外观', desc: { dark: '深色', light: '浅色', auto: '跟随系统' }[theme] || '跟随系统' },
+      { a: 'aikeys', ico: 'key', name: 'AI 设置 / API 管理', desc: '配置各厂商 API Key / MCP 服务' },
       { a: 'sources', ico: 'plug', name: '连接器管理', desc: '导入 / 管理内容连接器' },
-      { a: 'reader', ico: 'book', name: '阅读设置', desc: '翻页 / 字体 / 背景' },
+      { a: 'reader', ico: 'book', name: '阅读设置', desc: '小说 / 漫画阅读器偏好' },
       { a: 'update', ico: 'refresh', name: '检查更新', desc: '当前 v' + APP_VERSION },
       { a: 'changelog', ico: 'history', name: '历史版本', desc: '各版本更新日志' },
       { a: 'about', ico: 'info', name: '关于 ThirdHub', desc: '版本与许可' },
@@ -302,31 +470,23 @@ export async function renderProfile(page) {
         <span class="list-arrow">${icon('arrowR')}</span>
       </button>`).join('');
 
+    $('[data-a="personalize"]', box).onclick = showPersonalize;
     $('[data-a="theme"]', box).onclick = async () => {
+      const cur = await getSetting('theme');
       const v = await actionSheet('主题外观', [
-        { label: '深色', value: 'dark', icon: theme === 'dark' ? 'check' : undefined },
-        { label: '浅色', value: 'light', icon: theme === 'light' ? 'check' : undefined },
-        { label: '跟随系统', value: 'auto', icon: theme === 'auto' ? 'check' : undefined },
+        { label: '跟随系统（默认）', value: 'auto', icon: cur === 'auto' ? 'check' : undefined },
+        { label: '深色', value: 'dark', icon: cur === 'dark' ? 'check' : undefined },
+        { label: '浅色', value: 'light', icon: cur === 'light' ? 'check' : undefined },
       ]);
       if (v) { await setSetting('theme', v); renderSettings(); }
     };
     $('[data-a="aikeys"]', box).onclick = () => showKeySettings();
     $('[data-a="tabs"]', box).onclick = showTabManager;
     $('[data-a="sources"]', box).onclick = async () => {
-      const { openOverlay } = await import('../ui.js');
       const { renderCategory } = await import('./category.js');
       openOverlay({ title: '连接器管理', build: async (body) => { body.style.overflowY = 'auto'; await renderCategory(body); const h = body.querySelector('.page-head'); if (h) h.remove(); } });
     };
-    $('[data-a="reader"]', box).onclick = async () => {
-      const flip = await getSetting('readerFlip');
-      const v = await actionSheet('默认翻页模式', [
-        { label: '滑动翻页', value: 'slide', icon: flip === 'slide' ? 'check' : undefined },
-        { label: '覆盖翻页', value: 'cover', icon: flip === 'cover' ? 'check' : undefined },
-        { label: '仿真翻页', value: 'sim', icon: flip === 'sim' ? 'check' : undefined },
-        { label: '连续滚动', value: 'scroll', icon: flip === 'scroll' ? 'check' : undefined },
-      ]);
-      if (v) { await setSetting('readerFlip', v); toast('已保存'); }
-    };
+    $('[data-a="reader"]', box).onclick = showReaderSettings;
     $('[data-a="update"]', box).onclick = () => checkUpdate(true);
     $('[data-a="changelog"]', box).onclick = showChangelog;
     $('[data-a="about"]', box).onclick = () => {
@@ -342,7 +502,92 @@ export async function renderProfile(page) {
     };
   }
 
-  /* ---------- 导航栏板块管理（1-5 个，「我的」固定） ---------- */
+  /* ================= 个性化设置（多端导航栏） ================= */
+  async function showPersonalize() {
+    const navD = await getSetting('navDesktop');
+    const navM = await getSetting('navMobile');
+    const navW = await getSetting('navWatch');
+    const drawerSide = await getSetting('aiDrawerSide');
+    openOverlay({
+      title: '个性化设置',
+      build: (body) => {
+        const group = (title, key, cur, opts) => `
+          <div class="section-title">${title}</div>
+          <div class="nr-chip-row mb16" data-g="${key}">
+            ${opts.map(([v, name]) => `<button class="ai-chip ${cur === v ? 'on' : ''}" data-v="${v}">${name}</button>`).join('')}
+          </div>`;
+        body.innerHTML = `
+          <div class="muted" style="margin-bottom:14px;line-height:1.7">为不同设备分别设置导航栏样式，即时生效并云端同步。</div>
+          ${group('桌面端导航栏', 'navDesktop', navD, [['bottom', '底部导航'], ['top', '顶部导航'], ['fold', '可折叠导航']])}
+          ${group('移动端导航栏', 'navMobile', navM, [['bottom', '底部导航'], ['top', '顶部导航']])}
+          ${group('手表端导航栏', 'navWatch', navW, [['bottom', '底部导航'], ['top', '顶部导航']])}
+          ${group('AI 抽屉方向', 'aiDrawerSide', drawerSide, [['left', '左侧'], ['right', '右侧']])}
+          <div class="muted" style="font-size:12px">手表端为屏幕宽度 &lt; 380px 的触屏设备，自动识别。</div>`;
+        $$('[data-g]', body).forEach((g) => {
+          const key = g.dataset.g;
+          $$('.ai-chip', g).forEach((b) => b.onclick = async () => {
+            await setSetting(key, b.dataset.v);
+            $$('.ai-chip', g).forEach((x) => x.classList.toggle('on', x === b));
+            if (key.startsWith('nav')) window.dispatchEvent(new CustomEvent('th:navpos'));
+            toast('已保存');
+          });
+        });
+      },
+    });
+  }
+
+  /* ================= 阅读设置（小说 + 漫画） ================= */
+  async function showReaderSettings() {
+    const keys = ['readerFlip', 'readerFont', 'readerFontSize', 'readerLineHeight', 'readerTheme',
+      'readerIllust', 'readerTapFlip', 'readerVolumeFlip', 'readerInfoBar', 'readerAutoScroll',
+      'comicLayout', 'comicDir', 'comicFit', 'comicGap', 'comicBrightness', 'comicCropBorder', 'comicPreload'];
+    const S = {};
+    for (const k of keys) S[k] = await getSetting(k);
+    openOverlay({
+      title: '阅读设置',
+      build: (body) => {
+        const chipRow = (label, key, opts) => `
+          <div class="muted mb8">${label}</div>
+          <div class="nr-chip-row mb16" data-g="${key}">
+            ${opts.map(([v, name]) => `<button class="ai-chip ${String(S[key]) === String(v) ? 'on' : ''}" data-v="${v}">${name}</button>`).join('')}
+          </div>`;
+        const tog = (label, key) => `
+          <div class="nr-set-row"><span>${label}</span><button class="ai-toggle ${S[key] ? 'on' : ''}" data-tog="${key}"></button></div>`;
+        body.innerHTML = `
+          <div class="section-title">小说阅读</div>
+          ${chipRow('默认翻页方式', 'readerFlip', [['scroll', '滚动'], ['slide', '左右滑动'], ['cover', '覆盖'], ['sim', '仿真'], ['none', '无动画']])}
+          ${chipRow('字体', 'readerFont', [['system', '系统默认'], ['serif', '衬线'], ['sans', '无衬线'], ['kai', '楷体']])}
+          ${chipRow('背景主题', 'readerTheme', [['day', '白天'], ['night', '夜间'], ['eye', '护眼'], ['paper', '羊皮纸'], ['blue', '浅蓝'], ['green', '竹绿']])}
+          ${tog('显示正文插图（插图小说）', 'readerIllust')}
+          ${tog('点按翻页', 'readerTapFlip')}
+          ${tog('音量键翻页', 'readerVolumeFlip')}
+          ${tog('底部信息栏', 'readerInfoBar')}
+          <div class="muted" style="font-size:12px;margin:6px 0 16px">字号 / 行距 / 段距 / 边距 / 亮度 / 自动滚动等细项可在阅读器内「设置」中实时调整。</div>
+          <div class="section-title">漫画阅读</div>
+          ${chipRow('默认布局', 'comicLayout', [['paged', '单页'], ['double', '双页'], ['webtoon', '条漫（上下滚动）']])}
+          ${chipRow('翻页方向', 'comicDir', [['ltr', '左翻（国漫）'], ['rtl', '右翻（日漫）']])}
+          ${chipRow('图片适配', 'comicFit', [['width', '适应宽度'], ['height', '适应高度'], ['original', '原始大小']])}
+          ${tog('页间留白', 'comicGap')}
+          ${tog('切除白边', 'comicCropBorder')}`;
+        $$('[data-g]', body).forEach((g) => {
+          const key = g.dataset.g;
+          $$('.ai-chip', g).forEach((b) => b.onclick = async () => {
+            S[key] = b.dataset.v;
+            await setSetting(key, S[key]);
+            $$('.ai-chip', g).forEach((x) => x.classList.toggle('on', x === b));
+          });
+        });
+        $$('[data-tog]', body).forEach((t) => t.onclick = async () => {
+          const key = t.dataset.tog;
+          S[key] = !S[key];
+          t.classList.toggle('on', S[key]);
+          await setSetting(key, S[key]);
+        });
+      },
+    });
+  }
+
+  /* ================= 导航栏板块管理（1-5 个，「我的」固定） ================= */
   async function showTabManager() {
     const { BOARDS, MAX_TABS, MIN_TABS } = await import('../boards.js');
     const cur = await kvGet('ui:tabs', ['ai']);
@@ -360,7 +605,7 @@ export async function renderProfile(page) {
                 <div style="font-size:14px;font-weight:600">${b.name}</div>
                 <div class="muted ellipsis">${esc(b.desc)}</div>
               </div>
-              <span class="ai-toggle ${picked.has(b.id) ? 'on' : ''}" data-tg="${b.id}"></span>
+              <span class="ai-toggle ${picked.has(b.id) ? 'on' : ''}"></span>
             </button>`).join('')}
         </div>
         <div class="muted" style="text-align:center;margin-top:10px">已选 ${picked.size} / ${MAX_TABS} 个板块</div>`;
@@ -380,18 +625,15 @@ export async function renderProfile(page) {
       await kvSet('ui:tabs', [...picked]);
       render();
       const { rebuildTabs } = await import('../app.js');
-      rebuildTabs(currentTabId());
+      const onTab = document.querySelector('#tabbar .tab.on');
+      rebuildTabs(onTab ? onTab.dataset.tab : null);
     });
-    function currentTabId() {
-      const on = document.querySelector('#tabbar .tab.on');
-      return on ? on.dataset.tab : null;
-    }
     modal({ title: '导航栏管理', body });
   }
 
-  /* ---------- 历史版本（时间线，仅最新版展开） ---------- */
+  /* ================= 历史版本（时间线，仅最新版展开） ================= */
   function showChangelog() {
-    const list = CHANGELOG.slice().reverse(); // 最新在前
+    const list = CHANGELOG.slice().reverse();
     const body = el(`<div class="timeline">${list.map((c, idx) => `
       <div class="tl-item${idx === 0 ? ' major open' : ''}">
         <div class="tl-dot"></div>
@@ -412,7 +654,7 @@ export async function renderProfile(page) {
     modal({ title: '历史版本', body });
   }
 
-  /* ---------- 管理员入口 ---------- */
+  /* ================= 管理员入口 ================= */
   function renderAdmin() {
     const box = $('[data-role="admin"]', page);
     box.innerHTML = `

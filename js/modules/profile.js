@@ -284,11 +284,14 @@ export async function renderProfile(page) {
     const theme = await getSetting('theme');
     const box = $('[data-role="settings"]', page);
     box.innerHTML = [
+      { a: 'tabs', ico: 'grid', name: '导航栏管理', desc: '选择底部导航显示的板块（1-5 个）' },
       { a: 'theme', ico: 'palette', name: '主题外观', desc: { dark: '深色', light: '浅色', auto: '跟随系统' }[theme] },
       { a: 'aikeys', ico: 'key', name: 'AI 设置 / API 管理', desc: '配置各厂商 API Key' },
+      { a: 'sources', ico: 'plug', name: '连接器管理', desc: '导入 / 管理内容连接器' },
       { a: 'reader', ico: 'book', name: '阅读设置', desc: '翻页 / 字体 / 背景' },
       { a: 'update', ico: 'refresh', name: '检查更新', desc: '当前 v' + APP_VERSION },
-      { a: 'about', ico: 'info', name: '关于 ThirdHub', desc: '版本与更新日志' },
+      { a: 'changelog', ico: 'history', name: '历史版本', desc: '各版本更新日志' },
+      { a: 'about', ico: 'info', name: '关于 ThirdHub', desc: '版本与许可' },
     ].map((m) => `
       <button class="list-item" style="margin-bottom:8px;width:100%" data-a="${m.a}">
         <span class="list-ico">${icon(m.ico)}</span>
@@ -308,6 +311,12 @@ export async function renderProfile(page) {
       if (v) { await setSetting('theme', v); renderSettings(); }
     };
     $('[data-a="aikeys"]', box).onclick = () => showKeySettings();
+    $('[data-a="tabs"]', box).onclick = showTabManager;
+    $('[data-a="sources"]', box).onclick = async () => {
+      const { openOverlay } = await import('../ui.js');
+      const { renderCategory } = await import('./category.js');
+      openOverlay({ title: '连接器管理', build: async (body) => { body.style.overflowY = 'auto'; await renderCategory(body); const h = body.querySelector('.page-head'); if (h) h.remove(); } });
+    };
     $('[data-a="reader"]', box).onclick = async () => {
       const flip = await getSetting('readerFlip');
       const v = await actionSheet('默认翻页模式', [
@@ -319,6 +328,7 @@ export async function renderProfile(page) {
       if (v) { await setSetting('readerFlip', v); toast('已保存'); }
     };
     $('[data-a="update"]', box).onclick = () => checkUpdate(true);
+    $('[data-a="changelog"]', box).onclick = showChangelog;
     $('[data-a="about"]', box).onclick = () => {
       modal({
         title: '关于 ThirdHub',
@@ -327,15 +337,79 @@ export async function renderProfile(page) {
             <div style="font-size:18px;font-weight:800">第三方科技 · ThirdHub</div>
             <div class="muted mt8">v${APP_VERSION} · MIT License</div>
             <div class="muted mt8" style="max-width:300px;margin:8px auto 0;line-height:1.8">全平台智能聚合平台。软件不预置任何内容源，所有内容接入能力由用户自行导入配置后启用。</div>
-          </div>
-          <div class="muted mb8">更新日志</div>
-          ${CHANGELOG.slice().reverse().map((c) => `
-            <div style="margin-bottom:14px">
-              <div class="row gap8"><span class="tag tag-blue">v${c.version}</span><span class="muted">${c.date}</span></div>
-              <ul style="padding-left:18px;margin-top:6px;font-size:13px;color:var(--text-secondary);line-height:1.9">${c.items.map((i) => `<li>${esc(i)}</li>`).join('')}</ul>
-            </div>`).join('')}`,
+          </div>`,
       });
     };
+  }
+
+  /* ---------- 导航栏板块管理（1-5 个，「我的」固定） ---------- */
+  async function showTabManager() {
+    const { BOARDS, MAX_TABS, MIN_TABS } = await import('../boards.js');
+    const cur = await kvGet('ui:tabs', ['ai']);
+    const picked = new Set(Array.isArray(cur) && cur.length ? cur : ['ai']);
+
+    const body = el('<div></div>');
+    function render() {
+      body.innerHTML = `
+        <div class="muted" style="margin-bottom:10px;line-height:1.7">勾选要显示在底部导航栏的板块（${MIN_TABS}-${MAX_TABS} 个）。未勾选的板块不会加载，勾选后首次打开时才下载。「我的」固定显示。</div>
+        <div class="col gap8">
+          ${BOARDS.map((b) => `
+            <button class="list-item" style="width:100%" data-b="${b.id}">
+              <span class="list-ico">${icon(b.ico)}</span>
+              <div class="grow" style="text-align:left;min-width:0">
+                <div style="font-size:14px;font-weight:600">${b.name}</div>
+                <div class="muted ellipsis">${esc(b.desc)}</div>
+              </div>
+              <span class="ai-toggle ${picked.has(b.id) ? 'on' : ''}" data-tg="${b.id}"></span>
+            </button>`).join('')}
+        </div>
+        <div class="muted" style="text-align:center;margin-top:10px">已选 ${picked.size} / ${MAX_TABS} 个板块</div>`;
+    }
+    render();
+    body.addEventListener('click', async (e) => {
+      const row = e.target.closest('[data-b]');
+      if (!row) return;
+      const id = row.dataset.b;
+      if (picked.has(id)) {
+        if (picked.size <= MIN_TABS) return toast('至少保留 1 个板块');
+        picked.delete(id);
+      } else {
+        if (picked.size >= MAX_TABS) return toast(`最多选择 ${MAX_TABS} 个板块`);
+        picked.add(id);
+      }
+      await kvSet('ui:tabs', [...picked]);
+      render();
+      const { rebuildTabs } = await import('../app.js');
+      rebuildTabs(currentTabId());
+    });
+    function currentTabId() {
+      const on = document.querySelector('#tabbar .tab.on');
+      return on ? on.dataset.tab : null;
+    }
+    modal({ title: '导航栏管理', body });
+  }
+
+  /* ---------- 历史版本（时间线，仅最新版展开） ---------- */
+  function showChangelog() {
+    const list = CHANGELOG.slice().reverse(); // 最新在前
+    const body = el(`<div class="timeline">${list.map((c, idx) => `
+      <div class="tl-item${idx === 0 ? ' major open' : ''}">
+        <div class="tl-dot"></div>
+        <div class="tl-card">
+          <button class="tl-head tl-toggle">
+            <span class="tl-ver">v${c.version}</span>
+            ${idx === 0 ? '<span class="tl-badge">最新</span>' : ''}
+            <span class="tl-date">${c.date}</span>
+            <span class="tl-caret">${icon('arrowR')}</span>
+          </button>
+          <ul class="tl-list">${c.items.map((i) => `<li>${esc(i)}</li>`).join('')}</ul>
+        </div>
+      </div>`).join('')}</div>`);
+    body.addEventListener('click', (e) => {
+      const head = e.target.closest('.tl-toggle');
+      if (head) head.closest('.tl-item').classList.toggle('open');
+    });
+    modal({ title: '历史版本', body });
   }
 
   /* ---------- 管理员入口 ---------- */

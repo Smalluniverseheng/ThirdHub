@@ -7,7 +7,7 @@ const PUBLIC_PROXIES = [
   (u) => 'https://corsproxy.io/?url=' + encodeURIComponent(u),
 ];
 
-export async function getBackendProxy() { return await kvGet('proxy:backend', ''); }
+export async function getBackendProxy() { return await kvGet('proxy:backend', 'https://thirdhub-proxy.1829487897.workers.dev/'); }
 export async function setBackendProxy(url) { await kvSet('proxy:backend', (url || '').trim()); }
 
 export async function httpGet(url, headers = {}) {

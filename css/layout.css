@@ -7,11 +7,10 @@
   position: absolute; inset: 0; overflow-y: auto; overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   padding-bottom: 24px;
-  opacity: 0; pointer-events: none; transform: translateX(24px);
-  transition: opacity .22s ease, transform .22s ease;
+  opacity: 0; pointer-events: none;
+  transition: opacity .2s ease;
 }
-.page.active { opacity: 1; pointer-events: auto; transform: none; }
-.page.slide-left { transform: translateX(-24px); }
+.page.active { opacity: 1; pointer-events: auto; }
 
 /* 页头 */
 .page-head {

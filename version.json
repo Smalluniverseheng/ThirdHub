@@ -1,8 +1,8 @@
 {
-  "version": "1.1",
+  "version": "1.2",
   "type": "optional",
-  "title": "ThirdHub v1.1",
-  "content": "新增本地书籍导入（TXT/EPUB）与云端同步（书架/历史/收藏/阅读进度多设备合并）",
+  "title": "ThirdHub v1.2",
+  "content": "修复宽屏设备导航栏位置问题：所有设备统一为底部导航",
   "downloadUrl": "",
   "releaseDate": "2026-08-06"
 }

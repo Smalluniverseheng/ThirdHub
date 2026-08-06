@@ -17,3 +17,6 @@
 .cat-section { margin-top: 18px; }
 .cat-manager { padding: 0 16px; }
 .source-item .msg-act { background: none; }
+
+/* v1.5 修复：连接器管理图标大小不齐 */
+.cat-type-ico svg, .cat-type-ico .ico, .cat-type-ico .ico svg { width: 22px !important; height: 22px !important; display: block; flex-shrink: 0; }

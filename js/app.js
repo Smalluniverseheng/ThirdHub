@@ -1,5 +1,5 @@
 /* ===== ThirdHub app.js — 应用入口 / 路由 / 初始化 ===== */
-export const APP_VERSION = '1.6';
+export const APP_VERSION = '1.7';
 
 import { $, $$, icon, toast } from './ui.js';
 import { getSetting, setSetting, on, emit, openDB, kvGet, kvSet } from './store.js';
@@ -133,13 +133,29 @@ async function boot() {
   await openDB();
   await initTheme();
   initSW();
+
+  /* v1.7：设备日志钩子（尽早安装，捕获启动期错误） */
+  try { const { installLogHooks } = await import('./modules/devlog.js'); installLogHooks(); } catch (e) {}
+
+  /* v1.7：开屏动画（非首访且未关闭时展示，不阻塞启动） */
+  try { const { maybeSplash } = await import('./modules/splash.js'); maybeSplash(); } catch (e) {}
+
   /* 云端初始化不阻塞启动：慢网环境下最多等 6 秒，其余时间后台继续 */
   const cloudReady = (async () => {
     try { await initCloud(); } catch (e) { console.warn('cloud 初始化失败', e); }
     try { await initAuth(); } catch (e) { console.warn('auth 初始化失败', e); }
     try { initSync(); } catch (e) { console.warn('sync 初始化失败', e); }
+    /* v1.7：进入浏览器即拉取最新设置（多设备一致）；登记本设备 */
+    try { const { initSettingsSync } = await import('./modules/settings-sync.js'); await initSettingsSync(); } catch (e) { console.warn('设置同步失败', e); }
+    try { const { registerDevice } = await import('./modules/devices.js'); await registerDevice(); } catch (e) {}
   })();
   await Promise.race([cloudReady, new Promise((r) => setTimeout(r, 6000))]);
+
+  /* v1.7：回收站到期自动清理 */
+  try { const { purgeRecycle } = await import('./modules/recycle-bin.js'); await purgeRecycle(); } catch (e) {}
+
+  /* v1.7：应用锁门禁（开启后需先解锁才能进入） */
+  try { const { gateIfLocked } = await import('./modules/applock.js'); await gateIfLocked(); } catch (e) {}
 
   /* 首次进入：介绍 → 登录（可跳过）→ 新用户使用目的 */
   const { maybeOnboard } = await import('./modules/onboarding.js');

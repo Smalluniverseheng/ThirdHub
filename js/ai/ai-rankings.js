@@ -18,6 +18,19 @@ export const RANK_CATEGORIES = [
   { id: 'korean', name: '韩语榜' },
 ];
 
+/* ===== v1.9：云端排行榜覆盖（管理员后台维护，th_leaderboard 表） =====
+   云端有数据时覆盖「综合榜」；其余分类榜仍用内置快照。
+   org 字段存厂商 id（用于取图标，如 openai / google / moonshot）。 */
+export async function syncCloudRankings() {
+  try {
+    const { getSupabase, hasCloud } = await import('../supabase.js');
+    if (!hasCloud()) return;
+    const { data, error } = await getSupabase().from('th_leaderboard').select('*').order('rank', { ascending: true });
+    if (error || !data || !data.length) return;
+    RANKINGS.overall = data.map((r) => ({ m: r.model, p: r.org || 'openai', s: Number(r.score) || 0, note: r.note || '' }));
+  } catch (e) {}
+}
+
 /* m: 模型名（展示用） p: 厂商 id（取图标） s: 分数 dims: 六维分（仅综合榜 TOP 需要） */
 export const RANKINGS = {
   overall: [

@@ -3,12 +3,13 @@
    更多设置：偏好设置 · 会话与上下文 · 语音输入(ASR) · 语音合成(TTS) · 记忆系统 · 用量统计 · 工具中心 · 提供商与模型管理 */
 import { $, $$, el, esc, icon, toast, openOverlay, confirmDialog, formRow, modal, actionSheet } from '../ui.js';
 import { kvGet, kvSet, getSetting, setSetting, db } from '../store.js';
-import { PROVIDERS, providerById } from '../ai/ai-models.js';
+import { PROVIDERS, providerById, refreshCustomProviders } from '../ai/ai-models.js';
 import { vendorIcon } from '../ai/vendors.js';
 import { pickModel } from '../ai/model-selector.js';
-import { getApiKey } from '../ai/ai-api.js';
+import { getApiKey, setApiKey } from '../ai/ai-api.js';
 import { TTS_ENGINES } from '../voice.js';
 import { listMcpServers } from '../ai/mcp-client.js';
+import { listCustom, addCustom, updateCustom, removeCustom } from '../ai/custom-providers.js';
 import { getTotalStats, getDailyStats, getModelStats, getCostBreakdown, fmtTokens } from '../token-meter.js';
 import { fmtUsd, usdToCnyRate } from '../ai/ai-pricing.js';
 
@@ -643,6 +644,127 @@ function subTools() {
   });
 }
 
+
+/* ---------- 我的模型：自定义厂商（可无限添加） ---------- */
+function myModelsText(models) {
+  return (models || []).map((m) => (typeof m === 'string' ? m : (m.id + (m.nick ? '|' + m.nick : '')))).join('\n');
+}
+function parseMyModels(text) {
+  return String(text || '').split('\n').map((l) => l.trim()).filter(Boolean).map((l) => {
+    const i = l.indexOf('|');
+    if (i > 0) {
+      const id = l.slice(0, i).trim();
+      const nick = l.slice(i + 1).trim();
+      return nick ? { id, nick } : id;
+    }
+    return l;
+  }).filter((m) => (typeof m === 'string' ? m : m.id));
+}
+
+function showMyModels(page) {
+  openOverlay({
+    title: '我的模型',
+    build: async (body) => {
+      const render = async () => {
+        await refreshCustomProviders(true);
+        const list = await listCustom();
+        body.innerHTML = `<div class="set-wrap col gap8" id="my-list"></div>
+          <div style="padding:2px 20px 22px"><button class="btn btn-primary btn-block" id="my-add">${icon('plus')} 添加自定义厂商</button></div>
+          <div class="muted" style="padding:0 22px 18px;font-size:12px;line-height:1.7">添加后会出现在模型选择器的「我的模型」分组；模型行支持「模型ID|显示昵称」。</div>`;
+        const box = $('#my-list', body);
+        if (!list.length) {
+          box.innerHTML = '<div class="empty"><div class="empty-title">还没有自定义厂商</div><div class="empty-sub">点下方按钮添加，可一直添加多个</div></div>';
+        }
+        list.forEach((cp) => {
+          const row = el(`<div class="list-item">
+            <span class="list-ico" style="background:none">${vendorIcon(cp.id)}</span>
+            <div class="grow" style="min-width:0">
+              <div style="font-size:14px;font-weight:700" class="ellipsis">${esc(cp.name || '我的厂商')}</div>
+              <div class="muted ellipsis">${esc(cp.base || '未填接口地址')} · ${(cp.models || []).length} 个模型</div>
+            </div>
+            <div class="col gap4">
+              <button class="btn btn-sm" data-a="edit">编辑</button>
+              <button class="btn btn-sm btn-danger" data-a="del">删除</button>
+            </div>
+          </div>`);
+          $('[data-a="edit"]', row).onclick = () => editMyProvider(cp, render);
+          $('[data-a="del"]', row).onclick = async () => {
+            if (!(await confirmDialog(`删除「${cp.name || '我的厂商'}」？`, '该厂商下的模型与已保存 Key 会一起移除', '删除', true))) return;
+            await removeCustom(cp.id);
+            await refreshCustomProviders(true);
+            toast('已删除', 'ok');
+            render();
+          };
+          box.appendChild(row);
+        });
+        $('#my-add', body).onclick = () => editMyProvider(null, render);
+      };
+      await render();
+    },
+  });
+}
+
+function editMyProvider(cp, onDone) {
+  const isNew = !cp;
+  cp = cp || { id: 'custom', name: '', base: '', type: 'openai', models: [], icon: '' };
+  let iconData = cp.icon || '';
+  const body = el(`<div>
+    <div class="row gap8 mb16" style="align-items:center">
+      <span data-v="iconprev" style="width:44px;height:44px;border-radius:12px;overflow:hidden;display:inline-grid;place-items:center">${iconData ? `<img src="${esc(iconData)}" style="width:100%;height:100%;object-fit:cover">` : vendorIcon(cp.id || 'custom')}</span>
+      <div class="col gap4">
+        <button class="btn btn-sm" data-a="icon">${iconData ? '更换图标' : '上传图标'}</button>
+        ${iconData ? '<button class="btn btn-sm btn-danger" data-a="iconclear">清除图标</button>' : ''}
+      </div>
+      <input type="file" accept="image/*" data-f="iconfile" hidden>
+    </div>
+    ${formRow('厂商名称', `<input class="input" data-f="name" value="${esc(cp.name || '')}" placeholder="例如：我的中转站 / 自建 OneAPI">`)}
+    ${formRow('接口地址 Base URL', `<input class="input" data-f="base" value="${esc(cp.base || '')}" placeholder="https://your-api.example.com/v1">`)}
+    ${formRow('接口类型', `<select class="input" data-f="type"><option value="openai" ${cp.type !== 'anthropic' ? 'selected' : ''}>OpenAI 兼容</option><option value="anthropic" ${cp.type === 'anthropic' ? 'selected' : ''}>Anthropic 兼容</option></select>`)}
+    ${formRow('API Key', `<input class="input" data-f="key" type="password" value="" placeholder="${isNew ? 'sk-...（也可稍后在 API 密钥里配置）' : '留空则保持已保存的 Key'}" autocomplete="off">`)}
+    ${formRow('模型列表（每行一个）', `<textarea class="input" rows="7" data-f="models" placeholder="模型ID&#10;模型ID|显示昵称&#10;例如：gpt-4o-mini|我的小模型">${esc(myModelsText(cp.models))}</textarea>`)}
+    <p class="muted" style="margin-bottom:4px">保存后可在「模型选择 → 我的模型」中选择并直接对话；昵称只影响显示，请求仍使用真实模型 ID。</p>
+  </div>`);
+  const m = modal({
+    title: isNew ? '添加自定义厂商' : '编辑自定义厂商', body,
+    footer: `<button class="btn grow" data-a="cancel">取消</button><button class="btn btn-primary grow" data-a="save">保存</button>`,
+  });
+  const refreshIcon = () => {
+    $('[data-v="iconprev"]', body).innerHTML = iconData ? `<img src="${esc(iconData)}" style="width:100%;height:100%;object-fit:cover">` : vendorIcon(cp.id || 'custom');
+  };
+  $('[data-a="icon"]', body).onclick = () => $('[data-f="iconfile"]', body).click();
+  $('[data-f="iconfile"]', body).onchange = (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    const rd = new FileReader();
+    rd.onload = () => { iconData = String(rd.result || ''); refreshIcon(); toast('图标已选择，保存后生效', 'ok'); };
+    rd.readAsDataURL(f);
+  };
+  const clearBtn = $('[data-a="iconclear"]', body);
+  if (clearBtn) clearBtn.onclick = () => { iconData = ''; refreshIcon(); };
+  $('[data-a="cancel"]', m.mask).onclick = m.close;
+  $('[data-a="save"]', m.mask).onclick = async () => {
+    const name = $('[data-f="name"]', body).value.trim();
+    const base = $('[data-f="base"]', body).value.trim();
+    const type = $('[data-f="type"]', body).value;
+    const key = $('[data-f="key"]', body).value.trim();
+    const models = parseMyModels($('[data-f="models"]', body).value);
+    if (!name) return toast('请填写厂商名称');
+    if (!base) return toast('请填写接口地址');
+    if (!models.length) return toast('请至少填写一个模型');
+    if (isNew) {
+      const created = await addCustom({ name, base, type, models, icon: iconData });
+      if (key) await setApiKey(created.id, key);
+    } else {
+      await updateCustom(cp.id, { name, base, type, models, icon: iconData });
+      if (key) await setApiKey(cp.id, key);
+    }
+    await refreshCustomProviders(true);
+    toast('已保存，可在模型选择器「我的模型」中使用', 'ok');
+    m.close();
+    onDone && onDone();
+  };
+}
+
 /* ---------- 提供商与模型管理 ---------- */
 function subProviders(page) {
   openOverlay({
@@ -653,6 +775,7 @@ function subProviders(page) {
       const add = (ic, name, sub, fn) => { const r = entryRow(ic, name, sub); r.onclick = fn; list.appendChild(r); };
       add('cpu', '模型设置', '厂商模型列表 · 实时同步 · 排行榜', async () => { const m = await import('./ai-chat.js'); m.showModelsPage(page); });
       add('key', 'API 密钥 / 联网搜索 / MCP', '厂商凭据与搜索服务配置', async () => { const m = await import('./ai-chat.js'); m.showAISettings(); });
+      add('plus', '我的模型 / 自定义厂商', '可一直添加；进入模型选择器「我的模型」分组', () => showMyModels(page));
       // 专用模型
       const special = [
         { key: 'ai:model-title', name: '标题生成模型', desc: '自动生成话题标题所用模型（默认跟随当前模型）' },

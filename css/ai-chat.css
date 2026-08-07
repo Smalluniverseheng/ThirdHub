@@ -347,11 +347,13 @@
 .md-table th { background: var(--bg-card); font-weight: 700; }
 .md-table tbody tr:nth-child(even) { background: rgba(120,130,160,.06); }
 
-/* 品牌图标：透明底，直接显示原图标 */
-.vendor-ico.brand { display: inline-grid; place-items: center; border-radius: 26%; overflow: hidden; position: relative; background: transparent !important; box-shadow: none !important; }
+/* 官方品牌图标（v1.3）：圆角方形白底 + 品牌色字形 / 彩色官方 PNG；raw 模式直接显示原图标 */
+.vendor-ico.brand { display: inline-grid; place-items: center; border-radius: 26%; overflow: hidden; position: relative; box-shadow: var(--shadow-card); }
 .vendor-ico.brand svg { width: 68%; height: 68%; }
-.vendor-ico.brand img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: transparent !important; }
+.vendor-ico.brand img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #fff; }
 .vendor-ico.brand .brand-letter { font-size: 12px; font-weight: 700; font-family: system-ui, sans-serif; }
+.vendor-ico.brand.raw { background: transparent !important; box-shadow: none !important; border: 0 !important; }
+.vendor-ico.brand.raw img { background: transparent !important; }
 
 /* Key 自动识别日志 */
 .identify-log {
@@ -1090,10 +1092,10 @@ button.rank-row-item:active { background: var(--bg-input); }
 /* v1.9 欢迎页：厂商 Logo + 模型简介 */
 .ai-welcome-logo img { width: 38px; height: 38px; border-radius: 10px; }
 
-/* 厂商图标：直接展示原图标，不套底色块 */
+/* 欢迎页厂商大图标：直接展示原图标，不套底色块 */
 .ai-welcome-vendor { background: none !important; box-shadow: none !important; border: 0 !important; }
-.ai-welcome-vendor .vendor-ico.brand { width: 72px; height: 72px; background: transparent !important; box-shadow: none !important; border: 0 !important; }
-.ai-welcome-vendor .vendor-ico.brand img { width: 100% !important; height: 100% !important; border-radius: 18px; background: transparent !important; }
+.ai-welcome-vendor .vendor-ico.brand.raw { width: 72px; height: 72px; background: transparent !important; box-shadow: none !important; border: 0 !important; }
+.ai-welcome-vendor .vendor-ico.brand.raw img { width: 100% !important; height: 100% !important; border-radius: 18px; background: transparent !important; }
 .ai-welcome-intro {
   max-width: 520px; line-height: 1.8; text-align: center;
   color: var(--text-secondary); font-size: 13.5px;

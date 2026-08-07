@@ -1,10 +1,10 @@
 {
-  "version": "2.1",
-  "build": 12,
-  "notes": "厂商图标直接显示原图标，去掉底色块与白色衬底；版本号统一为 2.1",
+  "version": "2.2",
+  "build": 13,
+  "notes": "新增「我的模型」：自定义厂商可一直添加并直接对话，支持上传图标与模型昵称；恢复普通厂商图标底色",
   "apks": {
-    "universal": "https://github.com/Smalluniverseheng/ThirdHub-Android/releases/download/v2.1/ThirdHub-Android-v2.1.apk"
+    "universal": "https://github.com/Smalluniverseheng/ThirdHub-Android/releases/download/v2.2/ThirdHub-Android-v2.2.apk"
   },
-  "releasePage": "https://github.com/Smalluniverseheng/ThirdHub-Android/releases/tag/v2.1",
-  "apkUrl": "https://github.com/Smalluniverseheng/ThirdHub-Android/releases/download/v2.1/ThirdHub-Android-v2.1.apk"
+  "releasePage": "https://github.com/Smalluniverseheng/ThirdHub-Android/releases/tag/v2.2",
+  "apkUrl": "https://github.com/Smalluniverseheng/ThirdHub-Android/releases/download/v2.2/ThirdHub-Android-v2.2.apk"
 }

@@ -1,3 +1,6 @@
+import { kvGet } from '../store.js';
+import { setCustomVendorIcon, clearCustomVendorIcons } from './vendors.js';
+
 /* ===== ThirdHub js/ai/ai-models.js — 厂商与模型清单（v1.5 · 33 家厂商 300+ 模型） =====
    type: openai（OpenAI 兼容）/ anthropic（Claude 适配器）
    models: 对话模型 · image: 绘画模型 · video: 视频模型 · deprecated: 历史模型（默认折叠）
@@ -108,6 +111,48 @@ export const PROVIDERS = [
 
 export function providerById(id) {
   return PROVIDERS.find((p) => p.id === id) || PROVIDERS[PROVIDERS.length - 1];
+}
+
+
+/* ---------- 自定义厂商动态注册（我的模型） ---------- */
+export const modelIdOf = (m) => (typeof m === 'string' ? m : (m && (m.id || m.model)) || '');
+export const modelNickOf = (m) => (typeof m === 'string' ? m : (m && (m.nick || m.name || m.id || m.model)) || '');
+let __customReady = false;
+
+export async function refreshCustomProviders(force = false) {
+  if (__customReady && !force) return PROVIDERS.filter((p) => p.custom);
+  let list = [];
+  try { list = await kvGet('ai:custom-providers', []); } catch (e) { list = []; }
+  for (let i = PROVIDERS.length - 1; i >= 0; i--) if (PROVIDERS[i].custom) PROVIDERS.splice(i, 1);
+  clearCustomVendorIcons();
+  const customs = (Array.isArray(list) ? list : []).map((cp) => {
+    const models = (cp.models || []).map((m) => (typeof m === 'string' ? m : { id: modelIdOf(m), nick: m.nick || m.name || '' })).filter((m) => modelIdOf(m));
+    const p = {
+      ...cp,
+      name: cp.name || '我的厂商',
+      base: cp.base || '',
+      type: cp.type || 'openai',
+      models,
+      image: cp.image || [],
+      video: cp.video || [],
+      deprecated: cp.deprecated || [],
+      custom: true,
+      dynamic: true,
+      group: '我的模型',
+    };
+    setCustomVendorIcon(p.id, cp.icon || '');
+    return p;
+  });
+  const idx = PROVIDERS.findIndex((p) => p.id === 'custom');
+  PROVIDERS.splice(idx < 0 ? PROVIDERS.length : idx, 0, ...customs);
+  __customReady = true;
+  return customs;
+}
+
+export function modelDisplayName(providerId, model) {
+  const p = providerById(providerId);
+  const hit = (p.models || []).find((m) => modelIdOf(m) === model);
+  return hit ? modelNickOf(hit) : model;
 }
 
 /* 厂商全部模型（对话 + 绘画 + 视频 + 历史） */

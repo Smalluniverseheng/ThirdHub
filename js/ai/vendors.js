@@ -23,21 +23,37 @@ if (typeof window !== 'undefined') {
   };
 }
 
-export function vendorIcon(id) {
+const CUSTOM_ICONS = {};
+export function setCustomVendorIcon(id, icon) {
+  if (icon) CUSTOM_ICONS[id] = icon; else delete CUSTOM_ICONS[id];
+}
+export function clearCustomVendorIcons() {
+  Object.keys(CUSTOM_ICONS).forEach((k) => delete CUSTOM_ICONS[k]);
+}
+const escAttr = (s) => String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+
+export function vendorIcon(id, opts = {}) {
+  const raw = !!(opts && opts.raw);
+  const custom = CUSTOM_ICONS[id];
+  if (custom) {
+    return '<span class="vendor-ico brand has-img custom-icon' + (raw ? ' raw' : '') + '"' + (raw ? '' : ' style="background:#fff"') + '><img src="' + escAttr(custom) + '" loading="lazy" alt=""></span>';
+  }
   const b = BRANDS[id] || BRANDS.custom;
   // 1. 内嵌官方 SVG（离线可用，品牌色字形）
   if (b.emb && PATHS[b.emb]) {
-    return '<span class="vendor-ico brand"><svg viewBox="0 0 24 24" fill="' + b.color + '" aria-hidden="true"><path d="' + PATHS[b.emb] + '"/></svg></span>';
+    return '<span class="vendor-ico brand' + (raw ? ' raw' : '') + '"' + (raw ? '' : ' style="background:#fff"') + '><svg viewBox="0 0 24 24" fill="' + b.color + '" aria-hidden="true"><path d="' + PATHS[b.emb] + '"/></svg></span>';
   }
   // 2. CDN 官方图标链 + 首字母兜底
   const urls = [];
   if (b.lobe) { urls.push(LOBE_PRIMARY + b.lobe + '.png'); urls.push(LOBE_FALLBACK + b.lobe + '.png'); }
   if (b.simple) urls.push(SIMPLE_CDN + b.simple);
-  let inner = '<span class="brand-letter" style="color:' + b.color + '">' + b.letter + '</span>';
+  let inner = '<span class="brand-letter" style="color:' + (raw ? b.color : '#fff') + '">' + b.letter + '</span>';
   if (urls.length) {
     inner += '<img src="' + urls[0] + '" data-fb="' + encodeURIComponent(urls.slice(1).join('|')) + '" onerror="__thBrandErr(this)" loading="lazy" alt="">';
   }
-  return '<span class="vendor-ico brand' + (urls.length ? ' has-img' : '') + '">' + inner + '</span>';
+  return '<span class="vendor-ico brand' + (urls.length ? ' has-img' : '') + (raw ? ' raw' : '') + '"' + (raw ? '' : ' style="background:' + b.color + '"') + '>' + inner + '</span>';
 }
+
+export function vendorIconRaw(id) { return vendorIcon(id, { raw: true }); }
 
 export const VENDOR_ICONS = {};

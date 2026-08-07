@@ -9,8 +9,8 @@ import {
   fetchRemoteModels, saveSyncedModels, getSyncedModels, transcribeAudio,
 } from '../ai/ai-api.js';
 import { SEARCH_SERVICES, getSearchConfig, setSearchConfig, hasSearchConfig, searchWeb, resultsToContext } from '../ai/web-search.js';
-import { PROVIDERS, providerById } from '../ai/ai-models.js';
-import { vendorIcon } from '../ai/vendors.js';
+import { PROVIDERS, providerById, refreshCustomProviders, modelDisplayName } from '../ai/ai-models.js';
+import { vendorIcon, vendorIconRaw } from '../ai/vendors.js';
 import { modelIntro } from '../ai/model-intros.js';
 import { pickModel } from '../ai/model-selector.js';
 import { renderMarkdown, bindCopyButtons } from '../ai/markdown.js';
@@ -82,6 +82,7 @@ const attachTexts = new Map(); // 文本附件内容（chip ref -> {name,text}�
 
 /* ================= 主渲染 ================= */
 export async function renderAIChat(page) {
+  await refreshCustomProviders();
   currentModel = await kvGet('ai:last-model', { providerId: 'deepseek', model: 'deepseek-chat' });
   imageModel = await kvGet('ai:image-model', { providerId: 'openai', model: 'gpt-image-1' });
   videoModel = await kvGet('ai:video-model', { providerId: 'bytedance', model: 'doubao-seedance-1-0-pro' });
@@ -399,7 +400,7 @@ function updateTopbar(page) {
   const mi = $('[data-a="model"] .pill-ico', page);
   const sel = workspace === 'image' ? imageModel : workspace === 'video' ? videoModel : currentModel;
   if (currentMode === 'single' || !inChat) {
-    mp.textContent = sel.model;
+    mp.textContent = modelDisplayName(sel.providerId, sel.model);
     mi.innerHTML = vendorIcon(sel.providerId);
   } else {
     mp.textContent = compareModels.length ? `${compareModels.length} 个模型` : '选择模型';
@@ -1177,7 +1178,7 @@ function renderMessages(page) {
     ];
     const wprov = providerById(currentModel.providerId);
     box.innerHTML = `<div class="ai-welcome">
-      <div class="ai-welcome-logo ai-welcome-vendor" title="${esc(wprov.name)}">${vendorIcon(currentModel.providerId) || icon('robot')}</div>
+      <div class="ai-welcome-logo ai-welcome-vendor" title="${esc(wprov.name)}">${vendorIconRaw(currentModel.providerId) || icon('robot')}</div>
       <div class="ai-welcome-title">你好，我是 ${esc(currentModel.model)}</div>
       <div class="ai-welcome-sub ai-welcome-intro">${esc(modelIntro(currentModel.providerId, currentModel.model, wprov.name))}</div>
       <div class="ai-welcome-cards">
@@ -1951,6 +1952,7 @@ export async function showAISettings(focusProvider = null) {
         <div class="muted" style="font-size:12px;margin-bottom:8px">接入 MCP 工具服务后，AI 对话可调用外部工具（仅支持 SSE / HTTP 传输）。</div>
         <div class="col gap8" id="as-mcps"></div>`;
 
+      await refreshCustomProviders();
       const renderKeys = async () => {
         const box = $('#as-keys', body);
         box.innerHTML = '';

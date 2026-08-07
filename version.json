@@ -1,8 +1,8 @@
 {
-  "version": "2.1",
+  "version": "2.2",
   "type": "optional",
-  "title": "ThirdHub v2.1",
-  "content": "1. 厂商图标直接显示原图标，去掉底色块与白色衬底\n2. 网页端与安卓端版本号统一为 2.1\n3. 安卓安装包同步更新为 v2.1",
-  "downloadUrl": "https://github.com/Smalluniverseheng/ThirdHub-Android/releases/download/v2.1/ThirdHub-Android-v2.1.apk",
+  "title": "ThirdHub v2.2",
+  "content": "1. 恢复普通厂商图标底色，仅欢迎页大图标直显\n2. 新增「我的模型」：自定义厂商可一直添加，模型进入选择器并可直接对话\n3. 自定义厂商支持上传图标，模型支持自定义显示昵称",
+  "downloadUrl": "https://github.com/Smalluniverseheng/ThirdHub-Android/releases/download/v2.2/ThirdHub-Android-v2.2.apk",
   "releaseDate": "2026-08-07"
 }

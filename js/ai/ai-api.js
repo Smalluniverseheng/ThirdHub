@@ -1,5 +1,5 @@
 /* ===== ThirdHub js/ai/ai-api.js — 统一 AI 对话核心 v1.5（流式 SSE · 推理流 · 并行识别 · 模型同步 · 视频生成） ===== */
-import { providerById } from './ai-models.js';
+import { providerById, refreshCustomProviders } from './ai-models.js';
 import { kvGet, kvSet, emit } from '../store.js';
 import { recordUsage } from '../token-meter.js';
 
@@ -18,6 +18,7 @@ export async function setBaseOverride(providerId, base) {
   await kvSet('ai:base:' + providerId, (base || '').trim());
 }
 export async function allConfiguredKeys() {
+  await refreshCustomProviders();
   const { PROVIDERS } = await import('./ai-models.js');
   const out = [];
   for (const p of PROVIDERS) {
@@ -209,6 +210,7 @@ async function chatAnthropic({ base, key, model, messages, onToken, onReasoning,
 
 /* ---------- 统一入口（params：temperature / top_p / max_tokens / stream_options 等） ---------- */
 export async function chat({ providerId, model, messages, onToken, onReasoning, signal, params = {} }) {
+  await refreshCustomProviders();
   const provider = providerById(providerId);
   let key = await getApiKey(providerId);
   let base = (await getBaseOverride(providerId)) || provider.base;
@@ -259,6 +261,7 @@ export async function refreshFreeModels() {
 
 /* ---------- AI 绘画（OpenAI 兼容 images/generations） ---------- */
 export async function drawImage({ providerId, model, prompt, size = '1024x1024' }) {
+  await refreshCustomProviders();
   const provider = providerById(providerId);
   const key = await getApiKey(providerId);
   const base = (await getBaseOverride(providerId)) || provider.base;
@@ -280,6 +283,7 @@ export async function drawImage({ providerId, model, prompt, size = '1024x1024' 
 
 /* ---------- AI 视频生成（异步任务轮询） ---------- */
 export async function generateVideo({ providerId, model, prompt, ratio = '16:9', duration = 5, onProgress }) {
+  await refreshCustomProviders();
   const provider = providerById(providerId);
   const key = await getApiKey(providerId);
   const base = ((await getBaseOverride(providerId)) || provider.base || '').replace(/\/$/, '');
@@ -348,6 +352,7 @@ export function supportsWebSearch(providerId) {
 
 /* 对指定厂商做一次真实对话验证（最小开销：max_tokens=1） */
 export async function testProviderKey(providerId, key, timeoutMs = 9000) {
+  await refreshCustomProviders();
   const p = providerById(providerId);
   const model = (p.models || [])[0];
   if (!model) throw new Error('该厂商没有预置对话模型');
@@ -431,6 +436,7 @@ export async function identifyApiKey(key, onProgress = null) {
 
 /* ---------- 实时模型同步（厂商 /models 接口） ---------- */
 export async function fetchRemoteModels(providerId) {
+  await refreshCustomProviders();
   const p = providerById(providerId);
   const key = await getApiKey(providerId);
   const base = ((await getBaseOverride(providerId)) || p.base || '').replace(/\/$/, '');
@@ -468,6 +474,7 @@ export async function getSyncedModels(providerId) {
 
 /* 有效模型清单 = 预置 + 已同步去重 */
 export async function effectiveModels(providerId) {
+  await refreshCustomProviders();
   const p = providerById(providerId);
   const base = [...(p.models || [])];
   const synced = await getSyncedModels(providerId);
@@ -477,6 +484,7 @@ export async function effectiveModels(providerId) {
 
 /* ---------- 模型 ASR：OpenAI 兼容 /audio/transcriptions ---------- */
 export async function transcribeAudio({ providerId, model, blob, lang }) {
+  await refreshCustomProviders();
   const provider = providerById(providerId);
   const key = await getApiKey(providerId);
   const base = ((await getBaseOverride(providerId)) || provider.base || '').replace(/\/$/, '');

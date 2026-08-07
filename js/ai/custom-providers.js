@@ -5,9 +5,9 @@ import { uid } from '../ui.js';
 export async function listCustom() {
   return await kvGet('ai:custom-providers', []);
 }
-export async function addCustom({ name, base, key, models = [] }) {
+export async function addCustom({ name, base, key, models = [], type = 'openai', icon = '' }) {
   const list = await listCustom();
-  const cp = { id: 'custom-' + uid(), name, base, models, createdAt: Date.now() };
+  const cp = { id: 'custom-' + uid(), name, base, type, icon, models, createdAt: Date.now() };
   list.push(cp);
   await kvSet('ai:custom-providers', list);
   if (key) await kvSet('ai:key:' + cp.id, key);
@@ -20,4 +20,5 @@ export async function updateCustom(id, patch) {
 }
 export async function removeCustom(id) {
   await kvSet('ai:custom-providers', (await listCustom()).filter((x) => x.id !== id));
+  await kvSet('ai:key:' + id, '');
 }

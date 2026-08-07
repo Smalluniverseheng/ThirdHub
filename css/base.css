@@ -262,6 +262,8 @@ svg.ico.fill { fill: currentColor; stroke: none; }
   background: linear-gradient(135deg, var(--primary), #9b59ff);
   box-shadow: 0 8px 30px rgba(59,91,253,.45);
 }
+.obl-core-brand { background: none; box-shadow: none; overflow: visible; }
+.obl-core-brand img { width: 64px; height: 64px; border-radius: 18px; box-shadow: 0 8px 24px rgba(59,91,253,.35); display: block; }
 .obl-core svg { width: 32px; height: 32px; }
 .obl-title { font-size: 34px; font-weight: 900; letter-spacing: 1px; }
 .obl-tag { font-size: 14px; color: var(--text-secondary); margin-top: 6px; }

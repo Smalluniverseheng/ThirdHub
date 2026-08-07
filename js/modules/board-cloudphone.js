@@ -8,8 +8,8 @@ export async function renderCloudPhoneBoard(page) {
     <div class="page-head"><div class="page-title">云手机</div></div>
     <div style="padding:8px 16px 24px">
       <div class="card" style="text-align:center;padding:34px 20px">
-        <div style="width:84px;height:84px;margin:0 auto 16px;border-radius:24px;display:grid;place-items:center;color:#fff;background:linear-gradient(135deg,var(--primary),var(--primary-deep));box-shadow:0 10px 26px rgba(59,91,253,.35)">
-          <span style="width:42px;height:42px;display:block">${icon('phone')}</span>
+        <div style="width:84px;height:84px;margin:0 auto 16px;display:grid;place-items:center;color:var(--primary)">
+          <span style="width:56px;height:56px;display:block">${icon('phone')}</span>
         </div>
         <div style="font-size:19px;font-weight:800">云手机</div>
         <div class="muted" style="max-width:300px;margin:10px auto 0;line-height:1.9">

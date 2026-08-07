@@ -34,6 +34,9 @@ const CREATE_CARDS = [
   { no: '03', ico: 'film', t: 'AI 视频', d: '文生视频，多档时长与比例可选。分镜脚本智能体先写脚本再出片，成片在线预览、直接下载。',
     chips: ['Sora 2', 'Veo 3', 'Seedance', '可灵', 'Hailuo 02'] },
 ];
+/* 安卓 App 内不展示「下载安卓版」入口 */
+const IN_APP = (() => { try { return !!(window.ThirdHubNative && window.ThirdHubNative.isNative && window.ThirdHubNative.isNative()); } catch (e) { return false; } })();
+
 const FAQS = [
   { q: 'ThirdHub 是免费的吗？', a: '应用完全免费。AI 对话使用你自己的 API Key，费用与厂商直接结算；会员仅扩容云存储。' },
   { q: '为什么软件里没有任何内容？', a: 'ThirdHub 不预置任何内容源，这是一个设计原则。你可以在「连接器管理」中导入自己信任的内容连接器，导入后即可搜索、阅读、播放。' },
@@ -77,7 +80,7 @@ export async function maybeOnboard() {
             <div class="obl-orbit">
               ${ring(ORBIT_VENDORS, 120, 36, false)}
               ${ring(ORBIT_VENDORS_2, 72, 24, true)}
-              <div class="obl-core">${icon('robot')}</div>
+              <div class="obl-core obl-core-brand"><img src="icons/launcher.png" alt="ThirdHub"></div>
             </div>
             <div class="obl-kicker">第三方科技</div>
             <div class="obl-title obl-shine">ThirdHub</div>
@@ -88,7 +91,7 @@ export async function maybeOnboard() {
             <div class="obl-cta">
               <button class="btn btn-primary ob-btn" data-a="go">开始体验</button>
               <button class="ob-skip" data-a="guest">先看看，不登录 →</button>
-              <a class="ob-skip" href="https://github.com/Smalluniverseheng/ThirdHub-Android/releases/latest" target="_blank" rel="noopener" style="text-decoration:none">下载安卓版 App ↗</a>
+              ${IN_APP ? '' : `<a class="ob-skip" href="https://github.com/Smalluniverseheng/ThirdHub-Android/releases/latest" target="_blank" rel="noopener" style="text-decoration:none">下载安卓版 App ↗</a>`}
             </div>
           </div>
           <div class="obl-marquee"><div class="obl-mq-track">${marquee}${marquee}</div></div>
@@ -142,7 +145,7 @@ export async function maybeOnboard() {
 
           <div class="obl-sec rv" style="text-align:center;padding-bottom:44px">
             <button class="btn btn-primary ob-btn" data-a="go2">立即开始</button>
-            <div style="margin-top:12px"><a class="ob-skip" href="https://github.com/Smalluniverseheng/ThirdHub-Android/releases/latest" target="_blank" rel="noopener" style="text-decoration:none">下载安卓版 App ↗</a></div>
+            ${IN_APP ? '' : `<div style="margin-top:12px"><a class="ob-skip" href="https://github.com/Smalluniverseheng/ThirdHub-Android/releases/latest" target="_blank" rel="noopener" style="text-decoration:none">下载安卓版 App ↗</a></div>`}
             <div class="muted" style="font-size:12px;margin-top:14px">第三方科技 · 不预置任何内容源</div>
           </div>
         </div>`;

@@ -13,6 +13,9 @@ import { checkUpdate } from '../update-checker.js';
 import { showKeySettings } from './ai-chat.js';
 import { showRegisterPage } from './register-page.js';
 
+/* 安卓 App 内隐藏「下载安卓版」入口 */
+const IN_APP = (() => { try { return !!(window.ThirdHubNative && window.ThirdHubNative.isNative && window.ThirdHubNative.isNative()); } catch (e) { return false; } })();
+
 export async function renderProfile(page) {
   const admin = await isAdmin();
 
@@ -494,7 +497,7 @@ export async function renderProfile(page) {
       { a: 'splash', ico: 'splash', name: '开屏动画', desc: splashOn ? '已启用（打开应用时展示品牌动画）' : '已关闭' },
       { a: 'proxy', ico: 'globe', name: '模块代理设置', desc: '各模块独立选择直连 / 自有代理 / 云端代理' },
       { a: 'sources', ico: 'plug', name: '连接器管理', desc: '导入 / 管理内容连接器' },
-      { a: 'apk', ico: 'download', name: '下载安卓版', desc: '获取最新安卓安装包' },
+      ...(IN_APP ? [] : [{ a: 'apk', ico: 'download', name: '下载安卓版', desc: '获取最新安卓安装包' }]),
       { a: 'update', ico: 'refresh', name: '检查更新', desc: '当前 v' + APP_VERSION },
       { a: 'autoupdate', ico: 'sync', name: '自动检查更新', desc: '开启后每次启动自动检查并下载新版本' },
       { a: 'changelog', ico: 'history', name: '历史版本', desc: '各版本更新日志' },

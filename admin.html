@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0f1117">
+<title>ThirdHub 管理后台</title>
+<link rel="icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="css/base.css?v=1.7">
+<link rel="stylesheet" href="css/theme.css?v=1.7">
+<link rel="stylesheet" href="css/layout.css?v=1.7">
+<link rel="stylesheet" href="css/profile.css?v=1.7">
+<style>
+  body { background: var(--bg-page, #0f1117); }
+  .adm-wrap { max-width: 860px; margin: 0 auto; padding: 24px 16px 80px; }
+  .adm-head { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+  .adm-head img { width: 44px; height: 44px; border-radius: 12px; }
+  .adm-tabs { display: flex; gap: 8px; margin-bottom: 18px; flex-wrap: wrap; }
+  .adm-tab { padding: 8px 16px; border-radius: 10px; border: 1px solid var(--border, #2a2f3a); background: var(--bg-card, #171a23); color: var(--text-secondary, #9aa3b2); cursor: pointer; font-size: 13px; }
+  .adm-tab.on { background: var(--primary, #3b5bfd); color: #fff; border-color: var(--primary, #3b5bfd); }
+  .adm-login { max-width: 340px; margin: 15vh auto 0; text-align: center; }
+  .adm-login img { width: 72px; height: 72px; border-radius: 18px; margin-bottom: 14px; }
+  .plan-edit { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+  .plan-edit .input { width: 100%; }
+  @media (max-width: 560px) { .plan-edit { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body data-theme="dark">
+<div id="app"></div>
+<script type="module" src="js/admin.js?v=1.7"></script>
+</body>
+</html>

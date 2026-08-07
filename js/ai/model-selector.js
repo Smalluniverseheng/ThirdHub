@@ -15,12 +15,13 @@ export async function pickModel({ multi = false, selected = [], type = 'chat' } 
     if (type === 'video') return p.video || [];
     return p.models || [];
   };
-  // 聊天类型合并实时同步的模型（不含历史模型）
+  // 聊天类型合并实时同步的模型（不含历史模型与非对话模型）
+  const NON_CHAT_RE = /embed|whisper|tts|transcri|speech|audio|dall-e|image|imagen|moderation|rerank|babbage|davinci|clip|sora|veo|wanx|cogview|cogvideo|kolors|stable-diffusion|seedream|seedance|hailuo|sensemirage/i;
   const syncedMap = {};
   if (type === 'chat') {
     for (const p of PROVIDERS) {
       const synced = await getSyncedModels(p.id);
-      if (synced.length) syncedMap[p.id] = synced.filter((m) => !(p.deprecated || []).includes(m) && !(p.models || []).includes(m));
+      if (synced.length) syncedMap[p.id] = synced.filter((m) => !(p.deprecated || []).includes(m) && !(p.models || []).includes(m) && !NON_CHAT_RE.test(m));
     }
   }
 
@@ -45,13 +46,25 @@ export async function pickModel({ multi = false, selected = [], type = 'chat' } 
         models = models.filter((m) => { const name = m.replace('::new', ''); return !kw || name.toLowerCase().includes(kw) || p.name.toLowerCase().includes(kw); });
         if (!models.length) return;
         const group = document.createElement('div');
-        group.className = 'ms-group';
+        // 默认折叠为厂商行；搜索时自动展开；已选中的厂商保持展开
+        const hasPicked = models.some((raw) => picked.has(p.id + '/' + raw.replace('::new', '')));
+        const expand = !!kw || hasPicked;
+        group.className = 'ms-group' + (expand ? ' open' : '');
         group.innerHTML = `
-          <div class="ms-vendor">
+          <button class="ms-vendor">
             <span class="ms-vico">${vendorIcon(p.id)}</span>
-            <span class="ms-vname">${esc(p.name)}</span>
-            ${keys[p.id] ? '<span class="tag tag-green">已配置</span>' : '<span class="tag tag-gray">未配置 Key</span>'}
-          </div>`;
+            <span class="ms-vname ellipsis">${esc(p.name)}</span>
+            <span class="ms-vcount">${models.length}</span>
+            ${keys[p.id] ? '<span class="tag tag-green">已配置</span>' : '<span class="tag tag-gray">未配置</span>'}
+            <span class="ms-chev">${icon('arrowR')}</span>
+          </button>
+          <div class="ms-items" ${expand ? '' : 'hidden'}></div>`;
+        const itemsEl = group.querySelector('.ms-items');
+        group.querySelector('.ms-vendor').onclick = () => {
+          const open = itemsEl.hidden;
+          itemsEl.hidden = !open;
+          group.classList.toggle('open', open);
+        };
         models.forEach((raw) => {
           const isNew = raw.endsWith('::new');
           const m = isNew ? raw.slice(0, -5) : raw;
@@ -68,7 +81,7 @@ export async function pickModel({ multi = false, selected = [], type = 'chat' } 
               m2.mask.remove();
             }
           };
-          group.appendChild(item);
+          itemsEl.appendChild(item);
         });
         listEl.appendChild(group);
       });

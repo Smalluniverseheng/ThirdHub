@@ -151,6 +151,9 @@ window.addEventListener('th:navpos', applyNavPos);
 /* ---------- Service Worker ---------- */
 function initSW() {
   if (!('serviceWorker' in navigator)) return;
+  /* v2.0：安卓 App 内不注册 SW —— App 已由原生层用内置包直答（更快更稳），
+     旧 SW 缓存只会带来脏缓存风险；浏览器端保持 PWA 能力不变 */
+  try { if (window.ThirdHubNative && window.ThirdHubNative.isNative && window.ThirdHubNative.isNative()) return; } catch (e) {}
   navigator.serviceWorker.register('sw.js').then((reg) => {
     reg.addEventListener('updatefound', () => {
       const nw = reg.installing;

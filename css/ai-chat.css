@@ -862,3 +862,170 @@ button.rank-row-item:active { background: var(--bg-input); }
   font-size: 12.5px; line-height: 1.8; color: var(--text-secondary);
   max-height: 260px; overflow-y: auto; white-space: pre-wrap; word-break: break-word;
 }
+
+/* ================= v1.7 新增组件样式 ================= */
+
+/* 数字输入行（对话设置，替代滑条） */
+.set-num { width: 130px; text-align: right; font-variant-numeric: tabular-nums; }
+
+/* 历史会话置顶分组头 */
+.ai-pin-head {
+  display: flex; align-items: center; gap: 6px; width: 100%;
+  padding: 8px 14px 4px; background: none; border: none; cursor: pointer;
+  font-size: 12px; color: var(--text-secondary); font-weight: 600;
+}
+.ai-pin-head .ico { width: 13px; height: 13px; }
+.ai-pin-head .muted { font-size: 11px; }
+.ai-pin-arrow { margin-left: auto; display: inline-flex; transition: transform .2s; transform: rotate(90deg); }
+.ai-pin-arrow.open { transform: rotate(90deg); }
+.ai-pin-arrow:not(.open) { transform: rotate(0deg); }
+.ai-pin-arrow .ico { width: 12px; height: 12px; }
+.ai-session-title .ico { width: 12px; height: 12px; vertical-align: -2px; margin-right: 3px; color: var(--primary); }
+
+/* 多选管理页 */
+.sm-toolbar {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 0; background: var(--bg-page);
+  border-bottom: 1px solid var(--border); margin-bottom: 12px;
+}
+.sm-count { font-size: 13px; color: var(--text-secondary); }
+.sm-row .sm-check {
+  width: 22px; height: 22px; border-radius: 6px; flex-shrink: 0;
+  border: 1.5px solid var(--border); display: inline-flex; align-items: center; justify-content: center;
+  color: var(--primary);
+}
+.sm-row.sel .sm-check { border-color: var(--primary); background: rgba(59, 91, 253, .12); }
+.sm-row.sel { border-color: var(--primary); }
+.sm-check .ico { width: 16px; height: 16px; }
+@media (min-width: 768px) {
+  .sm-toolbar { padding: 12px 0; }
+}
+
+/* 自有服务器在线状态点 */
+.sv-dot {
+  width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+  background: #6b7280; transition: background .3s;
+}
+.sv-dot.online { background: #22c55e; box-shadow: 0 0 8px rgba(34, 197, 94, .55); }
+.sv-dot.offline { background: #6b7280; }
+.sv-dot.scanning { background: #e6a23c; animation: svPulse 1s infinite alternate; }
+@keyframes svPulse { from { opacity: .4; } to { opacity: 1; } }
+
+/* 应用锁 */
+.applock-mask {
+  position: fixed; inset: 0; z-index: 10000;
+  background: var(--bg-page);
+  display: flex; align-items: center; justify-content: center;
+}
+.applock-box { text-align: center; padding: 24px; max-width: 340px; width: 100%; }
+.applock-logo {
+  width: 64px; height: 64px; margin: 0 auto 14px; border-radius: 18px;
+  background: rgba(59, 91, 253, .12); color: var(--primary);
+  display: flex; align-items: center; justify-content: center;
+}
+.applock-logo .ico { width: 30px; height: 30px; }
+.lk-dots { display: flex; gap: 14px; justify-content: center; margin: 18px 0 22px; }
+.lk-dot { width: 13px; height: 13px; border-radius: 50%; border: 1.5px solid var(--border); transition: all .15s; }
+.lk-dot.on { background: var(--primary); border-color: var(--primary); }
+.lk-pad { display: grid; grid-template-columns: repeat(3, 72px); gap: 12px; justify-content: center; }
+.lk-key {
+  height: 56px; border-radius: 14px; border: 1px solid var(--border);
+  background: var(--bg-card); color: var(--text-primary); font-size: 20px; font-weight: 600;
+  cursor: pointer; transition: all .12s;
+}
+.lk-key:active { background: var(--primary); color: #fff; }
+.lk-pattern {
+  position: relative; width: 240px; height: 240px; margin: 0 auto;
+  display: grid; grid-template-columns: repeat(3, 1fr); place-items: center;
+  touch-action: none; user-select: none;
+}
+.lk-pdot {
+  width: 56px; height: 56px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .15s;
+}
+.lk-pdot i { width: 14px; height: 14px; border-radius: 50%; background: var(--border); transition: all .15s; }
+.lk-pdot.on { background: rgba(59, 91, 253, .15); }
+.lk-pdot.on i { background: var(--primary); transform: scale(1.35); }
+.lk-lines { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+
+/* 会员中心（仿 Kimi：横向滑套餐 + 竖向滑权益） */
+.vip-head-btn {
+  padding: 5px 12px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--bg-card); color: var(--text-secondary); font-size: 12px; cursor: pointer;
+}
+.vip-hero { padding: 8px 2px 16px; }
+.vip-hero-name { font-size: 20px; font-weight: 800; }
+.vip-hero-sub { color: var(--text-secondary); font-size: 13px; margin-top: 4px; }
+.vip-cycle { display: flex; gap: 8px; margin-bottom: 16px; }
+.vip-cycle-btn {
+  flex: 1; padding: 10px; border-radius: 12px; border: 1px solid var(--border);
+  background: var(--bg-card); color: var(--text-secondary); font-size: 13px; cursor: pointer;
+}
+.vip-cycle-btn.on { border-color: var(--primary); color: var(--primary); background: rgba(59, 91, 253, .08); font-weight: 700; }
+.vip-save { font-size: 11px; color: #e6a23c; }
+.vip-slider {
+  display: flex; gap: 14px; overflow-x: auto; scroll-snap-type: x mandatory;
+  padding: 4px 2px 12px; -webkit-overflow-scrolling: touch;
+}
+.vip-slider::-webkit-scrollbar { display: none; }
+.vip-card {
+  position: relative; flex: 0 0 82%; max-width: 320px; scroll-snap-align: center;
+  border: 1px solid var(--border); border-radius: 18px; padding: 20px 18px;
+  background: var(--bg-card);
+  display: flex; flex-direction: column;
+}
+@media (min-width: 768px) { .vip-card { flex-basis: 300px; } }
+.vip-card.vip-hot { border-color: var(--primary); box-shadow: 0 6px 30px rgba(59, 91, 253, .18); }
+.vip-hot-badge {
+  position: absolute; top: -10px; right: 16px; padding: 3px 10px; border-radius: 999px;
+  background: var(--primary); color: #fff; font-size: 11px; font-weight: 700;
+}
+.vip-card-name { font-size: 17px; font-weight: 800; }
+.vip-card-tagline { color: var(--text-secondary); font-size: 12px; margin-top: 2px; }
+.vip-card-price { margin: 14px 0 6px; }
+.vip-cny { font-size: 16px; font-weight: 700; color: var(--primary); }
+.vip-num { font-size: 34px; font-weight: 800; color: var(--primary); }
+.vip-per { color: var(--text-secondary); font-size: 13px; }
+.vip-card-storage { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-secondary); margin-bottom: 10px; }
+.vip-card-storage .ico { width: 15px; height: 15px; }
+.vip-benefits {
+  flex: 1; overflow-y: auto; max-height: 168px; margin-bottom: 14px;
+  display: flex; flex-direction: column; gap: 8px; padding-right: 4px;
+}
+.vip-benefit { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; line-height: 1.5; }
+.vip-benefit .ico { width: 14px; height: 14px; color: #22c55e; flex-shrink: 0; margin-top: 2px; }
+.vip-dots { display: flex; gap: 6px; justify-content: center; margin-top: 4px; }
+.vip-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--border); cursor: pointer; transition: all .2s; }
+.vip-dot.on { background: var(--primary); width: 18px; border-radius: 4px; }
+
+/* 开屏动画（与 Android 版一致：呼吸 Logo + 渐变 slogan） */
+.th-splash {
+  position: fixed; inset: 0; z-index: 10001; overflow: hidden;
+  background: #0f1117;
+  display: flex; align-items: center; justify-content: center;
+  animation: splashIn .35s ease;
+}
+.th-splash.out { opacity: 0; transition: opacity .4s ease; }
+@keyframes splashIn { from { opacity: 0; } to { opacity: 1; } }
+.th-splash-glow { position: absolute; border-radius: 50%; filter: blur(90px); }
+.th-splash-glow.g1 { width: 480px; height: 480px; top: -180px; left: -160px; background: rgba(99, 102, 241, .24); }
+.th-splash-glow.g2 { width: 440px; height: 440px; bottom: -160px; right: -140px; background: rgba(139, 92, 246, .18); }
+.th-splash-inner { position: relative; text-align: center; }
+.th-splash-card {
+  width: 108px; height: 108px; margin: 0 auto; border-radius: 24px; overflow: hidden;
+  background: #fff; box-shadow: 0 18px 50px rgba(0, 0, 0, .45);
+  animation: splashBreath 2.6s ease-in-out infinite;
+}
+.th-splash-card img { width: 100%; height: 100%; object-fit: cover; }
+@keyframes splashBreath { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+.th-splash-slogan {
+  margin-top: 32px; font-size: 24px; letter-spacing: .3em; font-family: serif;
+  background: linear-gradient(90deg, #818cf8, #c4b5fd);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.th-splash-brand {
+  position: absolute; bottom: 40px; left: 0; right: 0; text-align: center;
+  color: #6b7186; letter-spacing: .4em; font-size: 14px;
+}

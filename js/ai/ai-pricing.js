@@ -125,8 +125,50 @@ export const MODEL_PRICES = {
   'sensechat/SenseChat-5': { in: 0.4, out: 1.6, cache: 0.1 },
 };
 
-/* 前缀模糊匹配价格（如同族小版本号差异） */
+/* ===== v1.9：云端定价覆盖层（管理员后台维护，th_model_prices 表） =====
+   云端价格优先于内置价目；键可以是「厂商/模型」或裸模型名；单位 USD / 1M tokens。
+   本地缓存 6 小时内直接使用，离线也有上次的价格。 */
+let CLOUD_PRICES = {};
+
+export async function initPricing() {
+  try {
+    const c = await kvGet('price:cloud', null);
+    if (c && c.map) CLOUD_PRICES = c.map;
+  } catch (e) {}
+}
+
+export async function syncCloudPrices() {
+  try {
+    const { getSupabase, hasCloud } = await import('../supabase.js');
+    if (!hasCloud()) return;
+    const { data, error } = await getSupabase().from('th_model_prices').select('*');
+    if (error || !data) return;
+    const map = {};
+    data.forEach((r) => { map[r.model] = { in: Number(r.input_price) || 0, out: Number(r.output_price) || 0 }; });
+    CLOUD_PRICES = map;
+    await kvSet('price:cloud', { at: Date.now(), map });
+  } catch (e) {}
+}
+
+function cloudPriceOf(providerId, model) {
+  if (!Object.keys(CLOUD_PRICES).length) return null;
+  const key = providerId + '/' + model;
+  if (CLOUD_PRICES[key]) return CLOUD_PRICES[key];
+  if (CLOUD_PRICES[model]) return CLOUD_PRICES[model];
+  // 云端前缀最长匹配
+  let best = null, bestLen = 0;
+  for (const k of Object.keys(CLOUD_PRICES)) {
+    const slash = k.indexOf('/');
+    const pm = slash >= 0 && k.slice(0, slash) === providerId ? k.slice(slash + 1) : k;
+    if (model.startsWith(pm) && pm.length > bestLen) { best = CLOUD_PRICES[k]; bestLen = pm.length; }
+  }
+  return best;
+}
+
+/* 前缀模糊匹配价格（如同族小版本号差异）；云端价目优先 */
 export function priceOf(providerId, model) {
+  const cp = cloudPriceOf(providerId, model);
+  if (cp) return cp;
   const key = providerId + '/' + model;
   if (MODEL_PRICES[key]) return MODEL_PRICES[key];
   // 同厂商内前缀最长匹配

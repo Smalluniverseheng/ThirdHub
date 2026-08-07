@@ -38,6 +38,27 @@ export async function saveCustomProvider(cp) {
   await kvSet('ai:custom-providers', list);
 }
 
+/* ---------- 模块代理（v1.7 设置分级：直连 / 自有代理 / 会员云端代理） ---------- */
+export async function proxiedUrl(module, url) {
+  try {
+    const conf = (await kvGet('proxy:mod', {}))[module];
+    if (!conf || conf.mode === 'direct') return url;
+    const wrap = (base) => base + (base.includes('?') ? '&' : '?') + 'url=' + encodeURIComponent(url);
+    if (conf.mode === 'custom' && conf.url) return wrap(conf.url.replace(/\/$/, '') + (conf.url.endsWith('/') ? '' : '/'));
+    if (conf.mode === 'cloud') {
+      /* 云端代理为会员能力：校验会员有效后才生效，否则回退直连 */
+      const { currentUser, levelById } = await import('../auth.js');
+      const u = await currentUser();
+      const lv = levelById(u ? u.level : 'guest');
+      if (u && lv.price > 0 && (!u.expireAt || new Date(u.expireAt).getTime() > Date.now())) {
+        const base = await kvGet('proxy:backend', 'https://thirdhub-proxy.1829487897.workers.dev/');
+        return wrap(base);
+      }
+    }
+  } catch (e) {}
+  return url;
+}
+
 /* ---------- SSE 解析 ---------- */
 async function* sseLines(resp) {
   const reader = resp.body.getReader();
@@ -59,7 +80,7 @@ async function* sseLines(resp) {
 
 /* ---------- OpenAI 兼容流式（正文 / 推理分离） ---------- */
 async function chatOpenAI({ base, key, model, messages, onToken, onReasoning, signal, extra = {} }) {
-  const resp = await fetch(base.replace(/\/$/, '') + '/chat/completions', {
+  const resp = await fetch(await proxiedUrl('ai_chat', base.replace(/\/$/, '') + '/chat/completions'), {
     method: 'POST',
     signal,
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },
@@ -95,7 +116,7 @@ async function chatOpenAI({ base, key, model, messages, onToken, onReasoning, si
 async function chatAnthropic({ base, key, model, messages, onToken, onReasoning, signal, extra = {} }) {
   const sys = messages.filter((m) => m.role === 'system').map((m) => m.content).join('\n');
   const msgs = messages.filter((m) => m.role !== 'system').map((m) => ({ role: m.role, content: m.content }));
-  const resp = await fetch(base.replace(/\/$/, '') + '/messages', {
+  const resp = await fetch(await proxiedUrl('ai_chat', base.replace(/\/$/, '') + '/messages'), {
     method: 'POST',
     signal,
     headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
@@ -184,7 +205,7 @@ export async function drawImage({ providerId, model, prompt, size = '1024x1024' 
   const base = (await getBaseOverride(providerId)) || provider.base;
   if (!key) throw new Error('未配置 API Key');
   if (!base) throw new Error('该厂商暂不支持直连绘画接口');
-  const resp = await fetch(base.replace(/\/$/, '') + '/images/generations', {
+  const resp = await fetch(await proxiedUrl('ai_image', base.replace(/\/$/, '') + '/images/generations'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },
     body: JSON.stringify({ model, prompt, n: 1, size }),
@@ -208,7 +229,7 @@ export async function generateVideo({ providerId, model, prompt, ratio = '16:9',
 
   if (providerId === 'bytedance') {
     // 火山方舟：POST /contents/generations/tasks → 轮询
-    const resp = await fetch(base + '/contents/generations/tasks', {
+    const resp = await fetch(await proxiedUrl('ai_video', base + '/contents/generations/tasks'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },
       body: JSON.stringify({ model, content: [{ type: 'text', text: `${prompt} --ratio ${ratio} --duration ${duration}` }] }),
@@ -225,7 +246,7 @@ export async function generateVideo({ providerId, model, prompt, ratio = '16:9',
   if (providerId === 'aliyun') {
     // DashScope 异步任务
     const dash = 'https://dashscope.aliyuncs.com/api/v1';
-    const resp = await fetch(dash + '/services/aigc/video-generation/video-synthesis', {
+    const resp = await fetch(await proxiedUrl('ai_video', dash + '/services/aigc/video-generation/video-synthesis'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key, 'X-DashScope-Async': 'enable' },
       body: JSON.stringify({ model, input: { prompt }, parameters: { size: ratio === '16:9' ? '1280*720' : ratio === '9:16' ? '720*1280' : '960*960' } }),
@@ -411,7 +432,7 @@ export async function transcribeAudio({ providerId, model, blob, lang }) {
   fd.append('file', blob, 'audio.' + ext.split(';')[0]);
   fd.append('model', model);
   if (lang) fd.append('language', String(lang).split('-')[0]);
-  const resp = await fetch(base + '/audio/transcriptions', {
+  const resp = await fetch(await proxiedUrl('ai_asr', base + '/audio/transcriptions'), {
     method: 'POST',
     headers: { Authorization: 'Bearer ' + key },
     body: fd,

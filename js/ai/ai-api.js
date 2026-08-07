@@ -92,14 +92,14 @@ async function chatOpenAI({ base, key, model, messages, onToken, onReasoning, si
 }
 
 /* ---------- Anthropic 流式（含 thinking_delta） ---------- */
-async function chatAnthropic({ base, key, model, messages, onToken, onReasoning, signal }) {
+async function chatAnthropic({ base, key, model, messages, onToken, onReasoning, signal, extra = {} }) {
   const sys = messages.filter((m) => m.role === 'system').map((m) => m.content).join('\n');
   const msgs = messages.filter((m) => m.role !== 'system').map((m) => ({ role: m.role, content: m.content }));
   const resp = await fetch(base.replace(/\/$/, '') + '/messages', {
     method: 'POST',
     signal,
     headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-    body: JSON.stringify({ model, messages: msgs, system: sys || undefined, max_tokens: 8192, stream: true }),
+    body: JSON.stringify({ model, messages: msgs, system: sys || undefined, max_tokens: 8192, stream: true, ...extra }),
   });
   if (!resp.ok) {
     const t = await resp.text().catch(() => '');
@@ -127,8 +127,8 @@ async function chatAnthropic({ base, key, model, messages, onToken, onReasoning,
   return { text: full, reasoning: thinking, usage };
 }
 
-/* ---------- 统一入口 ---------- */
-export async function chat({ providerId, model, messages, onToken, onReasoning, signal }) {
+/* ---------- 统一入口（params：temperature / top_p / max_tokens / stream_options 等） ---------- */
+export async function chat({ providerId, model, messages, onToken, onReasoning, signal, params = {} }) {
   const provider = providerById(providerId);
   let key = await getApiKey(providerId);
   let base = (await getBaseOverride(providerId)) || provider.base;
@@ -146,7 +146,7 @@ export async function chat({ providerId, model, messages, onToken, onReasoning, 
   }
   if (!base) throw new Error(`${provider.name} 未配置接口地址`);
 
-  const args = { base, key, model, messages, onToken, onReasoning, signal };
+  const args = { base, key, model, messages, onToken, onReasoning, signal, extra: params };
   const t0 = Date.now();
   const result = provider.type === 'anthropic' ? await chatAnthropic(args) : await chatOpenAI(args);
 
@@ -393,4 +393,33 @@ export async function effectiveModels(providerId) {
   const synced = await getSyncedModels(providerId);
   for (const m of synced) if (!base.includes(m) && !(p.deprecated || []).includes(m)) base.push(m);
   return base;
+}
+
+/* ---------- 模型 ASR：OpenAI 兼容 /audio/transcriptions ---------- */
+export async function transcribeAudio({ providerId, model, blob, lang }) {
+  const provider = providerById(providerId);
+  const key = await getApiKey(providerId);
+  const base = ((await getBaseOverride(providerId)) || provider.base || '').replace(/\/$/, '');
+  if (!key) {
+    const err = new Error(`未配置 ${provider.name} 的 API Key`);
+    err.needKey = providerId;
+    throw err;
+  }
+  if (!base) throw new Error(`${provider.name} 未配置接口地址`);
+  const ext = (blob.type && blob.type.split('/')[1]) || 'webm';
+  const fd = new FormData();
+  fd.append('file', blob, 'audio.' + ext.split(';')[0]);
+  fd.append('model', model);
+  if (lang) fd.append('language', String(lang).split('-')[0]);
+  const resp = await fetch(base + '/audio/transcriptions', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + key },
+    body: fd,
+  });
+  if (!resp.ok) {
+    const t = await resp.text().catch(() => '');
+    throw new Error(`HTTP ${resp.status}: ${t.slice(0, 160)}`);
+  }
+  const d = await resp.json();
+  return d.text || '';
 }

@@ -50,6 +50,25 @@ function sliderRow(name, sub, { min, max, step, val, fmt }) {
   return { row, get: () => +slider.value };
 }
 
+/* 数字输入行（替代滑条，支持任意大数值，如百万级上下文 / Token 上限） */
+function numRow(name, sub, { min = 0, max = null, step = 1, val = 0, unit = '', placeholder = '' }) {
+  const row = el(`<div class="set-row">
+    <div class="set-row-info"><div class="set-row-name">${esc(name)}</div>${sub ? `<div class="set-row-sub">${esc(sub)}</div>` : ''}</div>
+    <div class="row gap8" style="align-items:center;flex-shrink:0">
+      <input type="number" class="input set-num" ${min != null ? `min="${min}"` : ''} ${max != null ? `max="${max}"` : ''} step="${step}" value="${val}" placeholder="${esc(placeholder || String(min))}">
+      ${unit ? `<span class="muted" style="font-size:12px">${esc(unit)}</span>` : ''}
+    </div>
+  </div>`);
+  const inp = $('input', row);
+  const clamp = (v) => {
+    if (min != null && v < min) v = min;
+    if (max != null && v > max) v = max;
+    return v;
+  };
+  inp.addEventListener('change', () => { const v = clamp(parseFloat(inp.value)); inp.value = isNaN(v) ? min : v; inp.dispatchEvent(new Event('numchange')); });
+  return { row, input: inp, get: () => { const v = parseFloat(inp.value); return isNaN(v) ? null : clamp(v); } };
+}
+
 function entryRow(ic, name, sub) {
   return el(`<button class="list-item" style="width:100%">
     <span class="list-ico">${icon(ic)}</span>
@@ -89,10 +108,10 @@ export async function showChatSettings(page, session, onChange) {
         </div>
       </div>`;
 
-      const ctxS = sliderRow('上下文消息数量上限', '每次请求携带的最大历史消息数', { min: 2, max: 50, step: 1, val: s.ctxLimit || 20, fmt: (v) => v + ' 条' });
-      const tempS = sliderRow('温度 Temperature', '越高越发散，越低越严谨（留空则用厂商默认）', { min: 0, max: 2, step: 0.05, val: s.temperature != null ? s.temperature : 0.7, fmt: (v) => v.toFixed(2) });
-      const topPS = sliderRow('Top P', '核采样比例（留空则用厂商默认）', { min: 0, max: 1, step: 0.01, val: s.topP != null ? s.topP : 0.9, fmt: (v) => v.toFixed(2) });
-      const maxS = sliderRow('最大输出 Token 数', '0 = 不限制', { min: 0, max: 8192, step: 256, val: s.maxTokens || 0, fmt: (v) => (v ? String(v) : '不限制') });
+      const ctxS = numRow('上下文消息数量上限', '每次请求携带的最大历史消息数（长文本场景可调至数千甚至更高）', { min: 1, max: null, step: 1, val: s.ctxLimit || 20, unit: '条' });
+      const tempS = numRow('温度 Temperature', '越高越发散，越低越严谨（常见 0 ~ 2）', { min: 0, max: 5, step: 0.01, val: s.temperature != null ? s.temperature : 0.7 });
+      const topPS = numRow('Top P', '核采样比例（0 ~ 1）', { min: 0, max: 1, step: 0.01, val: s.topP != null ? s.topP : 0.9 });
+      const maxS = numRow('最大输出 Token 数', '0 = 不限制；可自定义任意数值（如 8192 / 65536）', { min: 0, max: null, step: 1, val: s.maxTokens || 0, unit: 'tokens' });
       $('[data-v="ctx"]', body).appendChild(toggleRow('自定义上下文上限', '', s.ctxLimit != null, (on) => { ctxS.row.style.display = on ? '' : 'none'; }));
       $('[data-v="ctx"]', body).appendChild(ctxS.row);
       ctxS.row.style.display = s.ctxLimit != null ? '' : 'none';
@@ -163,6 +182,7 @@ export function showAdvSettings(page) {
       add('bookmark', '记忆系统', '跨对话长期记忆与记忆库管理', () => subMemory());
       add('chart', '用量统计', 'Token 总览 · 活跃热图 · 模型榜单', () => subUsage());
       add('plug', '工具中心', '内置工具与 MCP 工具的暴露开关', () => subTools());
+      add('globe', '模块代理设置', '各模块独立选择直连 / 自有代理 / 云端代理', async () => { const px = await import('./proxy-settings.js'); px.showProxySettings(); });
       add('cpu', '提供商与模型管理', '密钥 · 模型列表 · 专用模型', () => subProviders(page));
     },
   });
@@ -181,16 +201,16 @@ function subPrefs() {
         <div data-v="flags"></div>
       </div>`;
       const save = () => kvSet('ai:prefs', p);
-      const tempS = sliderRow('温度 Temperature', '', { min: 0, max: 2, step: 0.05, val: p.temperature, fmt: (v) => v.toFixed(2) });
-      const topPS = sliderRow('Top P', '', { min: 0, max: 1, step: 0.01, val: p.topP, fmt: (v) => v.toFixed(2) });
+      const tempS = numRow('温度 Temperature', '常见 0 ~ 2，可精确到小数点后两位', { min: 0, max: 5, step: 0.01, val: p.temperature });
+      const topPS = numRow('Top P', '0 ~ 1，可精确到小数点后两位', { min: 0, max: 1, step: 0.01, val: p.topP });
       $('[data-v="temp"]', body).appendChild(toggleRow('启用温度调节', '关闭时使用厂商默认值', p.tempOn, (on) => { p.tempOn = on; tempS.row.style.display = on ? '' : 'none'; save(); }));
       $('[data-v="temp"]', body).appendChild(tempS.row);
       tempS.row.style.display = p.tempOn ? '' : 'none';
-      tempS.row.querySelector('.set-slider').addEventListener('change', () => { p.temperature = tempS.get(); save(); });
+      tempS.input.addEventListener('numchange', () => { p.temperature = tempS.get(); save(); });
       $('[data-v="topp"]', body).appendChild(toggleRow('启用 Top P 调节', '关闭时使用厂商默认值', p.topPOn, (on) => { p.topPOn = on; topPS.row.style.display = on ? '' : 'none'; save(); }));
       $('[data-v="topp"]', body).appendChild(topPS.row);
       topPS.row.style.display = p.topPOn ? '' : 'none';
-      topPS.row.querySelector('.set-slider').addEventListener('change', () => { p.topP = topPS.get(); save(); });
+      topPS.input.addEventListener('numchange', () => { p.topP = topPS.get(); save(); });
 
       const flags = $('[data-v="flags"]', body);
       flags.appendChild(toggleRow('启用流式输出', '逐字显示回答；关闭则等待完整结果', p.stream, (on) => { p.stream = on; save(); }));
@@ -216,11 +236,13 @@ function subCtx() {
       </div>`;
       const save = () => kvSet('ai:ctx', c);
       $('[data-v="title"]', body).appendChild(toggleRow('自动生成话题标题', '首轮问答后用 AI 概括会话标题', c.autoTitle, (on) => { c.autoTitle = on; save(); }));
-      const limS = sliderRow('上下文窗口数量', '默认携带的历史消息条数（对话设置可覆盖）', { min: 2, max: 50, step: 1, val: c.ctxLimit, fmt: (v) => v + ' 条' });
-      limS.row.querySelector('.set-slider').addEventListener('change', () => { c.ctxLimit = limS.get(); save(); });
+      const pinOpen = await kvGet('ai:pin-open', true);
+      $('[data-v="title"]', body).appendChild(toggleRow('置顶区默认展开', '历史会话抽屉中置顶分组的默认展开 / 折叠状态', pinOpen, (on) => kvSet('ai:pin-open', on)));
+      const limS = numRow('上下文窗口数量', '默认携带的历史消息条数（对话设置可覆盖；长文本可设数千条）', { min: 1, max: null, step: 1, val: c.ctxLimit, unit: '条' });
+      limS.input.addEventListener('numchange', () => { c.ctxLimit = limS.get(); save(); });
       $('[data-v="limit"]', body).appendChild(limS.row);
-      const thS = sliderRow('压缩提醒阈值', '会话消息超过该数量时提醒开启新对话', { min: 10, max: 100, step: 2, val: c.compressThreshold, fmt: (v) => v + ' 条' });
-      thS.row.querySelector('.set-slider').addEventListener('change', () => { c.compressThreshold = thS.get(); save(); });
+      const thS = numRow('压缩提醒阈值', '会话消息超过该数量时提醒开启新对话', { min: 2, max: null, step: 1, val: c.compressThreshold, unit: '条' });
+      thS.input.addEventListener('numchange', () => { c.compressThreshold = thS.get(); save(); });
       $('[data-v="compress"]', body).appendChild(toggleRow('上下文压缩提醒', '', c.compressHint, (on) => { c.compressHint = on; thS.row.style.display = on ? '' : 'none'; save(); }));
       $('[data-v="compress"]', body).appendChild(thS.row);
       thS.row.style.display = c.compressHint ? '' : 'none';

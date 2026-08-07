@@ -9,7 +9,8 @@ import { pickModel } from '../ai/model-selector.js';
 import { getApiKey } from '../ai/ai-api.js';
 import { TTS_ENGINES } from '../voice.js';
 import { listMcpServers } from '../ai/mcp-client.js';
-import { getTotalStats, getDailyStats, getModelStats, fmtTokens } from '../token-meter.js';
+import { getTotalStats, getDailyStats, getModelStats, getCostBreakdown, fmtTokens } from '../token-meter.js';
+import { fmtUsd, usdToCnyRate } from '../ai/ai-pricing.js';
 
 /* ================= 配置读写（带默认值） ================= */
 const PREF_DEF = {
@@ -490,6 +491,8 @@ function subUsage() {
           <div class="usage-card"><div class="usage-num">${fmtTokens(todayStat.prompt + todayStat.completion)}</div><div class="usage-label">今日 Token</div></div>
           <div class="usage-card"><div class="usage-num">${activeDays}</div><div class="usage-label">活跃天数</div></div>
         </div>
+        ${secTitle('花费估算（按厂商刊例价）')}
+        <div class="card" data-v="cost"><div class="muted">计算中…</div></div>
         ${secTitle('最近 8 周活跃热图')}
         <div class="usage-heat" data-v="heat"></div>
         ${secTitle('模型榜单（按 Token 消耗）')}
@@ -497,6 +500,33 @@ function subUsage() {
         ${secTitle('来源分布')}
         <div class="col gap8" data-v="providers"></div>
       </div>`;
+      // 花费估算：总价 + 各模型明细（价格为云端维护的刊例价，仅供参考）
+      (async () => {
+        const box = $('[data-v="cost"]', body);
+        try {
+          const { usd, rows } = await getCostBreakdown();
+          const rate = await usdToCnyRate();
+          const cny = usd * rate;
+          const priced = rows.filter((r) => r.priced);
+          if (!rows.length) { box.innerHTML = '<div class="muted">还没有用量记录，开始对话后这里会显示花费估算。</div>'; return; }
+          box.innerHTML = `
+            <div class="row gap8" style="align-items:baseline">
+              <span style="font-size:20px;font-weight:800;color:var(--primary)">${fmtUsd(usd)}</span>
+              <span class="muted">≈ ¥${cny >= 100 ? cny.toFixed(0) : cny.toFixed(2)}</span>
+              <span class="muted" style="font-size:11px">累计估算</span>
+            </div>
+            <div class="col gap8 mt8">
+              ${priced.slice(0, 8).map((r) => `
+                <div class="row gap8" style="align-items:center;font-size:12.5px">
+                  <span class="rank-ico">${vendorIcon(r.key.split('/')[0])}</span>
+                  <span class="grow ellipsis">${esc(r.key.split('/').slice(1).join('/'))}</span>
+                  <span class="muted">${fmtUsd(r.cost)}</span>
+                </div>`).join('')}
+              ${rows.some((r) => !r.priced) ? '<div class="muted" style="font-size:11px">部分模型暂无刊例价，未计入估算。</div>' : ''}
+            </div>
+            <div class="muted mt8" style="font-size:11px">价格为厂商刊例价的约值（云端维护，管理员可随时更新），实际以厂商账单为准。</div>`;
+        } catch (e) { box.innerHTML = '<div class="muted">花费估算暂不可用</div>'; }
+      })();
       // 热图：最近 56 天，7 列
       const heat = $('[data-v="heat"]', body);
       const maxTok = Math.max(1, ...days.map((d) => (daily[d].prompt || 0) + (daily[d].completion || 0)));

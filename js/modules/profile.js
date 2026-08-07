@@ -26,6 +26,11 @@ export async function renderProfile(page) {
     </div>
 
     <div class="profile-section">
+      <div class="section-title">服务与安全</div>
+      <div data-role="services"></div>
+    </div>
+
+    <div class="profile-section">
       <div class="section-title">设置</div>
       <div data-role="settings"></div>
     </div>
@@ -36,6 +41,7 @@ export async function renderProfile(page) {
 
   renderUserCard();
   renderData();
+  renderServices();
   renderSettings();
   if (admin) renderAdmin();
   on('auth:changed', renderUserCard);
@@ -59,18 +65,10 @@ export async function renderProfile(page) {
         </div>
         <span class="list-arrow">${icon('arrowR')}</span>
       </div>
-      ${u ? '' : '<button class="btn btn-primary btn-block mt8" data-a="login">登录</button>'}
-      ${u ? `<button class="btn btn-block mt8" data-a="logout">退出登录</button>` : ''}`;
+      ${u ? '' : '<button class="btn btn-primary btn-block mt8" data-a="login">登录</button>'}`;
     $('[data-a="profile"]', box).onclick = () => u ? showProfileSubpage() : showAuthDialog();
     const loginBtn = $('[data-a="login"]', box);
     if (loginBtn) loginBtn.onclick = showAuthDialog;
-    const logoutBtn = $('[data-a="logout"]', box);
-    if (logoutBtn) logoutBtn.onclick = async () => {
-      if (await confirmDialog('退出登录', '退出后云端同步将停止，本地数据保留。', '退出')) {
-        await signOut();
-        toast('已退出');
-      }
-    };
   }
 
   function showAuthDialog() {
@@ -126,9 +124,20 @@ export async function renderProfile(page) {
           <div class="profile-section">
             <div class="section-title">会员中心</div>
             <div id="pf-member"></div>
+          </div>
+          <div class="profile-section">
+            <button class="btn btn-block" id="pf-logout" style="color:var(--danger)">${icon('logout')} 退出登录</button>
           </div>`;
         renderRows();
         renderMemberBox($('#pf-member', body));
+        /* v1.7：退出登录移入头像资料页 */
+        $('#pf-logout', body).onclick = async () => {
+          if (await confirmDialog('退出登录', '退出后云端同步将停止，本地数据保留。', '退出')) {
+            await signOut();
+            ref.close();
+            toast('已退出');
+          }
+        };
 
         function renderRows() {
           const rows = [
@@ -256,7 +265,7 @@ export async function renderProfile(page) {
             <button class="btn btn-sm grow" data-a="agent">${icon('users')} 代理中心</button>
           </div>
         </div>`;
-      $('[data-a="levels"]', box).onclick = showLevels;
+      $('[data-a="levels"]', box).onclick = async () => (await import('./vip.js')).showVipCenter();
       $('[data-a="card"]', box).onclick = showCardDialog;
       $('[data-a="agent"]', box).onclick = showAgent;
     });
@@ -365,7 +374,7 @@ export async function renderProfile(page) {
   function renderData() {
     const box = $('[data-role="data"]', page);
     box.innerHTML = [
-      { a: 'stats', ico: 'chart', name: '数据统计', desc: 'Token 用量 / 缓存命中 / 花费估算' },
+      { a: 'storage', ico: 'hdd', name: '存储管理', desc: '本地 / 云端 / 自有服务器 · 回收站' },
       { a: 'cloud', ico: 'cloud', name: '云端同步', desc: hasCloud() ? '已配置' : '未配置（纯本地模式）' },
       { a: 'backup', ico: 'download', name: '本地备份 / 恢复', desc: '导出或导入全部本地数据' },
       { a: 'cache', ico: 'trash', name: '清理缓存', desc: '清空章节内容缓存' },
@@ -379,7 +388,10 @@ export async function renderProfile(page) {
         <span class="list-arrow">${icon('arrowR')}</span>
       </button>`).join('');
 
-    $('[data-a="stats"]', box).onclick = showStats;
+    $('[data-a="storage"]', box).onclick = async () => {
+      const st = await import('./storage.js');
+      st.showStorageManagement();
+    };
 
     $('[data-a="cloud"]', box).onclick = async () => {
       const url = await kvGet('cloud:url', '');
@@ -446,17 +458,43 @@ export async function renderProfile(page) {
     };
   }
 
+  /* ================= 服务与安全（v1.7） ================= */
+  function renderServices() {
+    const box = $('[data-role="services"]', page);
+    box.innerHTML = [
+      { a: 'vip', ico: 'crown', name: '会员中心', desc: '套餐 / 额度 / 发票 · 会员云端代理' },
+      { a: 'devices', ico: 'devices', name: '多设备管理', desc: '已登录的设备与浏览器（上限 20 台）' },
+      { a: 'applock', ico: 'lock', name: '应用锁', desc: '6 位数字密码或九宫格图案，进入应用需验证' },
+      { a: 'devlog', ico: 'bug', name: '设备日志管理', desc: '本机运行日志抓取，用于排查 Bug' },
+      { a: 'feedback', ico: 'message', name: '意见反馈', desc: '提建议 / 报 Bug，可公开讨论或仅管理员可见' },
+    ].map((m) => `
+      <button class="list-item" style="margin-bottom:8px;width:100%" data-a="${m.a}">
+        <span class="list-ico">${icon(m.ico)}</span>
+        <div class="grow" style="text-align:left;min-width:0">
+          <div style="font-size:14px;font-weight:600">${m.name}</div>
+          <div class="muted">${m.desc}</div>
+        </div>
+        <span class="list-arrow">${icon('arrowR')}</span>
+      </button>`).join('');
+    $('[data-a="vip"]', box).onclick = async () => (await import('./vip.js')).showVipCenter();
+    $('[data-a="devices"]', box).onclick = async () => (await import('./devices.js')).showDevices();
+    $('[data-a="applock"]', box).onclick = async () => (await import('./applock.js')).showAppLockSettings();
+    $('[data-a="devlog"]', box).onclick = async () => (await import('./devlog.js')).showDevLogs();
+    $('[data-a="feedback"]', box).onclick = async () => (await import('./feedback.js')).showFeedback();
+  }
+
   /* ================= 设置 ================= */
   async function renderSettings() {
     const theme = await getSetting('theme');
     const box = $('[data-role="settings"]', page);
+    const splashOn = await kvGet('splash:on', true);
     box.innerHTML = [
       { a: 'personalize', ico: 'palette', name: '个性化设置', desc: '桌面 / 移动 / 手表端导航栏样式' },
       { a: 'tabs', ico: 'grid', name: '导航栏管理', desc: '选择底部导航显示的板块（1-5 个）' },
       { a: 'theme', ico: 'moon', name: '主题外观', desc: { dark: '深色', light: '浅色', auto: '跟随系统' }[theme] || '跟随系统' },
-      { a: 'aikeys', ico: 'key', name: 'AI 设置 / API 管理', desc: '配置各厂商 API Key / MCP 服务' },
+      { a: 'splash', ico: 'splash', name: '开屏动画', desc: splashOn ? '已启用（打开应用时展示品牌动画）' : '已关闭' },
+      { a: 'proxy', ico: 'globe', name: '模块代理设置', desc: '各模块独立选择直连 / 自有代理 / 云端代理' },
       { a: 'sources', ico: 'plug', name: '连接器管理', desc: '导入 / 管理内容连接器' },
-      { a: 'reader', ico: 'book', name: '阅读设置', desc: '小说 / 漫画阅读器偏好' },
       { a: 'update', ico: 'refresh', name: '检查更新', desc: '当前 v' + APP_VERSION },
       { a: 'changelog', ico: 'history', name: '历史版本', desc: '各版本更新日志' },
       { a: 'about', ico: 'info', name: '关于 ThirdHub', desc: '版本与许可' },
@@ -480,13 +518,23 @@ export async function renderProfile(page) {
       ]);
       if (v) { await setSetting('theme', v); renderSettings(); }
     };
-    $('[data-a="aikeys"]', box).onclick = () => showKeySettings();
     $('[data-a="tabs"]', box).onclick = showTabManager;
+    $('[data-a="splash"]', box).onclick = async () => {
+      const cur = await kvGet('splash:on', true);
+      const v = await actionSheet('开屏动画', [
+        { label: '启用加载动画（每次打开展示品牌开屏）', value: 'on', icon: cur ? 'check' : undefined },
+        { label: '不启用加载动画', value: 'off', icon: !cur ? 'check' : undefined },
+      ]);
+      if (v) { await kvSet('splash:on', v === 'on'); renderSettings(); toast(v === 'on' ? '开屏动画已启用' : '开屏动画已关闭', 'ok'); }
+    };
+    $('[data-a="proxy"]', box).onclick = async () => {
+      const px = await import('./proxy-settings.js');
+      px.showProxySettings();
+    };
     $('[data-a="sources"]', box).onclick = async () => {
       const { renderCategory } = await import('./category.js');
       openOverlay({ title: '连接器管理', build: async (body) => { body.style.overflowY = 'auto'; await renderCategory(body); const h = body.querySelector('.page-head'); if (h) h.remove(); } });
     };
-    $('[data-a="reader"]', box).onclick = showReaderSettings;
     $('[data-a="update"]', box).onclick = () => checkUpdate(true);
     $('[data-a="changelog"]', box).onclick = showChangelog;
     $('[data-a="about"]', box).onclick = () => {
@@ -663,10 +711,8 @@ export async function renderProfile(page) {
         <div class="grow" style="text-align:left"><div style="font-size:14px;font-weight:700;color:#ffd54d">管理后台</div><div class="muted">ThirdHub-Admin</div></div>
         <span class="list-arrow">${icon('arrowR')}</span>
       </button>`;
-    box.firstElementChild.onclick = async () => {
-      const url = await kvGet('admin:url', '');
-      if (url) window.open(url, '_blank');
-      else toast('未配置管理后台地址');
+    box.firstElementChild.onclick = () => {
+      window.open('admin.html', '_blank');
     };
   }
 }

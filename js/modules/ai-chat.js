@@ -22,6 +22,16 @@ import { showAdvSettings, showChatSettings, getChatPrefs, getCtxConf } from './a
 import { openAgentStudio } from './ai-agent-studio.js';
 import { showInspirePage, showInspireDetail } from './ai-inspire.js';
 import { device } from '../device.js';
+import { currentUser } from '../auth.js';
+import { trashChat, recycleDays } from './recycle-bin.js';
+
+/* 当前用户头像缓存（消息头像 + 抽屉头部同步） */
+let __userAvatar = '';
+export function userAvatarHtml(cls = '') {
+  return __userAvatar ? `<img class="${cls}" src="${esc(__userAvatar)}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">` : icon('user');
+}
+currentUser().then((u) => { __userAvatar = (u && u.avatar) || ''; }).catch(() => {});
+on('auth:changed', () => { currentUser().then((u) => { __userAvatar = (u && u.avatar) || ''; }).catch(() => {}); });
 
 const MODES = [
   { id: 'single',  name: '单模型',   desc: '一对一对话' },
@@ -116,12 +126,11 @@ export async function renderAIChat(page) {
     <div class="ai-drawer-mask" data-a="drawer-mask"></div>
     <aside class="ai-drawer" id="ai-drawer">
       <button class="ai-drawer-head" data-a="d-adv" title="高级设置">
-        <span class="ai-drawer-logo">${icon('robot')}</span>
+        <span class="ai-drawer-logo" data-role="d-avatar">${__userAvatar ? userAvatarHtml() : icon('robot')}</span>
         <span class="ai-drawer-title">ThirdHub AI</span>
         <span class="ai-drawer-arrow">${icon('arrowR')}</span>
       </button>
-      <button class="ai-drawer-item" data-a="d-models">${icon('cpu')}<span>模型设置</span><span class="ai-drawer-arrow">${icon('arrowR')}</span></button>
-      <button class="ai-drawer-item" data-a="d-settings">${icon('settings')}<span>设置</span><span class="ai-drawer-arrow">${icon('arrowR')}</span></button>
+      <button class="ai-drawer-item" data-a="d-models">${icon('cpu')}<span>模型</span><span class="ai-drawer-arrow">${icon('arrowR')}</span></button>
       <div class="ai-dtabs" id="ai-dtabs">
         ${DRAWER_TABS.map(t => `<button class="ai-dtab ${t.id === drawerTab ? 'on' : ''}" data-dtab="${t.id}">${t.name}</button>`).join('')}
       </div>
@@ -220,8 +229,13 @@ export async function renderAIChat(page) {
   peek.onclick = closeDrawer;
   $('[data-a="d-new"]', drawer).onclick = () => { closeDrawer(); newSession(); renderMessages(page); toast('已开始新对话'); };
   $('[data-a="d-models"]', drawer).onclick = () => { closeDrawer(); showModelsPage(page); };
-  $('[data-a="d-settings"]', drawer).onclick = () => { closeDrawer(); showAISettings(); };
   $('[data-a="d-adv"]', drawer).onclick = () => { closeDrawer(); showAdvSettings(page); };
+  /* 抽屉头部头像与账号头像实时同步 */
+  currentUser().then((u) => {
+    __userAvatar = (u && u.avatar) || '';
+    const av = $('[data-role="d-avatar"]', drawer);
+    if (av && __userAvatar) av.innerHTML = userAvatarHtml();
+  }).catch(() => {});
   $('#ai-dsearch-input', page).addEventListener('input', (e) => {
     // 搜索时自动切到「历史会话」tab
     if (drawerTab !== 'history') {
@@ -670,37 +684,179 @@ async function saveSession() {
 async function renderDrawerSessions(page, box, kw = '') {
   if (!box) return;
   const key = (kw || '').trim().toLowerCase();
-  let list = (await db.all('chats')).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  let list = (await db.all('chats'))
+    .filter((s) => !s.deletedAt) // 回收站中的会话不出现在历史列表
+    .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   if (key) list = list.filter(s => (s.title || '').toLowerCase().includes(key) ||
     (s.messages || []).some(m => typeof m.content === 'string' && m.content.toLowerCase().includes(key)));
   box.innerHTML = '';
   if (!list.length) { box.innerHTML = `<div class="ai-drawer-empty">${key ? '没有匹配的会话' : '暂无历史会话'}</div>`; return; }
-  list.forEach((s) => {
-    const item = el(`<button class="ai-session ${s.id === session.id ? 'on' : ''}">
-      <span class="ai-session-ico">${icon(s.agentId ? (AGENTS.find(a => a.id === s.agentId) || {}).icon || 'robot' : 'robot')}</span>
-      <span class="ai-session-info">
-        <span class="ai-session-title ellipsis">${esc(s.title)}</span>
-        <span class="ai-session-date">${fmtDate(s.updatedAt || s.createdAt, true)}</span>
-      </span>
-      <span class="ai-session-del" data-del>${icon('trash')}</span>
+
+  const rerender = () => renderDrawerSessions(page, box, kw);
+  const pinned = list.filter((s) => s.pinned);
+  const normal = list.filter((s) => !s.pinned);
+
+  /* 置顶区（可折叠，默认状态可在 AI 设置中配置） */
+  if (pinned.length) {
+    const pinOpen = await kvGet('ai:pin-open', true);
+    const open = box.__pinOpen != null ? box.__pinOpen : pinOpen;
+    box.__pinOpen = open;
+    const head = el(`<button class="ai-pin-head">
+      ${icon('pin')}<span>置顶</span><span class="muted">${pinned.length}</span>
+      <span class="ai-pin-arrow ${open ? 'open' : ''}">${icon('arrowR')}</span>
     </button>`);
-    item.onclick = async (e) => {
-      if (e.target.closest('[data-del]')) return;
-      session = s;
-      if (s.model) { currentModel = s.model; }
-      if (s.mode) { currentMode = s.mode; }
-      updateTopbar(page);
+    head.onclick = () => { box.__pinOpen = !box.__pinOpen; rerender(); };
+    box.appendChild(head);
+    if (open) pinned.forEach((s) => box.appendChild(buildSessionItem(page, s, rerender)));
+  }
+  normal.forEach((s) => box.appendChild(buildSessionItem(page, s, rerender)));
+}
+
+/* 单个会话条目：点击打开 · 长按/右键弹出操作菜单 · 删除进回收站 */
+function buildSessionItem(page, s, rerender) {
+  const item = el(`<button class="ai-session ${s.id === session.id ? 'on' : ''}">
+    <span class="ai-session-ico">${icon(s.agentId ? (AGENTS.find(a => a.id === s.agentId) || {}).icon || 'robot' : 'robot')}</span>
+    <span class="ai-session-info">
+      <span class="ai-session-title ellipsis">${s.pinned ? icon('pin') : ''}${esc(s.title)}</span>
+      <span class="ai-session-date">${fmtDate(s.updatedAt || s.createdAt, true)}</span>
+    </span>
+    <span class="ai-session-del" data-del>${icon('trash')}</span>
+  </button>`);
+
+  const openSession = () => {
+    session = s;
+    if (s.model) { currentModel = s.model; }
+    if (s.mode) { currentMode = s.mode; }
+    updateTopbar(page);
+    page.__closeDrawer && page.__closeDrawer();
+    renderMessages(page);
+  };
+
+  item.onclick = (e) => { if (e.target.closest('[data-del]')) return; openSession(); };
+
+  const doDelete = async () => {
+    if (!(await confirmDialog('删除该会话？', `将移入回收站，${await recycleDays()} 天后自动彻底清除`, '删除', true))) return;
+    await trashChat(s);
+    toast('已移入回收站', 'ok');
+    rerender();
+  };
+  $('[data-del]', item).onclick = async (e) => { e.stopPropagation(); await doDelete(); };
+
+  /* 长按（移动端）/ 右键（桌面端）→ 操作菜单 */
+  let lpTimer = null, lpFired = false;
+  const showMenu = async () => {
+    const v = await actionSheet(s.title || '会话操作', [
+      { label: '重命名', value: 'rename', icon: 'edit' },
+      { label: '多选', value: 'multi', icon: 'checkbox' },
+      { label: s.pinned ? '取消置顶' : '置顶', value: 'pin', icon: s.pinned ? 'pinOff' : 'pin' },
+      { label: '删除', value: 'del', icon: 'trash' },
+    ]);
+    if (v === 'rename') {
+      const b2 = el(`<div>${formRow('会话名称', `<input class="input" data-f="t" value="${esc(s.title || '')}" maxlength="40">`)}</div>`);
+      const m2 = modal({
+        title: '重命名会话', body: b2,
+        footer: '<button class="btn grow" data-a="c">取消</button><button class="btn btn-primary grow" data-a="ok">保存</button>',
+      });
+      $('[data-a="c"]', m2.mask).onclick = m2.close;
+      $('[data-a="ok"]', m2.mask).onclick = async () => {
+        const t = $('[data-f="t"]', b2).value.trim();
+        if (!t) { toast('名称不能为空'); return; }
+        s.title = t;
+        await db.put('chats', JSON.parse(JSON.stringify(s)));
+        m2.close();
+        if (s.id === session.id) updateTopbar(page);
+        rerender();
+      };
+    } else if (v === 'multi') {
       page.__closeDrawer && page.__closeDrawer();
-      renderMessages(page);
-    };
-    $('[data-del]', item).onclick = async (e) => {
-      e.stopPropagation();
-      if (!(await confirmDialog('删除该会话？', '删除后不可恢复', '删除', true))) return;
-      await db.del('chats', s.id);
-      item.remove();
-      if (!box.children.length) box.innerHTML = '<div class="ai-drawer-empty">暂无历史会话</div>';
-    };
-    box.appendChild(item);
+      showSessionManager(page, s.id);
+    } else if (v === 'pin') {
+      s.pinned = !s.pinned;
+      if (s.pinned) s.pinnedAt = Date.now();
+      await db.put('chats', JSON.parse(JSON.stringify(s)));
+      toast(s.pinned ? '已置顶' : '已取消置顶', 'ok');
+      rerender();
+    } else if (v === 'del') {
+      await doDelete();
+    }
+  };
+  item.addEventListener('touchstart', () => {
+    lpFired = false;
+    lpTimer = setTimeout(() => { lpFired = true; showMenu(); }, 500);
+  }, { passive: true });
+  item.addEventListener('touchend', () => { clearTimeout(lpTimer); if (lpFired) { /* 阻止紧随的 click 打开会话 */ } });
+  item.addEventListener('touchmove', () => clearTimeout(lpTimer));
+  item.addEventListener('click', (e) => { if (lpFired) { e.stopImmediatePropagation(); lpFired = false; } }, true);
+  item.addEventListener('contextmenu', (e) => { e.preventDefault(); showMenu(); });
+  return item;
+}
+
+/* ================= 多选管理页（移动端 + 桌面端自适应） ================= */
+function showSessionManager(page, preselectId = null) {
+  openOverlay({
+    title: '管理会话',
+    build: async (body) => {
+      body.innerHTML = `
+        <div class="sm-toolbar">
+          <button class="btn btn-sm" data-a="selall">全选</button>
+          <span class="grow sm-count">已选择 0 条</span>
+          <button class="btn btn-sm" data-a="pin" disabled>置顶</button>
+          <button class="btn btn-sm btn-danger" data-a="del" disabled>删除</button>
+        </div>
+        <div class="col gap8" id="sm-list"></div>`;
+      const listBox = $('#sm-list', body);
+      const selected = new Set();
+      if (preselectId) selected.add(preselectId);
+      let sessions = [];
+
+      async function renderList() {
+        sessions = (await db.all('chats')).filter((s) => !s.deletedAt)
+          .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || (b.updatedAt || 0) - (a.updatedAt || 0));
+        listBox.innerHTML = sessions.length ? '' : '<div class="ai-drawer-empty" style="padding:40px 0">暂无历史会话</div>';
+        sessions.forEach((s) => {
+          const on = selected.has(s.id);
+          const row = el(`<button class="list-item sm-row ${on ? 'sel' : ''}" style="width:100%">
+            <span class="sm-check">${on ? icon('checkbox') : ''}</span>
+            <span class="ai-session-ico">${icon(s.agentId ? (AGENTS.find(a => a.id === s.agentId) || {}).icon || 'robot' : 'robot')}</span>
+            <div class="grow" style="text-align:left;min-width:0">
+              <div style="font-size:14px;font-weight:600" class="ellipsis">${s.pinned ? icon('pin') : ''}${esc(s.title || '未命名会话')}</div>
+              <div class="muted">${fmtDate(s.updatedAt || s.createdAt, true)} · ${(s.messages || []).length} 条消息</div>
+            </div>
+          </button>`);
+          row.onclick = () => {
+            if (selected.has(s.id)) selected.delete(s.id); else selected.add(s.id);
+            renderList();
+          };
+          listBox.appendChild(row);
+        });
+        const n = selected.size;
+        $('.sm-count', body).textContent = `已选择 ${n} 条`;
+        $('[data-a="del"]', body).disabled = !n;
+        $('[data-a="pin"]', body).disabled = !n;
+      }
+
+      $('[data-a="selall"]', body).onclick = () => {
+        if (selected.size >= sessions.length) selected.clear();
+        else sessions.forEach((s) => selected.add(s.id));
+        renderList();
+      };
+      $('[data-a="del"]', body).onclick = async () => {
+        const n = selected.size;
+        if (!n) return;
+        if (!(await confirmDialog(`删除选中的 ${n} 条会话？`, `将移入回收站，${await recycleDays()} 天后自动彻底清除`, '删除', true))) return;
+        for (const s of sessions) if (selected.has(s.id)) await trashChat(s);
+        toast(`已将 ${n} 条会话移入回收站`, 'ok');
+        selected.clear();
+        renderList();
+      };
+      $('[data-a="pin"]', body).onclick = async () => {
+        for (const s of sessions) if (selected.has(s.id) && !s.pinned) { s.pinned = true; s.pinnedAt = Date.now(); await db.put('chats', JSON.parse(JSON.stringify(s))); }
+        toast('已置顶所选会话', 'ok');
+        selected.clear();
+        renderList();
+      };
+      renderList();
+    },
   });
 }
 
@@ -1004,11 +1160,11 @@ function appendMessage(page, m, msgIndex = -1) {
 
   const isUser = m.role === 'user';
   const wrap = el(`<div class="msg ${isUser ? 'user' : 'assistant'}">
-    <div class="msg-avatar">${isUser ? icon('user') : vendorIcon(m.providerId || currentModel.providerId)}</div>
+    <div class="msg-avatar">${isUser ? userAvatarHtml() : vendorIcon(m.providerId || currentModel.providerId)}</div>
     <div class="msg-body">
       <div class="msg-meta">${m.debateRole ? `<span class="debate-side debate-${m.debateRole}">${m.debateRole === 'pro' ? '正方' : m.debateRole === 'con' ? '反方' : '裁判'}</span>` : ''}<span>${esc(m.model || '')}</span>${m.ms ? `<span class="msg-ms">${m.ms}ms</span>` : ''}</div>
       <div class="msg-bubble"></div>
-      ${isUser ? '' : '<div class="msg-actions"><button class="msg-act" data-act="copy" title="复制">' + icon('bookmark') + '</button><button class="msg-act" data-act="speak" title="朗读">' + icon('mic') + '</button></div>'}
+      ${isUser ? '' : '<div class="msg-actions"><button class="msg-act" data-act="copy" title="复制">' + icon('copy') + '</button><button class="msg-act" data-act="speak" title="朗读">' + icon('speaker') + '</button></div>'}
     </div>
   </div>`);
   const bubble = $('.msg-bubble', wrap);

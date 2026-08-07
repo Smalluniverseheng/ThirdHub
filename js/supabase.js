@@ -8,7 +8,7 @@ let _ready = false;
 export function hasCloud() { return _ready && !!_sb; }
 export function getSupabase() { return _sb; }
 
-/* 动态加载 supabase-js（MIT） */
+/* 动态加载 supabase-js */
 async function loadLib() {
   if (window.supabase) return window.supabase;
   await new Promise((resolve, reject) => {

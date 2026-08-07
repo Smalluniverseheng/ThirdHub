@@ -494,6 +494,7 @@ export async function renderProfile(page) {
       { a: 'splash', ico: 'splash', name: '开屏动画', desc: splashOn ? '已启用（打开应用时展示品牌动画）' : '已关闭' },
       { a: 'proxy', ico: 'globe', name: '模块代理设置', desc: '各模块独立选择直连 / 自有代理 / 云端代理' },
       { a: 'sources', ico: 'plug', name: '连接器管理', desc: '导入 / 管理内容连接器' },
+      { a: 'apk', ico: 'download', name: '下载安卓版', desc: '获取最新安卓安装包' },
       { a: 'update', ico: 'refresh', name: '检查更新', desc: '当前 v' + APP_VERSION },
       { a: 'autoupdate', ico: 'sync', name: '自动检查更新', desc: '开启后每次启动自动检查并下载新版本' },
       { a: 'changelog', ico: 'history', name: '历史版本', desc: '各版本更新日志' },
@@ -535,6 +536,7 @@ export async function renderProfile(page) {
       const { renderCategory } = await import('./category.js');
       openOverlay({ title: '连接器管理', build: async (body) => { body.style.overflowY = 'auto'; await renderCategory(body); const h = body.querySelector('.page-head'); if (h) h.remove(); } });
     };
+    $('[data-a="apk"]', box).onclick = () => window.open('https://github.com/Smalluniverseheng/ThirdHub-Android/releases/latest', '_blank');
     $('[data-a="update"]', box).onclick = () => checkUpdate(true);
     $('[data-a="autoupdate"]', box).onclick = async () => {
       const cur = await kvGet('update:auto', true);
@@ -563,7 +565,7 @@ export async function renderProfile(page) {
         body: `
           <div style="text-align:center;padding:12px 0 20px">
             <div style="font-size:18px;font-weight:800">第三方科技 · ThirdHub</div>
-            <div class="muted mt8">v${APP_VERSION} · MIT License</div>
+            <div class="muted mt8">v${APP_VERSION}</div>
             <div class="muted mt8" style="max-width:300px;margin:8px auto 0;line-height:1.8">全平台智能聚合平台。软件不预置任何内容源，所有内容接入能力由用户自行导入配置后启用。</div>
           </div>`,
       });

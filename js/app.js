@@ -1,5 +1,5 @@
 /* ===== ThirdHub app.js — 应用入口 / 路由 / 初始化 ===== */
-export const APP_VERSION = '1.9';
+export const APP_VERSION = '2.0';
 
 import { $, $$, icon, toast } from './ui.js';
 import { getSetting, setSetting, on, emit, openDB, kvGet, kvSet } from './store.js';
@@ -52,8 +52,28 @@ function buildChrome(tabIds) {
   currentTab = null;
 }
 
+/* v2.0：慢网/弱网加固 —— 板块模块加载带超时与自动重试，避免请求挂起导致永久转圈 */
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, rej) => setTimeout(() => rej(new Error((label || '模块') + '加载超时')), ms)),
+  ]);
+}
+
+async function loadBoardModule(board, attempt = 0) {
+  try {
+    return await withTimeout(board.load(), 20000, board.name);
+  } catch (e) {
+    if (attempt < 2) {
+      await new Promise((r) => setTimeout(r, 1200));
+      return loadBoardModule(board, attempt + 1);
+    }
+    throw e;
+  }
+}
+
 async function getRenderer(board) {
-  if (!moduleCache[board.id]) moduleCache[board.id] = await board.load();
+  if (!moduleCache[board.id]) moduleCache[board.id] = await loadBoardModule(board);
   const mod = moduleCache[board.id];
   return (page) => mod[board.fn](page, board.arg);
 }
@@ -67,10 +87,21 @@ export async function switchTab(tab, force = false) {
   if (!rendered.has(tab) || force) {
     page.innerHTML = '<div class="loading-row" style="margin-top:60px"><div class="spinner"></div></div>';
     const board = boardById(tab);
-    const render = await getRenderer(board);
-    page.innerHTML = '';
-    await render(page);
-    rendered.add(tab);
+    try {
+      const render = await getRenderer(board);
+      page.innerHTML = '';
+      await render(page);
+      rendered.add(tab);
+    } catch (e) {
+      console.error('板块加载失败', e);
+      page.innerHTML = `<div style="padding:80px 24px;text-align:center;color:var(--tx-3,#888)">
+        <div style="font-size:15px;margin-bottom:16px">「${board.name}」加载失败，请检查网络后重试</div>
+        <button class="btn btn-primary" data-retry type="button" style="padding:10px 28px">重新加载</button>
+      </div>`;
+      const btn = page.querySelector('[data-retry]');
+      if (btn) btn.onclick = () => { rendered.delete(tab); delete moduleCache[tab]; switchTab(tab, true); };
+      return;
+    }
   }
   requestAnimationFrame(() => page.classList.add('active'));
   currentTab = tab;
@@ -186,6 +217,7 @@ async function boot() {
   setTimeout(() => checkUpdate().catch(() => {}), 3000);
 
   window.__THIRDHUB__ = { version: APP_VERSION, switchTab, refreshTab, rebuildTabs };
+  window.__TH_READY = true;  /* v2.0：安卓 WebView 看门狗据此判定线上版启动成功 */
   console.log('%cThirdHub v' + APP_VERSION + ' · 第三方科技', 'color:#3b5bfd;font-weight:bold');
 }
 

@@ -1,8 +1,8 @@
 {
-  "version": "1.9",
+  "version": "2.0",
   "type": "optional",
-  "title": "ThirdHub v1.9",
-  "content": "1. 修复安卓安装包白屏：优先加载线上最新版，断网自动回退内置包\n2. 发票页改为购买记录列表（在线订单+卡密激活），每条记录一键申请发票\n3. 多设备管理显示真实设备名称与平台（浏览器/安卓App/iOS）\n4. 模块代理新增「自动」模式：云端/自有/直连优先级可排序，断线自动切换；非会员点云端代理弹回、自有代理失败自动回直连\n5. AI 抽屉支持按住右滑关闭；未配置模型在输入框上方提示并一键跳转配置\n6. 邮箱验证码真实发送（59 秒倒计时重发）；报错全面中文化\n7. 用量统计恢复花费估算，模型价格与排行榜支持管理后台云端维护",
-  "downloadUrl": "",
-  "releaseDate": "2026-08-08"
+  "title": "ThirdHub v2.0",
+  "content": "1. 修复安卓端登录后页面空白：加载超时自动重试、失败可重新加载，App 启动超时自动回退内置包\n2. 修复新用户注册失败\n3. 新增「下载安卓版」入口（我的 → 全局设置、网页介绍页）\n4. 移除开源相关表述",
+  "downloadUrl": "https://github.com/Smalluniverseheng/ThirdHub-Android/releases/download/v2.0/ThirdHub-Android-v2.0.apk",
+  "releaseDate": "2026-08-07"
 }

@@ -12,8 +12,7 @@
 - Vanilla JS (ES6+ Module) + CSS3 Variables，无构建工具
 - PWA（Service Worker + Manifest），可安装到 Android / iOS / 桌面主屏
 - IndexedDB 本地存储，Supabase 云端同步（Realtime，离线优先）
-- hls.js（Apache-2.0）视频播放，Chart.js（MIT）后台图表，Phosphor Icons（MIT）图标
-- 协议：MIT，可闭源商用。仅使用 MIT / Apache-2.0 / BSD / ISC 依赖，严禁 GPL
+- hls.js 视频播放，Chart.js 后台图表，Phosphor Icons 图标
 
 ## 部署
 

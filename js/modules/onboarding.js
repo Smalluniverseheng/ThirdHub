@@ -35,7 +35,7 @@ const CREATE_CARDS = [
     chips: ['Sora 2', 'Veo 3', 'Seedance', '可灵', 'Hailuo 02'] },
 ];
 const FAQS = [
-  { q: 'ThirdHub 是免费的吗？', a: '应用完全免费开源（MIT License）。AI 对话使用你自己的 API Key，费用与厂商直接结算；会员仅扩容云存储。' },
+  { q: 'ThirdHub 是免费的吗？', a: '应用完全免费。AI 对话使用你自己的 API Key，费用与厂商直接结算；会员仅扩容云存储。' },
   { q: '为什么软件里没有任何内容？', a: 'ThirdHub 不预置任何内容源，这是一个设计原则。你可以在「连接器管理」中导入自己信任的内容连接器，导入后即可搜索、阅读、播放。' },
   { q: '我的 API Key 安全吗？', a: 'Key 只保存在你设备的本地数据库中，所有请求直接从你的浏览器发往厂商接口，不经过任何中间服务器。' },
   { q: '支持哪些设备？', a: '网页版支持桌面、手机、手表浏览器，另有 Android 客户端。添加到底层主屏幕后可作为 PWA 离线使用。' },
@@ -79,7 +79,7 @@ export async function maybeOnboard() {
               ${ring(ORBIT_VENDORS_2, 72, 24, true)}
               <div class="obl-core">${icon('robot')}</div>
             </div>
-            <div class="obl-kicker">第三方科技 · 开源 MIT</div>
+            <div class="obl-kicker">第三方科技</div>
             <div class="obl-title obl-shine">ThirdHub</div>
             <div class="obl-tag">一个入口 · 连接所有 AI 与内容</div>
             <div class="obl-stats">
@@ -88,6 +88,7 @@ export async function maybeOnboard() {
             <div class="obl-cta">
               <button class="btn btn-primary ob-btn" data-a="go">开始体验</button>
               <button class="ob-skip" data-a="guest">先看看，不登录 →</button>
+              <a class="ob-skip" href="https://github.com/Smalluniverseheng/ThirdHub-Android/releases/latest" target="_blank" rel="noopener" style="text-decoration:none">下载安卓版 App ↗</a>
             </div>
           </div>
           <div class="obl-marquee"><div class="obl-mq-track">${marquee}${marquee}</div></div>
@@ -141,7 +142,8 @@ export async function maybeOnboard() {
 
           <div class="obl-sec rv" style="text-align:center;padding-bottom:44px">
             <button class="btn btn-primary ob-btn" data-a="go2">立即开始</button>
-            <div class="muted" style="font-size:12px;margin-top:14px">第三方科技 · MIT License · 不预置任何内容源</div>
+            <div style="margin-top:12px"><a class="ob-skip" href="https://github.com/Smalluniverseheng/ThirdHub-Android/releases/latest" target="_blank" rel="noopener" style="text-decoration:none">下载安卓版 App ↗</a></div>
+            <div class="muted" style="font-size:12px;margin-top:14px">第三方科技 · 不预置任何内容源</div>
           </div>
         </div>`;
       $('[data-a="go"]', ov).onclick = stepAuth;

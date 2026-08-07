@@ -7,7 +7,7 @@ export const SEARCH_SERVICES = [
   { id: 'tavily',  name: 'Tavily',            keyHint: 'tvly-...',            desc: '专为 AI 设计的搜索 API，每月有免费额度', needUrl: false },
   { id: 'brave',   name: 'Brave Search',      keyHint: 'BSA...',              desc: 'Brave 搜索引擎 API，免费额度 2000 次/月', needUrl: false },
   { id: 'serpapi', name: 'SerpAPI（Google）', keyHint: '一串十六进制 Key',     desc: 'Google 搜索结果 API',                    needUrl: false },
-  { id: 'searxng', name: 'SearXNG（自建）',   keyHint: '可留空',               desc: '开源自建搜索聚合，填实例地址即可',       needUrl: true },
+  { id: 'searxng', name: 'SearXNG（自建）',   keyHint: '可留空',               desc: '自建搜索聚合引擎，填实例地址即可',       needUrl: true },
 ];
 
 export async function getSearchConfig() {

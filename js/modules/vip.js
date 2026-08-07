@@ -5,7 +5,6 @@
 import { $, $$, el, esc, icon, toast, openOverlay, modal, formRow, fmtBytes, fmtDate } from '../ui.js';
 import { hasCloud, getSupabase } from '../supabase.js';
 import { currentUser, redeemCard, levelById } from '../auth.js';
-import { addFeedback } from './feedback.js';
 
 /* 本地兜底定价（云端不可用时） */
 const FALLBACK_PLANS = [
@@ -100,8 +99,10 @@ export async function showVipCenter() {
       }
 
       slider.addEventListener('scroll', () => {
-        const w = slider.scrollWidth / plans.length;
-        const idx = Math.round(slider.scrollLeft / w);
+        // 卡片实际步进 = 卡片宽 + 间距（含首尾居中 padding 时 scrollWidth 不可直接均分）
+        const card = slider.querySelector('.vip-card');
+        const step = card ? card.offsetWidth + 14 : 1;
+        const idx = Math.max(0, Math.min(plans.length - 1, Math.round(slider.scrollLeft / step)));
         $$('.vip-dot', dots).forEach((d, i) => d.classList.toggle('on', i === idx));
       }, { passive: true });
 
@@ -136,7 +137,22 @@ export async function showVipCenter() {
         $('[data-a="c"]', m.mask).onclick = m.close;
         $('[data-a="ok"]', m.mask).onclick = async () => {
           try {
-            const r = await redeemCard($('[data-f="card"]', b2).value);
+            const card = $('[data-f="card"]', b2).value;
+            const r = await redeemCard(card);
+            // 卡密激活也记入购买记录（发票页可见、可申请开票）
+            try {
+              const { getSupabase, hasCloud } = await import('../supabase.js');
+              if (hasCloud() && u) {
+                await getSupabase().from('th_orders').insert({
+                  user_id: u.id,
+                  order_no: 'CARD-' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 6).toUpperCase(),
+                  plan: plan.id, plan_name: plan.name, period: cycle,
+                  amount: price, pay_method: 'card', status: 'paid',
+                  trade_no: card.trim().toUpperCase().slice(0, 14) + '…',
+                  paid_at: new Date().toISOString(),
+                });
+              }
+            } catch (_) {}
             m.close();
             toast('开通成功' + (r && r.level ? '：' + levelById(r.level).name : ''), 'ok');
             setTimeout(() => location.reload(), 800);
@@ -175,34 +191,98 @@ export async function showVipCenter() {
         });
       };
 
-      /* 发票 */
-      $('#vip-invoice', body.closest('.overlay')).onclick = () => {
-        const b2 = el(`<div>
-          <div class="muted" style="margin-bottom:12px;line-height:1.7">提交开票申请后，管理员团队会在 7 个工作日内处理并发送至你的邮箱。</div>
-          ${formRow('发票抬头', '<input class="input" data-f="t" placeholder="个人姓名或公司全称">')}
-          ${formRow('税号（公司必填）', '<input class="input" data-f="tax" placeholder="统一社会信用代码">')}
-          ${formRow('接收邮箱', `<input class="input" type="email" data-f="mail" value="${esc((u && u.email) || '')}">`)}
-          ${formRow('订单 / 卡密信息', '<input class="input" data-f="order" placeholder="购买时间或卡密前 8 位">')}
-        </div>`);
-        const m = modal({
-          title: '申请发票', body: b2,
-          footer: '<button class="btn grow" data-a="c">取消</button><button class="btn btn-primary grow" data-a="ok">提交申请</button>',
+      /* 发票：展示全部购买记录（在线订单 + 卡密激活），每条记录可一键申请开票 */
+      $('#vip-invoice', body.closest('.overlay')).onclick = async () => {
+        const uu = await currentUser();
+        if (!uu) { toast('请先登录后再查看发票'); return; }
+        const { getSupabase, hasCloud } = await import('../supabase.js');
+        if (!hasCloud()) { toast('当前为纯本地模式，暂无购买记录'); return; }
+        openOverlay({
+          title: '发票',
+          build: async (b2) => {
+            b2.innerHTML = '<p class="muted" style="text-align:center;padding:20px 0">加载购买记录…</p>';
+            let orders = [], invoices = [];
+            try {
+              const sb = getSupabase();
+              const [{ data: o }, { data: iv }] = await Promise.all([
+                sb.from('th_orders').select('*').eq('user_id', uu.id).order('created_at', { ascending: false }),
+                sb.from('th_invoices').select('*').eq('user_id', uu.id),
+              ]);
+              orders = o || [];
+              invoices = iv || [];
+            } catch (_) {}
+            const invMap = {};
+            invoices.forEach((x) => { invMap[x.order_no] = x; });
+            const mName = { alipay: '支付宝', wechat: '微信支付', card: '卡密激活' };
+            const sName = { pending: '待确认收款', paid: '已完成', cancelled: '已取消' };
+            const sColor = { pending: '#fbbf24', paid: '#34d399', cancelled: '#9aa3b2' };
+
+            const renderList = () => {
+              if (!orders.length) {
+                b2.innerHTML = '<div class="empty"><div class="empty-title">还没有购买记录</div><p class="muted">开通会员或卡密激活后，记录会显示在这里，可对每条记录申请发票。</p></div>';
+                return;
+              }
+              b2.innerHTML = `<div class="set-wrap">
+                <div class="muted" style="line-height:1.7;margin-bottom:12px">这里是你的全部购买记录（含在线支付与卡密激活）。已完成的记录可一键申请发票，管理员会在 7 个工作日内开具并发送到你的邮箱。</div>
+                <div class="col gap8" id="inv-list"></div>
+              </div>`;
+              const box = $('#inv-list', b2);
+              orders.forEach((o) => {
+                const iv = invMap[o.order_no];
+                const canApply = o.status === 'paid' && !iv;
+                const item = el(`<div class="card">
+                  <div class="row gap8" style="align-items:center">
+                    <b style="flex:1;font-size:14px">${esc(o.plan_name || o.plan || '会员')} · ${o.period === 'yearly' ? '年付' : '月付'}</b>
+                    <span class="tag" style="background:${sColor[o.status] || '#9aa3b2'}22;color:${sColor[o.status] || '#9aa3b2'}">${sName[o.status] || o.status}</span>
+                  </div>
+                  <div class="muted" style="margin-top:4px">¥${Number(o.amount || 0).toFixed(2)} · ${mName[o.pay_method] || o.pay_method || '-'} · ${fmtDate(new Date(o.created_at).getTime(), true)}</div>
+                  <div class="muted ellipsis" style="margin-top:2px;font-family:monospace;font-size:11px">订单号 ${esc(o.order_no)}</div>
+                  ${o.status === 'paid' ? `<button class="btn btn-sm ${canApply ? 'btn-primary' : ''} mt8" data-a="apply" ${canApply ? '' : 'disabled'}>${iv ? (iv.status === 'done' ? '✓ 发票已开具' : '✓ 已申请，处理中') : '申请发票'}</button>` : ''}
+                </div>`);
+                const btn = $('[data-a="apply"]', item);
+                if (btn && canApply) btn.onclick = () => applyInvoice(o);
+                box.appendChild(item);
+              });
+            };
+
+            const applyInvoice = (o) => {
+              const f = el(`<div>
+                <div class="card" style="margin-bottom:12px">
+                  <b style="font-size:14px">${esc(o.plan_name || o.plan || '会员')} · ${o.period === 'yearly' ? '年付' : '月付'} · ¥${Number(o.amount || 0).toFixed(2)}</b>
+                  <div class="muted" style="margin-top:2px;font-family:monospace;font-size:11px">订单号 ${esc(o.order_no)}</div>
+                </div>
+                ${formRow('发票抬头', '<input class="input" data-f="t" placeholder="个人姓名或公司全称">')}
+                ${formRow('税号（公司必填）', '<input class="input" data-f="tax" placeholder="统一社会信用代码">')}
+                ${formRow('接收邮箱', `<input class="input" type="email" data-f="mail" value="${esc(uu.email || '')}">`)}
+              </div>`);
+              const m = modal({
+                title: '申请发票', body: f,
+                footer: '<button class="btn grow" data-a="c">取消</button><button class="btn btn-primary grow" data-a="ok">提交申请</button>',
+              });
+              $('[data-a="c"]', m.mask).onclick = m.close;
+              $('[data-a="ok"]', m.mask).onclick = async () => {
+                const t = $('[data-f="t"]', f).value.trim();
+                const mail = $('[data-f="mail"]', f).value.trim();
+                if (!t) { toast('请填写发票抬头'); return; }
+                if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) { toast('请填写正确的接收邮箱'); return; }
+                try {
+                  const { error } = await getSupabase().from('th_invoices').insert({
+                    user_id: uu.id, order_no: o.order_no, title: t,
+                    tax_no: $('[data-f="tax"]', f).value.trim(), email: mail,
+                    amount: Number(o.amount || 0),
+                  });
+                  if (error) throw error;
+                  invMap[o.order_no] = { status: 'pending' };
+                  m.close();
+                  toast('开票申请已提交，7 个工作日内处理', 'ok');
+                  renderList();
+                } catch (e) { toast('提交失败：' + (e.message || '请稍后再试'), 'err'); }
+              };
+            };
+
+            renderList();
+          },
         });
-        $('[data-a="c"]', m.mask).onclick = m.close;
-        $('[data-a="ok"]', m.mask).onclick = async () => {
-          const t = $('[data-f="t"]', b2).value.trim();
-          const mail = $('[data-f="mail"]', b2).value.trim();
-          if (!t || !mail) { toast('请填写抬头和邮箱'); return; }
-          try {
-            await addFeedback({
-              title: '【发票申请】' + t,
-              content: `抬头：${t}\n税号：${$('[data-f="tax"]', b2).value.trim() || '无'}\n接收邮箱：${mail}\n订单信息：${$('[data-f="order"]', b2).value.trim() || '未提供'}`,
-              visibility: 'admin',
-            });
-            m.close();
-            toast('开票申请已提交', 'ok');
-          } catch (e) { toast('提交失败：' + e.message, 'err'); }
-        };
       };
 
       renderPlans();

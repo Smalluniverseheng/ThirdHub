@@ -18,6 +18,13 @@ function cmpVer(a, b) {
 }
 
 export async function checkUpdate(manual = false) {
+  /* 安卓 WebView 壳：更新交给原生更新器（后台下载 APK，完成后提示安装） */
+  try {
+    if (window.ThirdHubNative && window.ThirdHubNative.isNative && window.ThirdHubNative.isNative()) {
+      window.ThirdHubNative.checkAppUpdate(!!manual);
+      return;
+    }
+  } catch (e) {}
   let info = null;
   // 1. 云端
   try {

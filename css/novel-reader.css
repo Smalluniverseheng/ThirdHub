@@ -1,0 +1,103 @@
+/* ===== ThirdHub novel-reader.css — 小说阅读器 ===== */
+.nr-overlay { background: var(--reader-bg); }
+.nr-top {
+  display: flex; align-items: center; gap: 10px;
+  padding: calc(10px + env(safe-area-inset-top)) 14px 10px;
+  flex-shrink: 0;
+}
+.nr-top .icon-btn { background: rgba(128,128,128,.12); box-shadow: none; color: inherit; }
+.nr-body {
+  flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  padding: 8px 22px 40px;
+  font-size: 17px; line-height: 1.7;
+}
+.nr-chapter-title { font-size: 1.25em; font-weight: 800; margin: 12px 0 22px; }
+.nr-p { margin-bottom: 1em; text-indent: 2em; }
+.nr-bottom {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+  flex-shrink: 0;
+}
+.nr-nav {
+  padding: 9px 20px; border-radius: 999px;
+  background: rgba(128,128,128,.12); font-size: 14px;
+  color: inherit; transition: opacity .15s;
+}
+.nr-nav:active { opacity: .6; }
+.nr-catalog {
+  position: absolute; top: 0; left: 0; bottom: 0; width: min(320px, 82vw);
+  background: var(--bg-elevated); z-index: 30; overflow-y: auto;
+  box-shadow: 4px 0 24px rgba(0,0,0,.3);
+  animation: cat-in .24s ease;
+}
+@keyframes cat-in { from { transform: translateX(-40%); opacity: 0; } }
+.nr-catalog-head { position: sticky; top: 0; padding: 16px; font-weight: 700; font-size: 15px; background: var(--bg-elevated); border-bottom: 1px solid var(--border); z-index: 2; }
+.nr-catalog-item {
+  display: block; width: 100%; text-align: left;
+  padding: 12px 16px; font-size: 14px; color: var(--text-secondary);
+  border-bottom: 1px solid var(--border);
+}
+.nr-catalog-item.on { color: var(--primary); font-weight: 700; background: rgba(59,91,253,.08); }
+.nr-theme-dot { width: 44px; height: 44px; border-radius: 12px; border: 2px solid var(--border); transition: transform .15s; }
+.nr-theme-dot:active { transform: scale(.9); }
+input[type="range"] { accent-color: var(--primary); }
+
+/* ================= v1.5 ================= */
+.nr-body { --nr-pad: 20px; --nr-gap: .6em; padding-left: var(--nr-pad); padding-right: var(--nr-pad); }
+.nr-p { margin-bottom: var(--nr-gap); }
+
+/* 分页模式（CSS 多栏横向翻页） */
+.nr-body.nr-paged {
+  overflow: hidden; padding-top: 0; padding-bottom: 0;
+  column-gap: 0;
+  column-fill: auto;
+  height: 100%;
+}
+.nr-body.nr-paged .nr-p, .nr-body.nr-paged .nr-chapter-title { break-inside: avoid-column; }
+.nr-body.nr-anim-none { scroll-behavior: auto; }
+.nr-body.nr-anim-slide, .nr-body.nr-anim-cover, .nr-body.nr-anim-sim { scroll-behavior: smooth; }
+
+/* 插图小说 */
+.nr-illust {
+  display: block; max-width: 100%; max-height: 60vh;
+  margin: 12px auto; border-radius: 10px;
+  break-inside: avoid-column;
+}
+.nr-illust-link { text-indent: 0; font-size: .85em; }
+
+/* 点按区域 */
+.nr-tapzones { position: absolute; inset: 0; z-index: 20; display: flex; }
+.nr-tap { height: 100%; }
+.nr-tap.left { width: 30%; }
+.nr-tap.center { width: 40%; }
+.nr-tap.right { width: 30%; }
+
+/* 上下栏显隐（沉浸阅读） */
+.nr-top, .nr-bottom { transition: transform .25s ease, opacity .25s ease; }
+.nr-top.nr-ui-hidden { transform: translateY(-110%); opacity: 0; pointer-events: none; position: absolute; top: 0; left: 0; right: 0; z-index: 25; }
+.nr-bottom.nr-ui-hidden { transform: translateY(110%); opacity: 0; pointer-events: none; position: absolute; bottom: 0; left: 0; right: 0; z-index: 25; }
+.nr-top { position: relative; z-index: 25; }
+.nr-bottom { position: relative; z-index: 25; }
+
+/* 底部信息栏 */
+.nr-info {
+  position: absolute; bottom: 0; left: 0; right: 0; z-index: 15;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 4px 14px calc(4px + env(safe-area-inset-bottom));
+  font-size: 11px; opacity: .75; pointer-events: none;
+}
+.nr-info-title { min-width: 0; }
+.nr-info-right { display: flex; gap: 10px; flex-shrink: 0; }
+
+/* 设置面板 */
+.nr-chip-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.ai-chip {
+  padding: 7px 14px; border-radius: 999px; font-size: 13px;
+  background: var(--bg-input); color: var(--text-secondary);
+  border: 1px solid var(--border); transition: all .15s;
+}
+.ai-chip.on { background: var(--primary); border-color: var(--primary); color: #fff; }
+.nr-set-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 0; font-size: 14px; border-top: 1px solid var(--border);
+}

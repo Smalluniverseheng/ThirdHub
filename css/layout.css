@@ -1,0 +1,114 @@
+/* ===== ThirdHub layout.css — 整体布局 / 5 Tab 导航 ===== */
+#app { display: flex; flex-direction: column; height: 100dvh; }
+.safe-top { height: env(safe-area-inset-top); flex-shrink: 0; }
+
+#pages { flex: 1; position: relative; overflow: hidden; }
+.page {
+  position: absolute; inset: 0; overflow-y: auto; overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 24px;
+  opacity: 0; pointer-events: none;
+  transition: opacity .2s ease;
+}
+.page.active { opacity: 1; pointer-events: auto; }
+
+/* 页头 */
+.page-head {
+  position: sticky; top: 0; z-index: 20;
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 16px 10px;
+  background: linear-gradient(var(--bg-page) 78%, transparent);
+}
+.page-title { font-size: 24px; font-weight: 800; letter-spacing: .5px; }
+.page-head .spacer { flex: 1; }
+.icon-btn {
+  width: 38px; height: 38px; border-radius: 12px;
+  display: grid; place-items: center;
+  background: var(--bg-card); color: var(--text-secondary);
+  box-shadow: var(--shadow-card); transition: transform .15s;
+}
+.icon-btn:active { transform: scale(.9); }
+
+/* 底部 Tab */
+#tabbar {
+  flex-shrink: 0; z-index: 50;
+  display: flex; justify-content: space-around; align-items: stretch;
+  background: var(--tabbar-bg); backdrop-filter: blur(18px);
+  border-top: 1px solid var(--border);
+  padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+}
+.tab {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 4px 0; color: var(--text-tertiary);
+  transition: color .2s;
+}
+.tab-ico { display: grid; place-items: center; width: 42px; height: 26px; border-radius: 999px; transition: background .25s; }
+.tab.on { color: var(--primary); }
+.tab.on .tab-ico { background: rgba(59,91,253,.15); }
+.tab-label { font-size: 11px; font-weight: 600; }
+.tab:active .tab-ico { transform: scale(.9); }
+.tab-ico { transition: background .25s, transform .15s; }
+
+/* 全屏覆盖层 */
+.overlay {
+  position: fixed; inset: 0; z-index: 8000;
+  background: var(--bg-page);
+  display: flex; flex-direction: column;
+  animation: overlay-in .26s cubic-bezier(.2,.9,.3,1);
+}
+@keyframes overlay-in { from { transform: translateY(6%); opacity: 0; } }
+.overlay.closing { transform: translateY(6%); opacity: 0; transition: all .22s ease; }
+.overlay-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: calc(10px + env(safe-area-inset-top)) 14px 10px;
+  flex-shrink: 0;
+}
+.overlay-title { font-size: 16px; font-weight: 700; flex: 1; min-width: 0; }
+.overlay-body { flex: 1; overflow-y: auto; overflow-x: hidden; position: relative; display: flex; flex-direction: column; -webkit-overflow-scrolling: touch; }
+.overlay-body > .ov-fill { flex: 1; display: flex; flex-direction: column; min-height: 100%; }
+
+/* AI 聊天页：输入栏紧贴底部导航，无额外留白 */
+.page.ai-page { padding-bottom: 0 !important; overflow: hidden; }
+
+/* 平板/桌面响应式（导航栏始终在底部） */
+@media (min-width: 768px) {
+  .safe-top { display: none; }
+  #tabbar { justify-content: center; gap: 8px; }
+  .tab { flex: 0 1 110px; }
+  #pages { height: auto; }
+  .page { padding: 0 max(24px, calc((100% - 860px) / 2)) 40px; }
+  .page-head { padding-top: 20px; }
+}
+@media (min-width: 1200px) {
+  .page { padding: 0 max(40px, calc((100% - 1080px) / 2)) 48px; }
+}
+
+/* ================= v1.5 多端导航位置 ================= */
+/* 顶部导航 */
+body[data-navpos="top"] #app { flex-direction: column; }
+body[data-navpos="top"] #tabbar {
+  order: -1;
+  border-top: 0; border-bottom: 1px solid var(--border);
+  padding: calc(6px + env(safe-area-inset-top)) 4px 6px;
+}
+/* 桌面端可折叠导航（底部悬浮折叠钮） */
+#tab-fold-handle {
+  position: fixed; bottom: calc(64px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%);
+  z-index: 60; width: 44px; height: 20px; border-radius: 10px;
+  background: var(--bg-card); border: 1px solid var(--border);
+  color: var(--text-tertiary); display: grid; place-items: center;
+  box-shadow: var(--shadow-card);
+}
+#tab-fold-handle svg { width: 14px; height: 14px; }
+body[data-navpos="fold"] #tabbar { transition: transform .3s ease, opacity .3s ease; }
+body[data-navpos="fold"].nav-folded #tabbar { transform: translateY(110%); opacity: 0; pointer-events: none; }
+body[data-navpos="fold"].nav-folded #tab-fold-handle { bottom: calc(10px + env(safe-area-inset-bottom)); }
+
+/* 手表端（<380px 触屏）紧凑模式 */
+@media (max-width: 380px) and (pointer: coarse) {
+  .page-title { font-size: 19px; }
+  .tab-label { font-size: 10px; }
+  #tabbar { padding: 4px 2px calc(4px + env(safe-area-inset-bottom)); }
+  .list-item { padding: 10px; }
+  .ob-grid { grid-template-columns: 1fr 1fr; }
+}

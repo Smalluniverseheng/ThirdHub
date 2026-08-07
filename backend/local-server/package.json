@@ -1,0 +1,15 @@
+{
+  "name": "thirdhub-local",
+  "version": "0.1.0",
+  "description": "ThirdHub 本地 AI 后端（Termux / Node.js 自建版）",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "pm2": "pm2 start src/index.js --name thirdhub-local"
+  },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "better-sqlite3": "^11.10.0",
+    "fastify": "^4.28.1"
+  }
+}

@@ -1,0 +1,22 @@
+/* ===== ThirdHub category.css — 分类页 ===== */
+.cat-types {
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px;
+  padding: 4px 16px 8px;
+}
+@media (min-width: 768px) { .cat-types { grid-template-columns: repeat(5, 120px); justify-content: center; } }
+.cat-type-card {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 14px 4px !important; font-size: 12.5px; font-weight: 600;
+}
+.cat-type-ico {
+  width: 42px; height: 42px; border-radius: 13px;
+  background: rgba(59,91,253,.1); color: var(--primary);
+  display: grid; place-items: center;
+}
+.cat-type-card .muted { font-size: 10px; }
+.cat-section { margin-top: 18px; }
+.cat-manager { padding: 0 16px; }
+.source-item .msg-act { background: none; }
+
+/* v1.5 修复：连接器管理图标大小不齐 */
+.cat-type-ico svg, .cat-type-ico .ico, .cat-type-ico .ico svg { width: 22px !important; height: 22px !important; display: block; flex-shrink: 0; }

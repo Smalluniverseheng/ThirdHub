@@ -90,7 +90,7 @@ export async function kvGet(k, def = null) {
   const row = await db.get('kv', k);
   return row ? row.v : def;
 }
-export async function kvSet(k, v) { return db.put('kv', { k, v }); }
+export async function kvSet(k, v) { const r = await db.put('kv', { k, v }); emit('kv:changed', k); return r; }
 export async function kvDel(k) { return db.del('kv', k); }
 
 /* ---------- 全局响应式状态（轻量事件总线） ---------- */
@@ -160,8 +160,9 @@ export async function getSetting(k) {
   return v === null || v === undefined ? DEFAULT_SETTINGS[k] : v;
 }
 export async function setSetting(k, v) {
-  await kvSet('setting:' + k, v);
+  await db.put('kv', { k: 'setting:' + k, v });
   emit('setting:' + k, v);
+  emit('setting:changed', k);
 }
 export async function allSettings() {
   const out = { ...DEFAULT_SETTINGS };
@@ -169,3 +170,4 @@ export async function allSettings() {
   return out;
 }
 export { DEFAULT_SETTINGS };
+export const DEFAULT_SETTINGS_KEYS = Object.keys(DEFAULT_SETTINGS);

@@ -10,7 +10,10 @@ export async function renderMediaBoard(page, type) {
   const NAME = { novel: '小说', comic: '漫画', music: '音乐', audio: '有声', video: '视频' }[type] || t.name;
 
   page.innerHTML = `
-    <div class="page-head"><div class="page-title">${NAME}</div></div>
+    <div class="page-head"><div class="page-title">${NAME}</div>
+      <div class="spacer"></div>
+      ${type === 'novel' || type === 'comic' ? `<button class="icon-btn" data-a="modset" title="${type === 'novel' ? '阅读设置' : '漫画设置'}">${icon('settings')}</button>` : ''}
+    </div>
     <div class="discover-search">
       <div class="search-box">
         ${icon('search')}
@@ -20,6 +23,14 @@ export async function renderMediaBoard(page, type) {
     </div>
     <div data-role="results"></div>
     <div data-role="home"></div>`;
+
+  /* v1.7 设置分级：阅读设置归入小说模块，漫画设置归入漫画模块 */
+  const modsetBtn = $('[data-a="modset"]', page);
+  if (modsetBtn) modsetBtn.onclick = async () => {
+    const ms = await import('./mod-settings.js');
+    if (type === 'novel') ms.showNovelSettings();
+    else ms.showComicSettings();
+  };
 
   const homeEl = $('[data-role="home"]', page);
   const resultsEl = $('[data-role="results"]', page);

@@ -28,7 +28,7 @@ import { trashChat, recycleDays } from './recycle-bin.js';
 /* 当前用户头像缓存（消息头像 + 抽屉头部同步） */
 let __userAvatar = '';
 export function userAvatarHtml(cls = '') {
-  return __userAvatar ? `<img class="${cls}" src="${esc(__userAvatar)}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">` : icon('user');
+  return `<img class="${cls}" src="${__userAvatar ? esc(__userAvatar) : 'icons/brand.jpg'}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">`;
 }
 currentUser().then((u) => { __userAvatar = (u && u.avatar) || ''; }).catch(() => {});
 on('auth:changed', () => { currentUser().then((u) => { __userAvatar = (u && u.avatar) || ''; }).catch(() => {}); });
@@ -126,7 +126,7 @@ export async function renderAIChat(page) {
     <div class="ai-drawer-mask" data-a="drawer-mask"></div>
     <aside class="ai-drawer" id="ai-drawer">
       <button class="ai-drawer-head" data-a="d-adv" title="高级设置">
-        <span class="ai-drawer-logo" data-role="d-avatar">${__userAvatar ? userAvatarHtml() : icon('robot')}</span>
+        <span class="ai-drawer-logo" data-role="d-avatar">${userAvatarHtml()}</span>
         <span class="ai-drawer-title">ThirdHub AI</span>
         <span class="ai-drawer-arrow">${icon('arrowR')}</span>
       </button>
@@ -234,7 +234,7 @@ export async function renderAIChat(page) {
   currentUser().then((u) => {
     __userAvatar = (u && u.avatar) || '';
     const av = $('[data-role="d-avatar"]', drawer);
-    if (av && __userAvatar) av.innerHTML = userAvatarHtml();
+    if (av) av.innerHTML = userAvatarHtml();
   }).catch(() => {});
   $('#ai-dsearch-input', page).addEventListener('input', (e) => {
     // 搜索时自动切到「历史会话」tab
@@ -742,15 +742,41 @@ function buildSessionItem(page, s, rerender) {
   };
   $('[data-del]', item).onclick = async (e) => { e.stopPropagation(); await doDelete(); };
 
-  /* 长按（移动端）/ 右键（桌面端）→ 操作菜单 */
-  let lpTimer = null, lpFired = false;
-  const showMenu = async () => {
-    const v = await actionSheet(s.title || '会话操作', [
-      { label: '重命名', value: 'rename', icon: 'edit' },
-      { label: '多选', value: 'multi', icon: 'checkbox' },
-      { label: s.pinned ? '取消置顶' : '置顶', value: 'pin', icon: s.pinned ? 'pinOff' : 'pin' },
-      { label: '删除', value: 'del', icon: 'trash' },
-    ]);
+  /* 长按（移动端）/ 右键（桌面端）→ 紧凑锚点菜单（Kimi 式小弹窗） */
+  let lpTimer = null, lpFired = false, menuOpen = false;
+  const showMenu = (px, py) => {
+    if (menuOpen) return;   // 守卫：防止长按计时器与 contextmenu 双触发
+    menuOpen = true;
+    const acts = [
+      { v: 'rename', ico: 'edit', name: '重命名' },
+      { v: 'multi', ico: 'checkbox', name: '多选' },
+      { v: 'pin', ico: s.pinned ? 'pinOff' : 'pin', name: s.pinned ? '取消置顶' : '置顶' },
+      { v: 'del', ico: 'trash', name: '删除', danger: true },
+    ];
+    const mask = el('<div class="ctx-mask"></div>');
+    const pop = el(`<div class="ctx-pop">${acts.map((a) => `<button class="ctx-item${a.danger ? ' danger' : ''}" data-v="${a.v}">${icon(a.ico)}<span>${a.name}</span></button>`).join('')}</div>`);
+    document.body.appendChild(mask);
+    document.body.appendChild(pop);
+    /* 定位：优先条目上方，空间不足放下方 */
+    const rect = item.getBoundingClientRect();
+    const pw = pop.offsetWidth, ph = pop.offsetHeight;
+    const vw = window.innerWidth, vh = window.innerHeight;
+    let left = (px != null ? px : rect.left + rect.width / 2) - pw / 2;
+    left = Math.max(8, Math.min(left, vw - pw - 8));
+    let top = rect.top - ph - 8;
+    if (top < 8) top = Math.min(rect.bottom + 8, vh - ph - 8);
+    pop.style.left = left + 'px';
+    pop.style.top = top + 'px';
+    const close = (v) => {
+      menuOpen = false;
+      mask.remove();
+      pop.remove();
+      if (v) handleAction(v);
+    };
+    mask.onclick = () => close(null);
+    $$('.ctx-item', pop).forEach((b) => b.onclick = () => close(b.dataset.v));
+  };
+  const handleAction = async (v) => {
     if (v === 'rename') {
       const b2 = el(`<div>${formRow('会话名称', `<input class="input" data-f="t" value="${esc(s.title || '')}" maxlength="40">`)}</div>`);
       const m2 = modal({
@@ -780,14 +806,15 @@ function buildSessionItem(page, s, rerender) {
       await doDelete();
     }
   };
-  item.addEventListener('touchstart', () => {
+  item.addEventListener('touchstart', (e) => {
     lpFired = false;
-    lpTimer = setTimeout(() => { lpFired = true; showMenu(); }, 500);
+    const t = e.touches && e.touches[0];
+    lpTimer = setTimeout(() => { lpFired = true; showMenu(t && t.clientX, t && t.clientY); }, 500);
   }, { passive: true });
-  item.addEventListener('touchend', () => { clearTimeout(lpTimer); if (lpFired) { /* 阻止紧随的 click 打开会话 */ } });
+  item.addEventListener('touchend', () => clearTimeout(lpTimer));
   item.addEventListener('touchmove', () => clearTimeout(lpTimer));
   item.addEventListener('click', (e) => { if (lpFired) { e.stopImmediatePropagation(); lpFired = false; } }, true);
-  item.addEventListener('contextmenu', (e) => { e.preventDefault(); showMenu(); });
+  item.addEventListener('contextmenu', (e) => { e.preventDefault(); showMenu(e.clientX, e.clientY); });
   return item;
 }
 
@@ -1959,12 +1986,17 @@ export async function showKeySettings(focusProvider = null) { return showAISetti
 async function editProviderKey(p, onChange) {
   const key = await getApiKey(p.id);
   const base = await getBaseOverride(p.id);
+  const kv = await import('./keyvault.js');
+  const keyMode = await kv.getKeyMode(p.id);
   const body = el(`<div>
     <div class="row gap8 mb16"><span style="width:32px;height:32px">${vendorIcon(p.id)}</span><div><div style="font-weight:700">${esc(p.name)}</div><div class="muted">${esc(p.base || '需填写接口地址')}</div></div></div>
     ${formRow('API Key', `<input class="input" data-f="key" type="password" value="${esc(key)}" placeholder="sk-..." autocomplete="off">`)}
     ${formRow('自定义接口地址（可选，留空用官方）', `<input class="input" data-f="base" value="${esc(base)}" placeholder="${esc(p.base || 'https://...')}">`)}
+    ${kv.keyModeRowHtml(keyMode)}
+    <p class="muted" style="margin-bottom:10px">🔐 加密上传使用「我的 → 全局设置 → 二级密码」进行本地加密，丢失二级密码将无法解密。</p>
     <div data-v="result" style="margin-bottom:10px"></div>
   </div>`);
+  kv.bindKeyModeRow(body, p.id, () => { afterKeySavedHook(p); });
   const result = $('[data-v="result"]', body);
   const m = modal({
     title: '配置 ' + p.name, body,
@@ -1977,6 +2009,7 @@ async function editProviderKey(p, onChange) {
     await setApiKey(p.id, '');
     m.close();
     toast('已删除', 'ok');
+    afterKeySavedHook(p);
     onChange && onChange();
   };
   $('[data-a="sync"]', m.mask).onclick = async (e) => {
@@ -2015,8 +2048,18 @@ async function editProviderKey(p, onChange) {
     await setBaseOverride(p.id, $('[data-f="base"]', body).value);
     m.close();
     toast('已保存', 'ok');
+    afterKeySavedHook(p);
     onChange && onChange();
   };
+}
+
+/* 密钥变更后按存储方式同步到云端（密钥保险库） */
+async function afterKeySavedHook(p) {
+  try {
+    const kv = await import('./keyvault.js');
+    const base = await getBaseOverride(p.id);
+    await kv.afterKeySaved(p.id, p.name, base);
+  } catch (_) {}
 }
 
 /* ================= 自动识别 API Key（并行真实对话验证） ================= */

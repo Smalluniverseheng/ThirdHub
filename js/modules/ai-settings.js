@@ -10,7 +10,7 @@ import { getApiKey, setApiKey } from '../ai/ai-api.js';
 import { TTS_ENGINES } from '../voice.js';
 import { listMcpServers } from '../ai/mcp-client.js';
 import { listCustom, addCustom, updateCustom, removeCustom } from '../ai/custom-providers.js';
-import { getLocalBackend, saveLocalBackend, testLocalBackend, mixedContentRisk, normalizeBase } from '../ai/local-backend.js';
+import { getLocalBackend, saveLocalBackend, testLocalBackend, mixedContentRisk, normalizeBase, cloudMemberInfo, getCloudAccessToken } from '../ai/local-backend.js';
 import { getTotalStats, getDailyStats, getModelStats, getCostBreakdown, fmtTokens } from '../token-meter.js';
 import { fmtUsd, usdToCnyRate } from '../ai/ai-pricing.js';
 
@@ -766,25 +766,47 @@ function editMyProvider(cp, onDone) {
   };
 }
 
-/* ---------- 本地 AI 后端（v2.3 · 文档第一阶段：设置 + 健康检查 + 协议适配） ---------- */
+/* ---------- AI 后端（v2.4 · 云端会员后端 / 本地自建后端 双模式） ---------- */
 function showLocalBackend(page) {
   openOverlay({
-    title: '本地 AI 后端',
+    title: 'AI 后端',
     build: async (body) => {
       const conf = await getLocalBackend();
       let enabled = !!conf.enabled;
+      let mode = conf.mode === 'local' ? 'local' : 'cloud';
       let fallback = conf.fallback !== false;
       const lastTest = await kvGet('ai:local-backend:last-test', null);
+      const mi = await cloudMemberInfo();
 
       body.innerHTML = `<div class="set-wrap">
         <div class="muted" style="font-size:12px;line-height:1.75;margin-bottom:10px">
-          连接你自己部署的本地后端（Termux / Node.js），对话改走局域网 SSE 流式。
-          本地后端只负责对话 / 工具 / Agent / 记忆；登录、会员、全局设置仍由云端处理。
+          AI 对话除了厂商直连，还可以走「AI 后端」：云端后端（会员专属，开箱即用）或你自己部署的本地后端（Termux / Node.js，免费用户自建）。
+          后端只负责对话 / 工具 / 记忆；登录、会员、全局设置仍由 ThirdHub 云端处理。
         </div>
-        <div data-v="warn"></div>
-        <div data-v="enable"></div>
-        ${formRow('后端地址', `<input class="input" data-f="url" value="${esc(conf.url || '')}" placeholder="http://192.168.1.100:3000" inputmode="url" autocomplete="off">`)}
-        ${formRow('访问令牌（可选）', `<input class="input" data-f="token" type="password" value="${esc(conf.token || '')}" placeholder="后端如设置鉴权令牌则填写" autocomplete="off">`)}
+        <div class="col gap8" data-v="modes">
+          <button class="list-item" data-mode="cloud" style="width:100%">
+            <span class="list-ico">${icon('globe')}</span>
+            <div class="grow" style="text-align:left;min-width:0">
+              <div style="font-size:14px;font-weight:600">云端后端 <span class="tag tag-gold" style="font-size:10px;padding:1px 6px;border-radius:6px;vertical-align:1px">会员</span></div>
+              <div class="muted">${mi.member ? `已开通（${esc(mi.levelName)}），可直接使用` : mi.loggedIn ? `当前等级：${esc(mi.levelName)} · 开通会员后可用` : '需要登录并开通会员'}</div>
+            </div>
+            <span class="ai-toggle" data-v="sel-cloud"></span>
+          </button>
+          <button class="list-item" data-mode="local" style="width:100%">
+            <span class="list-ico">${icon('server')}</span>
+            <div class="grow" style="text-align:left;min-width:0">
+              <div style="font-size:14px;font-weight:600">本地自建后端</div>
+              <div class="muted">在自己的设备上部署（Termux / Node.js），任何用户可用</div>
+            </div>
+            <span class="ai-toggle" data-v="sel-local"></span>
+          </button>
+        </div>
+        <div data-v="enable" style="margin-top:8px"></div>
+        <div data-v="local-fields">
+          <div data-v="warn"></div>
+          ${formRow('后端地址', `<input class="input" data-f="url" value="${esc(conf.url || '')}" placeholder="http://192.168.1.100:3000" inputmode="url" autocomplete="off">`)}
+          ${formRow('访问令牌（可选）', `<input class="input" data-f="token" type="password" value="${esc(conf.token || '')}" placeholder="后端如设置鉴权令牌则填写" autocomplete="off">`)}
+        </div>
         <div data-v="fallback"></div>
         <div class="set-row">
           <div class="set-row-info"><div class="set-row-name">连接测试</div><div class="set-row-sub" data-v="status">${esc(lastTest ? (lastTest.ok ? `上次成功 · ${new Date(lastTest.at).toLocaleString()} · ${lastTest.ms}ms` : `上次失败 · ${new Date(lastTest.at).toLocaleString()}`) : '尚未测试')}</div></div>
@@ -798,6 +820,23 @@ function showLocalBackend(page) {
       const urlInput = $('[data-f="url"]', body);
       const tokenInput = $('[data-f="token"]', body);
       const statusEl = $('[data-v="status"]', body);
+      const localFields = $('[data-v="local-fields"]', body);
+
+      const renderMode = () => {
+        $('[data-v="sel-cloud"]', body).classList.toggle('on', mode === 'cloud');
+        $('[data-v="sel-local"]', body).classList.toggle('on', mode === 'local');
+        localFields.style.display = mode === 'local' ? '' : 'none';
+      };
+      $$('[data-mode]', body).forEach((b) => {
+        b.onclick = () => {
+          mode = b.dataset.mode;
+          if (mode === 'cloud' && !mi.member) {
+            toast(mi.loggedIn ? '云端后端是会员功能，当前等级未开通' : '请先登录并开通会员');
+          }
+          renderMode();
+        };
+      });
+      renderMode();
 
       const renderWarn = () => {
         const u = normalizeBase(urlInput.value);
@@ -811,19 +850,25 @@ function showLocalBackend(page) {
       renderWarn();
       urlInput.addEventListener('input', renderWarn);
 
-      $('[data-v="enable"]', body).appendChild(toggleRow('启用本地后端', '开启后 AI 对话优先走本地后端', enabled, (on) => { enabled = on; }));
-      $('[data-v="fallback"]', body).appendChild(toggleRow('失败自动回退', '本地连接失败时自动退回厂商直连；已开始输出则不回退', fallback, (on) => { fallback = on; }));
+      $('[data-v="enable"]', body).appendChild(toggleRow('启用 AI 后端', '开启后 AI 对话优先走后端；关闭则始终厂商直连', enabled, (on) => { enabled = on; }));
+      $('[data-v="fallback"]', body).appendChild(toggleRow('失败自动回退', '后端连接失败时自动退回厂商直连；已开始输出则不回退', fallback, (on) => { fallback = on; }));
 
       $('[data-a="test"]', body).onclick = async () => {
-        const url = normalizeBase(urlInput.value);
-        const token = tokenInput.value.trim();
-        if (!url) return toast('请先填写后端地址');
         statusEl.textContent = '正在连接…';
         try {
-          const r = await testLocalBackend(url, token);
-          statusEl.textContent = `连接成功 · ${r.ms}ms` + (r.info && r.info.version ? ` · 后端 v${r.info.version}` : '');
+          let r;
+          if (mode === 'cloud') {
+            const token = await getCloudAccessToken();
+            if (!token) throw new Error('请先登录 ThirdHub 账号');
+            r = await testLocalBackend('', token, 8000, 'cloud');
+          } else {
+            const url = normalizeBase(urlInput.value);
+            if (!url) { statusEl.textContent = '尚未测试'; return toast('请先填写后端地址'); }
+            r = await testLocalBackend(url, tokenInput.value.trim(), 6000, 'local');
+          }
+          statusEl.textContent = `连接成功 · ${r.ms}ms` + (r.info && r.info.version ? ` · 后端 v${r.info.version}` : '') + (r.info && r.info.member === false ? ' · 非会员（对话将受限）' : '');
           await kvSet('ai:local-backend:last-test', { ok: true, at: Date.now(), ms: r.ms });
-          toast('本地后端连接成功', 'ok');
+          toast('后端连接成功', 'ok');
         } catch (e) {
           statusEl.textContent = '连接失败：' + (e && e.message || e);
           await kvSet('ai:local-backend:last-test', { ok: false, at: Date.now() });
@@ -833,9 +878,12 @@ function showLocalBackend(page) {
 
       $('[data-a="save"]', body).onclick = async () => {
         const url = normalizeBase(urlInput.value);
-        if (enabled && !url) return toast('启用前请先填写后端地址');
-        await saveLocalBackend({ enabled, url, token: tokenInput.value.trim(), fallback });
-        toast(enabled ? '已保存：AI 对话将优先走本地后端' : '已保存', 'ok');
+        if (enabled && mode === 'local' && !url) return toast('本地模式启用前请先填写后端地址');
+        if (enabled && mode === 'cloud' && !mi.member) {
+          toast(mi.loggedIn ? '云端后端是会员功能：当前账号未开通会员，保存后对话会自动回退到厂商直连' : '云端后端需要登录并开通会员，保存后对话会自动回退到厂商直连');
+        }
+        await saveLocalBackend({ enabled, mode, url, token: tokenInput.value.trim(), fallback });
+        toast(enabled ? `已保存：AI 对话将优先走${mode === 'cloud' ? '云端' : '本地'}后端` : '已保存', 'ok');
       };
     },
   });
@@ -852,7 +900,7 @@ function subProviders(page) {
       add('cpu', '模型设置', '厂商模型列表 · 实时同步 · 排行榜', async () => { const m = await import('./ai-chat.js'); m.showModelsPage(page); });
       add('key', 'API 密钥 / 联网搜索 / MCP', '厂商凭据与搜索服务配置', async () => { const m = await import('./ai-chat.js'); m.showAISettings(); });
       add('plus', '我的模型 / 自定义厂商', '可一直添加；进入模型选择器「我的模型」分组', () => showMyModels(page));
-      add('server', '本地 AI 后端', '连接自建 Termux / Node 后端，对话走局域网 SSE（实验）', () => showLocalBackend(page));
+      add('server', 'AI 后端（云端 / 本地）', '会员云端后端开箱即用；也可自建 Termux / Node 本地后端', () => showLocalBackend(page));
       // 专用模型
       const special = [
         { key: 'ai:model-title', name: '标题生成模型', desc: '自动生成话题标题所用模型（默认跟随当前模型）' },

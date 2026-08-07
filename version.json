@@ -1,8 +1,8 @@
 {
-  "version": "2.3",
+  "version": "2.4",
   "type": "optional",
-  "title": "ThirdHub v2.3",
-  "content": "1. 新增「本地 AI 后端」：连接自建 Termux / Node 后端，对话优先走局域网 SSE 流式\n2. 支持 /health 连接测试、访问令牌、失败自动回退厂商直连\n3. HTTPS 页面访问 http:// 局域网后端时给出混合内容解决提示",
+  "title": "ThirdHub v2.4",
+  "content": "1. 新增「云端后端」（会员专属）：与本地后端同一套 SSE 协议，登录即可用\n2. 发布可自建后端代码（backend/local-server），Termux / Node.js 部署，含会话与记忆存储\n3. AI 后端设置升级为双模式：云端会员后端 / 本地自建后端，支持连接测试与失败回退",
   "downloadUrl": "https://github.com/Smalluniverseheng/ThirdHub-Android/releases/download/v2.2/ThirdHub-Android-v2.2.apk",
-  "releaseDate": "2026-08-07"
+  "releaseDate": "2026-08-08"
 }

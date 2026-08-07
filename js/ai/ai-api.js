@@ -2,7 +2,7 @@
 import { providerById, refreshCustomProviders } from './ai-models.js';
 import { kvGet, kvSet, emit } from '../store.js';
 import { recordUsage } from '../token-meter.js';
-import { getLocalBackend, chatLocalBackend } from './local-backend.js';
+import { getLocalBackend, chatLocalBackend, cloudBase, getCloudAccessToken } from './local-backend.js';
 
 /* ---------- API Key 管理 ---------- */
 export async function getApiKey(providerId) {
@@ -210,44 +210,61 @@ async function chatAnthropic({ base, key, model, messages, onToken, onReasoning,
 }
 
 /* ---------- 统一入口（params：temperature / top_p / max_tokens / stream_options 等） ----------
-   v2.3：启用本地 AI 后端时优先走本地（Termux/Node 自建后端，文档 Wire Protocol），
+   v2.4：AI 后端（云端会员后端 / 本地自建后端）优先，均按文档 Wire Protocol；
+   用户的厂商 Key 与接口地址随请求转发给后端（后端不落库保存）；
    连接级失败且开启回退时自动退回厂商直连；已开始输出或用户取消则直接报错。 */
 export async function chat({ providerId, model, messages, onToken, onReasoning, signal, params = {} }) {
   await refreshCustomProviders();
-
-  const lb = await getLocalBackend();
-  if (lb.enabled && lb.url) {
-    let streamed = false;
-    try {
-      const t0 = Date.now();
-      const r = await chatLocalBackend({
-        base: lb.url, token: lb.token, providerId, model, messages,
-        sessionId: params.sessionId,
-        onToken: (c, f) => { streamed = true; onToken && onToken(c, f); },
-        onReasoning: (c, f) => { onReasoning && onReasoning(c, f); },
-        signal, params,
-      });
-      const usage = r.usage || estimateUsage(messages, r.text);
-      recordUsage(providerId, model, usage, Date.now() - t0);
-      return r;
-    } catch (e) {
-      if (e && e.name === 'AbortError') throw e; // 用户主动取消：不回退
-      if (streamed || !lb.fallback) throw e;    // 已产出内容或未开回退：直接报错
-      try {
-        const { toast } = await import('../ui.js');
-        toast('本地后端不可用，已自动回退到厂商直连', 'err');
-      } catch (_) {}
-      // 落入下方直连流程
-    }
-  }
-
   const provider = providerById(providerId);
   let key = await getApiKey(providerId);
   let base = (await getBaseOverride(providerId)) || provider.base;
 
-  // 限时免费模型：走平台代理，无需用户 Key
+  // 限时免费模型（无 Key 时走平台代理，不经后端）
   const free = await getFreeModel();
-  if (!key && free && free.enabled && free.models && free.models.includes(providerId + '/' + model)) {
+  const isFree = !key && !!(free && free.enabled && free.models && free.models.includes(providerId + '/' + model));
+
+  const lb = await getLocalBackend();
+  if (lb.enabled && !isFree) {
+    let backendBase = lb.mode === 'cloud' ? cloudBase() : lb.url;
+    let backendToken = lb.token || '';
+    if (lb.mode === 'cloud') {
+      backendToken = await getCloudAccessToken();
+      if (!backendToken) {
+        const err = new Error('云端后端需要登录 ThirdHub 账号');
+        err.needLogin = true;
+        throw err;
+      }
+    }
+    if (backendBase) {
+      let streamed = false;
+      try {
+        const t0 = Date.now();
+        const r = await chatLocalBackend({
+          base: backendBase, token: backendToken, mode: lb.mode, providerId, model, messages,
+          sessionId: params.sessionId,
+          apiKey: key, providerBase: base,
+          onToken: (c, f) => { streamed = true; onToken && onToken(c, f); },
+          onReasoning: (c, f) => { onReasoning && onReasoning(c, f); },
+          signal, params,
+        });
+        const usage = r.usage || estimateUsage(messages, r.text);
+        recordUsage(providerId, model, usage, Date.now() - t0);
+        return r;
+      } catch (e) {
+        if (e && e.name === 'AbortError') throw e; // 用户主动取消：不回退
+        if (streamed || !lb.fallback) throw e;    // 已产出内容或未开回退：直接报错
+        try {
+          const { toast } = await import('../ui.js');
+          toast(e.needMember
+            ? '云端后端为会员功能，已回退到厂商直连'
+            : (lb.mode === 'cloud' ? '云端后端不可用，已回退到厂商直连' : '本地后端不可用，已自动回退到厂商直连'), 'err');
+        } catch (_) {}
+        // 落入下方直连流程
+      }
+    }
+  }
+
+  if (!key && isFree) {
     const proxy = await kvGet('ai:free-proxy', '');
     if (proxy) { base = proxy; key = 'free'; }
   }

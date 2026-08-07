@@ -1,5 +1,5 @@
 /* ThirdHub Service Worker */
-const VERSION = '2.3';
+const VERSION = '2.4';
 const CACHE_NAME = 'thirdhub-v' + VERSION;
 
 const CORE_ASSETS = [
@@ -33,6 +33,7 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
+  if (url.pathname.startsWith('/api/')) return; // 云端后端接口：不缓存、不拦截
   if (e.request.method !== 'GET') return;
   if (url.origin === self.location.origin) {
     e.respondWith(

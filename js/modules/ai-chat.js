@@ -11,6 +11,7 @@ import {
 import { SEARCH_SERVICES, getSearchConfig, setSearchConfig, hasSearchConfig, searchWeb, resultsToContext } from '../ai/web-search.js';
 import { PROVIDERS, providerById } from '../ai/ai-models.js';
 import { vendorIcon } from '../ai/vendors.js';
+import { modelIntro } from '../ai/model-intros.js';
 import { pickModel } from '../ai/model-selector.js';
 import { renderMarkdown, bindCopyButtons } from '../ai/markdown.js';
 import { getSessionStats, fmtTokens } from '../token-meter.js';
@@ -407,6 +408,11 @@ function updateTopbar(page) {
   $('[data-a="mode"] .pill-text', page).textContent = '模式: ' + MODES.find(m => m.id === currentMode).name;
   $('[data-a="mode"]', page).style.display = inChat ? '' : 'none';
   syncNokeyPill(page);
+  // 切换模型后刷新欢迎语（你好，我是 XX 模型）
+  if (inChat && session && !session.messages.length) {
+    const box = $('#ai-messages', page);
+    if (box && box.querySelector('.ai-welcome')) renderMessages(page);
+  }
 }
 
 /* 未配置提示：当前模型所属厂商没有 API Key 时，在输入框上方显示「未配置 →」 */
@@ -1169,10 +1175,11 @@ function renderMessages(page) {
       { ico: 'book', t: '学习问答', d: '概念讲解、知识梳理', p: '请用通俗的语言解释：' },
       { ico: 'sparkle', t: '头脑风暴', d: '创意点子、方案对比', p: '帮我想几个点子，主题：' },
     ];
+    const wprov = providerById(currentModel.providerId);
     box.innerHTML = `<div class="ai-welcome">
-      <div class="ai-welcome-logo">${icon('robot')}</div>
-      <div class="ai-welcome-title">有什么可以帮你？</div>
-      <div class="ai-welcome-sub">当前模型：${esc(currentModel.model)} · ${esc(providerById(currentModel.providerId).name)}</div>
+      <div class="ai-welcome-logo ai-welcome-vendor" title="${esc(wprov.name)}">${vendorIcon(currentModel.providerId) || icon('robot')}</div>
+      <div class="ai-welcome-title">你好，我是 ${esc(currentModel.model)}</div>
+      <div class="ai-welcome-sub ai-welcome-intro">${esc(modelIntro(currentModel.providerId, currentModel.model, wprov.name))}</div>
       <div class="ai-welcome-cards">
         ${SUGGESTIONS.map((s, i) => `<button class="ai-welcome-card" data-sug="${i}">
           <span class="ai-welcome-card-ico">${icon(s.ico)}</span>

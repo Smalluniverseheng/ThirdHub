@@ -38,25 +38,84 @@ export async function saveCustomProvider(cp) {
   await kvSet('ai:custom-providers', list);
 }
 
-/* ---------- 模块代理（v1.7 设置分级：直连 / 自有代理 / 会员云端代理） ---------- */
+/* ---------- 模块代理（v1.9：直连 / 自有代理 / 会员云端代理 / 自动优先级链路） ---------- */
+const DEFAULT_BACKEND = 'https://thirdhub-proxy.1829487897.workers.dev/';
+const wrapProxy = (base, url) => base + (base.includes('?') ? '&' : '?') + 'url=' + encodeURIComponent(url);
+
+async function isMemberUser() {
+  try {
+    const { currentUser, levelById } = await import('../auth.js');
+    const u = await currentUser();
+    const lv = levelById(u ? u.level : 'guest');
+    return !!(u && lv.price > 0 && (!u.expireAt || new Date(u.expireAt).getTime() > Date.now()));
+  } catch (e) { return false; }
+}
+
+/* 构造某一条通道的地址；该通道不可用（未填地址 / 非会员）时返回 null */
+async function hopUrl(hop, conf, url) {
+  if (hop === 'direct') return url;
+  if (hop === 'custom') {
+    if (!conf.url) return null;
+    return wrapProxy(conf.url.replace(/\/$/, '') + '/', url);
+  }
+  if (hop === 'cloud') {
+    if (!(await isMemberUser())) return null;
+    const base = await kvGet('proxy:backend', DEFAULT_BACKEND);
+    return wrapProxy(base, url);
+  }
+  return null;
+}
+
 export async function proxiedUrl(module, url) {
   try {
     const conf = (await kvGet('proxy:mod', {}))[module];
     if (!conf || conf.mode === 'direct') return url;
-    const wrap = (base) => base + (base.includes('?') ? '&' : '?') + 'url=' + encodeURIComponent(url);
-    if (conf.mode === 'custom' && conf.url) return wrap(conf.url.replace(/\/$/, '') + (conf.url.endsWith('/') ? '' : '/'));
-    if (conf.mode === 'cloud') {
-      /* 云端代理为会员能力：校验会员有效后才生效，否则回退直连 */
-      const { currentUser, levelById } = await import('../auth.js');
-      const u = await currentUser();
-      const lv = levelById(u ? u.level : 'guest');
-      if (u && lv.price > 0 && (!u.expireAt || new Date(u.expireAt).getTime() > Date.now())) {
-        const base = await kvGet('proxy:backend', 'https://thirdhub-proxy.1829487897.workers.dev/');
-        return wrap(base);
-      }
+    if (conf.mode === 'auto') {
+      const prio = await kvGet('proxy:prio', ['cloud', 'custom', 'direct']);
+      for (const hop of prio) { const u = await hopUrl(hop, conf, url); if (u) return u; }
+      return url;
     }
-  } catch (e) {}
-  return url;
+    const u = await hopUrl(conf.mode, conf, url);
+    return u || url;
+  } catch (e) { return url; }
+}
+
+/* 带自动回退的 fetch：
+   · 自动模式：按优先级链路依次尝试，断线（网络错误 / 5xx）自动切下一条
+   · 显式自有代理 / 云端代理：失败时自动弹回直连并提示 */
+export async function proxiedFetch(module, url, opts = {}) {
+  let confAll = {};
+  try { confAll = await kvGet('proxy:mod', {}); } catch (e) {}
+  const conf = confAll[module] || { mode: 'direct' };
+  let chain;
+  if (conf.mode === 'auto') chain = await kvGet('proxy:prio', ['cloud', 'custom', 'direct']);
+  else if (conf.mode === 'custom' || conf.mode === 'cloud') chain = [conf.mode, 'direct']; // 显式模式失败 → 弹回直连
+  else chain = ['direct'];
+
+  for (let i = 0; i < chain.length; i++) {
+    const hop = chain[i];
+    const u = await hopUrl(hop, conf, url);
+    if (!u) continue;
+    const last = i === chain.length - 1;
+    try {
+      const resp = await fetch(u, opts);
+      if (resp.status >= 500 && !last) throw new Error('HTTP ' + resp.status); // 网关/代理故障 → 下一条
+      return resp;
+    } catch (e) {
+      if (e && e.name === 'AbortError') throw e; // 用户主动取消不回退
+      // 显式选择自有代理 / 云端代理失败 → 自动弹回直连并提示
+      if (conf.mode !== 'auto' && hop === conf.mode && hop !== 'direct') {
+        try {
+          confAll[module] = { ...conf, mode: 'direct' };
+          await kvSet('proxy:mod', confAll);
+          const { toast } = await import('../ui.js');
+          toast(hop === 'custom' ? '自有代理连接失败，已自动切回直连' : '云端代理连接失败，已自动切回直连', 'err');
+        } catch (_) {}
+      }
+      if (last) throw new Error('网络请求失败：所有通道均不可用，请检查网络或代理设置');
+    }
+  }
+  throw new Error('网络请求失败：所有通道均不可用，请检查网络或代理设置');
 }
 
 /* ---------- SSE 解析 ---------- */
@@ -80,7 +139,7 @@ async function* sseLines(resp) {
 
 /* ---------- OpenAI 兼容流式（正文 / 推理分离） ---------- */
 async function chatOpenAI({ base, key, model, messages, onToken, onReasoning, signal, extra = {} }) {
-  const resp = await fetch(await proxiedUrl('ai_chat', base.replace(/\/$/, '') + '/chat/completions'), {
+  const resp = await proxiedFetch('ai_chat', base.replace(/\/$/, '') + '/chat/completions', {
     method: 'POST',
     signal,
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },
@@ -116,7 +175,7 @@ async function chatOpenAI({ base, key, model, messages, onToken, onReasoning, si
 async function chatAnthropic({ base, key, model, messages, onToken, onReasoning, signal, extra = {} }) {
   const sys = messages.filter((m) => m.role === 'system').map((m) => m.content).join('\n');
   const msgs = messages.filter((m) => m.role !== 'system').map((m) => ({ role: m.role, content: m.content }));
-  const resp = await fetch(await proxiedUrl('ai_chat', base.replace(/\/$/, '') + '/messages'), {
+  const resp = await proxiedFetch('ai_chat', base.replace(/\/$/, '') + '/messages', {
     method: 'POST',
     signal,
     headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
@@ -205,7 +264,7 @@ export async function drawImage({ providerId, model, prompt, size = '1024x1024' 
   const base = (await getBaseOverride(providerId)) || provider.base;
   if (!key) throw new Error('未配置 API Key');
   if (!base) throw new Error('该厂商暂不支持直连绘画接口');
-  const resp = await fetch(await proxiedUrl('ai_image', base.replace(/\/$/, '') + '/images/generations'), {
+  const resp = await proxiedFetch('ai_image', base.replace(/\/$/, '') + '/images/generations', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },
     body: JSON.stringify({ model, prompt, n: 1, size }),
@@ -229,7 +288,7 @@ export async function generateVideo({ providerId, model, prompt, ratio = '16:9',
 
   if (providerId === 'bytedance') {
     // 火山方舟：POST /contents/generations/tasks → 轮询
-    const resp = await fetch(await proxiedUrl('ai_video', base + '/contents/generations/tasks'), {
+    const resp = await proxiedFetch('ai_video', base + '/contents/generations/tasks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },
       body: JSON.stringify({ model, content: [{ type: 'text', text: `${prompt} --ratio ${ratio} --duration ${duration}` }] }),
@@ -246,7 +305,7 @@ export async function generateVideo({ providerId, model, prompt, ratio = '16:9',
   if (providerId === 'aliyun') {
     // DashScope 异步任务
     const dash = 'https://dashscope.aliyuncs.com/api/v1';
-    const resp = await fetch(await proxiedUrl('ai_video', dash + '/services/aigc/video-generation/video-synthesis'), {
+    const resp = await proxiedFetch('ai_video', dash + '/services/aigc/video-generation/video-synthesis', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key, 'X-DashScope-Async': 'enable' },
       body: JSON.stringify({ model, input: { prompt }, parameters: { size: ratio === '16:9' ? '1280*720' : ratio === '9:16' ? '720*1280' : '960*960' } }),
@@ -432,7 +491,7 @@ export async function transcribeAudio({ providerId, model, blob, lang }) {
   fd.append('file', blob, 'audio.' + ext.split(';')[0]);
   fd.append('model', model);
   if (lang) fd.append('language', String(lang).split('-')[0]);
-  const resp = await fetch(await proxiedUrl('ai_asr', base + '/audio/transcriptions'), {
+  const resp = await proxiedFetch('ai_asr', base + '/audio/transcriptions', {
     method: 'POST',
     headers: { Authorization: 'Bearer ' + key },
     body: fd,

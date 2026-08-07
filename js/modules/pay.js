@@ -161,7 +161,7 @@ export async function showMyOrders() {
       if (!orders.length) { body.innerHTML = '<div class="empty"><div class="empty-title">还没有订单</div></div>'; return; }
       const sName = { pending: '待确认', paid: '已开通', cancelled: '已取消' };
       const sColor = { pending: '#fbbf24', paid: '#34d399', cancelled: '#9aa3b2' };
-      const mName = { alipay: '支付宝', wechat: '微信' };
+      const mName = { alipay: '支付宝', wechat: '微信', card: '卡密激活' };
       body.innerHTML = orders.map((o) => `
         <div class="card" style="margin-bottom:10px">
           <div class="row gap8" style="align-items:center">

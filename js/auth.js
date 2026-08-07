@@ -71,11 +71,31 @@ export async function refreshProfile() {
   return user;
 }
 
+/* 云端报错中文化：把 Supabase / 网络的英文错误翻译成界面语言 */
+export function zhErr(e) {
+  const m = String((e && e.message) || e || '');
+  const t = m.toLowerCase();
+  if (/invalid login credentials/.test(t)) return '邮箱或密码不正确';
+  if (/email not confirmed/.test(t)) return '邮箱尚未验证，请先查收验证邮件';
+  if (/user already registered|already been registered/.test(t)) return '该邮箱已注册，请直接登录';
+  if (/password.*at least|should be at least/.test(t)) return '密码长度不足（至少 6 位）';
+  if (/unable to validate email|invalid email/.test(t)) return '邮箱格式不正确';
+  if (/signup.*disabled|signups not allowed/.test(t)) return '当前暂未开放注册';
+  if (/rate limit|too many requests|over_request_rate/.test(t)) return '操作太频繁，请稍后再试';
+  if (/email rate limit exceeded/.test(t)) return '邮件发送太频繁，请稍后再试';
+  if (/failed to fetch|networkerror|network request failed|load failed/.test(t)) return '网络连接失败，请检查网络后重试';
+  if (/timeout|timed out|aborterror/.test(t)) return '网络超时，请稍后再试';
+  if (/jwt|token.*expired|session.*expired|refresh token/.test(t)) return '登录状态已过期，请重新登录';
+  if (/new row violates row-level security/.test(t)) return '没有权限执行该操作';
+  if (/duplicate key/.test(t)) return '记录已存在，请勿重复提交';
+  return m || '操作失败，请稍后再试';
+}
+
 export async function signIn(email, password) {
   if (!hasCloud()) throw new Error('云端未配置');
   const sb = getSupabase();
   const { error } = await sb.auth.signInWithPassword({ email, password });
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(zhErr(error));
   return refreshProfile();
 }
 
@@ -86,7 +106,7 @@ export async function signUp(email, password, nickname = '') {
     email, password,
     options: { data: { nickname: nickname || email.split('@')[0] } },
   });
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(zhErr(error));
   // 写入资料行（失败静默：触发器可能已建行）
   try {
     if (data && data.user) {
@@ -114,7 +134,7 @@ export async function updateProfile(patch) {
       delete row.phone; delete row.bio;
       ({ error } = await sb.from('th_profiles').upsert(row));
     }
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(zhErr(error));
     try { await sb.auth.updateUser({ data: { nickname: row.nickname, avatar: row.avatar } }); } catch (e) {}
   }
   const next = { ...u, ...patch };
@@ -130,7 +150,7 @@ export async function changeEmail(newEmail) {
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(newEmail)) throw new Error('邮箱格式不正确');
   const sb = getSupabase();
   const { error } = await sb.auth.updateUser({ email: newEmail });
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(zhErr(error));
 }
 
 export async function signOut() {
@@ -152,8 +172,8 @@ export async function redeemCard(cardKey) {
   if (!u) throw new Error('请先登录');
   const sb = getSupabase();
   const { data, error } = await sb.rpc('th_redeem_card', { p_card: cardKey, p_user: u.id });
-  if (error) throw new Error(error.message);
-  if (data && data.error) throw new Error(data.error);
+  if (error) throw new Error(zhErr(error));
+  if (data && data.error) throw new Error(zhErr(data.error));
   await refreshProfile();
   return data;
 }

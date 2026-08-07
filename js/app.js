@@ -53,6 +53,10 @@ function buildChrome(tabIds) {
 }
 
 /* v2.0：慢网/弱网加固 —— 板块模块加载带超时与自动重试，避免请求挂起导致永久转圈 */
+function timedImport(spec, ms = 15000) {
+  return withTimeout(import(spec), ms, spec);
+}
+
 function withTimeout(promise, ms, label) {
   return Promise.race([
     promise,
@@ -166,13 +170,13 @@ async function boot() {
   initSW();
 
   /* v1.7：设备日志钩子（尽早安装，捕获启动期错误） */
-  try { const { installLogHooks } = await import('./modules/devlog.js'); installLogHooks(); } catch (e) {}
+  try { const { installLogHooks } = await timedImport('./modules/devlog.js'); installLogHooks(); } catch (e) {}
 
   /* v1.7：开屏动画（非首访且未关闭时展示，不阻塞启动） */
-  try { const { maybeSplash } = await import('./modules/splash.js'); maybeSplash(); } catch (e) {}
+  try { const { maybeSplash } = await timedImport('./modules/splash.js'); maybeSplash(); } catch (e) {}
 
   /* v1.9：先载入本地缓存的云端定价（离线也可用上次价格估算） */
-  try { const { initPricing } = await import('./ai/ai-pricing.js'); await initPricing(); } catch (e) {}
+  try { const { initPricing } = await timedImport('./ai/ai-pricing.js'); await initPricing(); } catch (e) {}
 
   /* 云端初始化不阻塞启动：慢网环境下最多等 6 秒，其余时间后台继续 */
   const cloudReady = (async () => {
@@ -180,21 +184,21 @@ async function boot() {
     try { await initAuth(); } catch (e) { console.warn('auth 初始化失败', e); }
     try { initSync(); } catch (e) { console.warn('sync 初始化失败', e); }
     /* v1.7：进入浏览器即拉取最新设置（多设备一致）；登记本设备 */
-    try { const { initSettingsSync } = await import('./modules/settings-sync.js'); await initSettingsSync(); } catch (e) { console.warn('设置同步失败', e); }
-    try { const { registerDevice } = await import('./modules/devices.js'); await registerDevice(); } catch (e) {}
-    try { const { pullKeysFromCloud } = await import('./modules/keyvault.js'); await pullKeysFromCloud(); } catch (e) {}
-    try { const { initSourceSync } = await import('./engine/source-sync.js'); await initSourceSync(); } catch (e) {}
+    try { const { initSettingsSync } = await timedImport('./modules/settings-sync.js'); await initSettingsSync(); } catch (e) { console.warn('设置同步失败', e); }
+    try { const { registerDevice } = await timedImport('./modules/devices.js'); await registerDevice(); } catch (e) {}
+    try { const { pullKeysFromCloud } = await timedImport('./modules/keyvault.js'); await pullKeysFromCloud(); } catch (e) {}
+    try { const { initSourceSync } = await timedImport('./engine/source-sync.js'); await initSourceSync(); } catch (e) {}
     /* v1.9：云端模型定价 / 排行榜（管理员后台可维护） */
-    try { const { syncCloudPrices } = await import('./ai/ai-pricing.js'); await syncCloudPrices(); } catch (e) {}
-    try { const { syncCloudRankings } = await import('./ai/ai-rankings.js'); await syncCloudRankings(); } catch (e) {}
+    try { const { syncCloudPrices } = await timedImport('./ai/ai-pricing.js'); await syncCloudPrices(); } catch (e) {}
+    try { const { syncCloudRankings } = await timedImport('./ai/ai-rankings.js'); await syncCloudRankings(); } catch (e) {}
   })();
   await Promise.race([cloudReady, new Promise((r) => setTimeout(r, 6000))]);
 
   /* v1.7：回收站到期自动清理 */
-  try { const { purgeRecycle } = await import('./modules/recycle-bin.js'); await purgeRecycle(); } catch (e) {}
+  try { const { purgeRecycle } = await timedImport('./modules/recycle-bin.js'); await purgeRecycle(); } catch (e) {}
 
   /* v1.7：应用锁门禁（开启后需先解锁才能进入） */
-  try { const { gateIfLocked } = await import('./modules/applock.js'); await gateIfLocked(); } catch (e) {}
+  try { const { gateIfLocked } = await timedImport('./modules/applock.js'); await gateIfLocked(); } catch (e) {}
 
   /* 自动检查更新（可在「我的 → 全局设置 → 自动检查更新」中关闭） */
   try {
@@ -204,7 +208,7 @@ async function boot() {
   } catch (e) {}
 
   /* 首次进入：介绍 → 登录（可跳过）→ 新用户使用目的 */
-  const { maybeOnboard } = await import('./modules/onboarding.js');
+  const { maybeOnboard } = await timedImport('./modules/onboarding.js');
   await maybeOnboard();
 
   const tabs = await loadEnabledTabs();

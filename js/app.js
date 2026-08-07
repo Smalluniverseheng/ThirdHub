@@ -1,5 +1,5 @@
 /* ===== ThirdHub app.js — 应用入口 / 路由 / 初始化 ===== */
-export const APP_VERSION = '1.8';
+export const APP_VERSION = '1.9';
 
 import { $, $$, icon, toast } from './ui.js';
 import { getSetting, setSetting, on, emit, openDB, kvGet, kvSet } from './store.js';
@@ -140,6 +140,9 @@ async function boot() {
   /* v1.7：开屏动画（非首访且未关闭时展示，不阻塞启动） */
   try { const { maybeSplash } = await import('./modules/splash.js'); maybeSplash(); } catch (e) {}
 
+  /* v1.9：先载入本地缓存的云端定价（离线也可用上次价格估算） */
+  try { const { initPricing } = await import('./ai/ai-pricing.js'); await initPricing(); } catch (e) {}
+
   /* 云端初始化不阻塞启动：慢网环境下最多等 6 秒，其余时间后台继续 */
   const cloudReady = (async () => {
     try { await initCloud(); } catch (e) { console.warn('cloud 初始化失败', e); }
@@ -150,6 +153,9 @@ async function boot() {
     try { const { registerDevice } = await import('./modules/devices.js'); await registerDevice(); } catch (e) {}
     try { const { pullKeysFromCloud } = await import('./modules/keyvault.js'); await pullKeysFromCloud(); } catch (e) {}
     try { const { initSourceSync } = await import('./engine/source-sync.js'); await initSourceSync(); } catch (e) {}
+    /* v1.9：云端模型定价 / 排行榜（管理员后台可维护） */
+    try { const { syncCloudPrices } = await import('./ai/ai-pricing.js'); await syncCloudPrices(); } catch (e) {}
+    try { const { syncCloudRankings } = await import('./ai/ai-rankings.js'); await syncCloudRankings(); } catch (e) {}
   })();
   await Promise.race([cloudReady, new Promise((r) => setTimeout(r, 6000))]);
 

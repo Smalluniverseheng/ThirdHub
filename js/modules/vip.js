@@ -64,11 +64,17 @@ export async function showVipCenter() {
         <div class="vip-dots" id="vip-dots"></div>
         <div class="muted" style="text-align:center;font-size:12px;margin-top:14px;line-height:1.7">
           会员扩容云存储并解锁云端代理等能力；AI 对话始终使用你自己的 API Key，不额外计费。<br>
-          开通 / 续费请使用卡密激活，卡密可联系代理获取。
+          支持支付宝 / 微信支付，也可以使用卡密激活。
+        </div>
+        <div class="row gap8" style="margin-top:12px;justify-content:center">
+          <button class="btn btn-sm" id="vip-orders">${icon('receipt')} 我的订单</button>
+          <button class="btn btn-sm" id="vip-redeem">${icon('key')} 卡密激活</button>
         </div>`;
 
       const slider = $('#vip-slider', body);
       const dots = $('#vip-dots', body);
+      $('#vip-orders', body).onclick = async () => (await import('./pay.js')).showMyOrders();
+      $('#vip-redeem', body).onclick = () => redeemFlow(plans.find((p) => p.level !== 'satellite') || plans[1] || plans[0]);
 
       function renderPlans() {
         slider.innerHTML = '';
@@ -107,12 +113,24 @@ export async function showVipCenter() {
 
       async function buy(plan) {
         if (!u) { toast('请先登录'); return; }
+        const price = cycle === 'monthly' ? plan.monthly : plan.yearly;
+        if (price > 0) {
+          // 在线支付（预接支付宝 / 微信）
+          const { showPayMethods } = await import('./pay.js');
+          showPayMethods(plan, cycle, () => setTimeout(() => location.reload(), 600));
+          return;
+        }
+        redeemFlow(plan);
+      }
+
+      async function redeemFlow(plan) {
+        const price = cycle === 'monthly' ? plan.monthly : plan.yearly;
         const b2 = el(`<div>
-          <div class="muted" style="margin-bottom:12px;line-height:1.7">开通 <b>${esc(plan.name)}</b>（${cycle === 'monthly' ? '月付' : '年付'} ¥${cycle === 'monthly' ? plan.monthly : plan.yearly}）。请输入对应面额的卡密完成激活：</div>
+          <div class="muted" style="margin-bottom:12px;line-height:1.7">开通 <b>${esc(plan.name)}</b>（${cycle === 'monthly' ? '月付' : '年付'} ¥${price}）。请输入对应面额的卡密完成激活：</div>
           ${formRow('卡密', '<input class="input" data-f="card" placeholder="TP-XXXXXXXX-XXXXXXXX-..." style="font-family:monospace">')}
         </div>`);
         const m = modal({
-          title: '开通会员', body: b2,
+          title: '卡密激活', body: b2,
           footer: '<button class="btn grow" data-a="c">取消</button><button class="btn btn-primary grow" data-a="ok">激活</button>',
         });
         $('[data-a="c"]', m.mask).onclick = m.close;

@@ -52,7 +52,7 @@ export async function configureCloud(url, anonKey) {
 }
 
 /* ---------- 通用同步表读写（带版本号防冲突） ---------- */
-const SYNC_TABLES = ['th_bookshelf', 'th_reading_progress', 'th_history', 'th_favorites'];
+const SYNC_TABLES = ['th_bookshelf', 'th_reading_progress', 'th_history', 'th_favorites', 'th_settings', 'th_devices'];
 
 export async function syncPush(table, row, userId) {
   if (!hasCloud()) return false;

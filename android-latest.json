@@ -1,10 +1,10 @@
 {
-  "version": "2.0",
-  "build": 11,
-  "notes": "彻底修复白屏：改为纯本地架构，打开即显与网络无关；自动清理旧缓存；介绍页与图标细节优化",
+  "version": "2.1",
+  "build": 12,
+  "notes": "厂商图标直接显示原图标，去掉底色块与白色衬底；版本号统一为 2.1",
   "apks": {
-    "universal": "https://github.com/Smalluniverseheng/ThirdHub-Android/releases/download/v2.0/ThirdHub-Android-v2.0.apk"
+    "universal": "https://github.com/Smalluniverseheng/ThirdHub-Android/releases/download/v2.1/ThirdHub-Android-v2.1.apk"
   },
-  "releasePage": "https://github.com/Smalluniverseheng/ThirdHub-Android/releases/tag/v2.0",
-  "apkUrl": "https://github.com/Smalluniverseheng/ThirdHub-Android/releases/download/v2.0/ThirdHub-Android-v2.0.apk"
+  "releasePage": "https://github.com/Smalluniverseheng/ThirdHub-Android/releases/tag/v2.1",
+  "apkUrl": "https://github.com/Smalluniverseheng/ThirdHub-Android/releases/download/v2.1/ThirdHub-Android-v2.1.apk"
 }

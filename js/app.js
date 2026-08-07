@@ -1,5 +1,5 @@
 /* ===== ThirdHub app.js — 应用入口 / 路由 / 初始化 ===== */
-export const APP_VERSION = '1.5';
+export const APP_VERSION = '1.6';
 
 import { $, $$, icon, toast } from './ui.js';
 import { getSetting, setSetting, on, emit, openDB, kvGet, kvSet } from './store.js';
@@ -158,7 +158,12 @@ async function boot() {
   console.log('%cThirdHub v' + APP_VERSION + ' · 第三方科技', 'color:#3b5bfd;font-weight:bold');
 }
 
-boot().catch((e) => {
-  console.error(e);
-  document.body.innerHTML = '<div style="padding:60px 24px;text-align:center;color:#888">应用初始化失败，请刷新重试<br><br><button onclick="location.reload()" style="padding:10px 24px;border-radius:10px;background:#3b5bfd;color:#fff;border:none">刷新</button></div>';
-});
+/* app.js 会被 index.html(?v=x.y) 与 profile.js/update-checker.js(无参数) 以两个不同 URL 各加载一次，
+   必须防止 boot() 重复执行（否则引导层、监听器都会翻倍） */
+if (!window.__TH_BOOTED__) {
+  window.__TH_BOOTED__ = true;
+  boot().catch((e) => {
+    console.error(e);
+    document.body.innerHTML = '<div style="padding:60px 24px;text-align:center;color:#888">应用初始化失败，请刷新重试<br><br><button onclick="location.reload()" style="padding:10px 24px;border-radius:10px;background:#3b5bfd;color:#fff;border:none">刷新</button></div>';
+  });
+}

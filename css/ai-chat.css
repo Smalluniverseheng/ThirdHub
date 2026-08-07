@@ -1029,3 +1029,26 @@ button.rank-row-item:active { background: var(--bg-input); }
   position: absolute; bottom: 40px; left: 0; right: 0; text-align: center;
   color: #6b7186; letter-spacing: .4em; font-size: 14px;
 }
+.th-splash-ver {
+  margin-top: 14px; font-size: 11px; letter-spacing: .12em; color: #565d72;
+  font-family: ui-monospace, monospace;
+}
+
+/* ===== v1.8 紧凑锚点菜单（Kimi 式小弹窗） ===== */
+.ctx-mask { position: fixed; inset: 0; z-index: 9500; background: transparent; }
+.ctx-pop {
+  position: fixed; z-index: 9501; min-width: 132px; padding: 6px;
+  background: var(--bg-card, #1a1d27); border: 1px solid var(--border, #2a2f3a);
+  border-radius: 14px; box-shadow: 0 8px 32px rgba(0,0,0,.28);
+  animation: ctxIn .15s ease;
+  display: flex; flex-direction: column; gap: 2px;
+}
+@keyframes ctxIn { from { opacity: 0; transform: scale(.92); } to { opacity: 1; transform: scale(1); } }
+.ctx-item {
+  display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+  border: none; background: none; border-radius: 9px; cursor: pointer;
+  font-size: 13px; color: var(--text-primary, #e6e9f0); text-align: left; white-space: nowrap;
+}
+.ctx-item:active { background: var(--bg-input, rgba(128,128,128,.12)); }
+.ctx-item svg { width: 16px; height: 16px; flex: 0 0 auto; }
+.ctx-item.danger { color: #ef4444; }

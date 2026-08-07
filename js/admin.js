@@ -1,6 +1,7 @@
-/* ===== ThirdHub js/admin.js — 管理后台（v1.8 重建版） =====
+/* ===== ThirdHub js/admin.js — 管理后台（v1.9） =====
    入口 admin.html · 账号 admin · 密码 123456
-   仪表盘 / 用户管理（等级分组·关注星标）/ 用户数据（书源·API 密钥）/ 订单管理 / 会员定价 / 意见反馈 / 收款设置
+   仪表盘 / 用户管理（等级分组·关注星标）/ 用户数据（书源·API 密钥）/ 订单管理 / 发票管理 / 会员定价 /
+   模型定价（花费估算价目·支持文件导入）/ 排行榜（综合榜云端维护）/ 意见反馈 / 收款设置
    所有写操作经 Supabase RPC 口令校验，无需暴露 service key */
 (function () {
 'use strict';
@@ -23,7 +24,10 @@ var TABS = [
   { id: 'users', name: '用户管理' },
   { id: 'userdata', name: '用户数据' },
   { id: 'orders', name: '订单管理' },
+  { id: 'invoices', name: '发票管理' },
   { id: 'plans', name: '会员定价' },
+  { id: 'prices', name: '模型定价' },
+  { id: 'rank', name: '排行榜' },
   { id: 'feedback', name: '意见反馈' },
   { id: 'paycfg', name: '收款设置' },
 ];
@@ -149,7 +153,10 @@ function renderBody() {
   else if (state.tab === 'users') renderUsers(body);
   else if (state.tab === 'userdata') renderUserData(body);
   else if (state.tab === 'orders') renderOrders(body);
+  else if (state.tab === 'invoices') renderInvoices(body);
   else if (state.tab === 'plans') renderPlans(body);
+  else if (state.tab === 'prices') renderPrices(body);
+  else if (state.tab === 'rank') renderRank(body);
   else if (state.tab === 'feedback') renderFeedback(body);
   else if (state.tab === 'paycfg') renderPayCfg(body);
 }
@@ -389,6 +396,131 @@ function renderOrders(body) {
     }).catch(function (e) { body.innerHTML = '<p class="adm-muted">加载失败：' + esc(e.message) + '</p>'; });
 }
 
+/* ---------- 发票管理 ---------- */
+function renderInvoices(body) {
+  body.innerHTML = '<p class="adm-muted">加载中…</p>';
+  Promise.all([
+    loadSb().then(function (cli) { return cli.rpc('admin_list_invoices', { pwd: PWD }); }),
+    fetchUsers(),
+  ]).then(function (rs) {
+    var r = rs[0], users = rs[1];
+    if (r.error) throw r.error;
+    var emailOf = {};
+    users.forEach(function (u) { emailOf[u.id] = u.email || ''; });
+    var list = r.data || [];
+    if (!list.length) { body.innerHTML = '<p class="adm-muted" style="text-align:center;padding:24px 0">暂无发票申请</p>'; return; }
+    body.innerHTML = '<p class="adm-muted" style="margin-bottom:12px">用户在 App「会员中心 → 发票」对购买记录提交的开票申请。开具并发往用户邮箱后，点击「标记已开具」。</p>' +
+      list.map(function (iv) {
+        var done = iv.status === 'done';
+        return '<div class="adm-card" data-iv="' + esc(iv.id) + '" style="margin-bottom:10px">' +
+          '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
+            '<b style="flex:1;font-size:14px">' + esc(iv.title) + '</b>' +
+            '<span class="adm-badge" style="background:' + (done ? '#34d39922;color:#34d399' : '#fbbf2422;color:#fbbf24') + '">' + (done ? '已开具' : '待处理') + '</span>' +
+          '</div>' +
+          '<div style="margin-top:6px;font-size:14px">金额 <b style="color:#34d399">¥' + Number(iv.amount || 0).toFixed(2) + '</b>' +
+            (iv.tax_no ? ' · 税号 ' + esc(iv.tax_no) : ' · 个人') + '</div>' +
+          '<div class="adm-muted" style="margin-top:4px">接收邮箱 ' + esc(iv.email) + '</div>' +
+          '<div class="adm-muted adm-mono" style="margin-top:2px;font-size:12px">订单号 ' + esc(iv.order_no) + '</div>' +
+          '<div class="adm-muted" style="margin-top:2px">用户 ' + esc(emailOf[iv.user_id] || String(iv.user_id).slice(0, 8) + '…') + ' · ' + fmtDate(iv.created_at) + '</div>' +
+          '<div class="adm-row" style="margin-top:8px">' +
+            '<button class="adm-btn adm-btn-sm ' + (done ? '' : 'adm-btn-primary') + '" data-act="toggle-invoice">' + (done ? '标记待处理' : '标记已开具') + '</button>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+  }).catch(function (e) { body.innerHTML = '<p class="adm-muted">加载失败：' + esc(e.message) + '</p>'; });
+}
+
+/* ---------- 模型定价（花费估算价目，USD / 1M tokens） ---------- */
+function renderPrices(body) {
+  body.innerHTML = '<p class="adm-muted">加载中…</p>';
+  loadSb().then(function (cli) { return cli.from('th_model_prices').select('*').order('model'); })
+    .then(function (r) {
+      if (r.error) throw r.error;
+      var rows = r.data || [];
+      body.innerHTML =
+        '<p class="adm-muted" style="margin-bottom:12px">这里维护 App「用量统计 → 花费估算」使用的模型刊例价（<b>美元 / 1M tokens</b>）。云端价目优先于 App 内置价目；键可写「厂商/模型」（如 openai/gpt-5）或裸模型名。修改后用户端下次启动生效。</p>' +
+        '<div class="adm-card" style="margin-bottom:12px">' +
+          '<b>' + (state.priceEdit ? '编辑：' + esc(state.priceEdit) : '新增 / 更新价格') + '</b>' +
+          '<div class="adm-form-grid" style="margin-top:8px">' +
+            '<label class="adm-muted">模型键<input class="adm-input" data-f="p-model" value="' + esc(state.priceEdit || '') + '" placeholder="openai/gpt-5"></label>' +
+            '<label class="adm-muted">输入价（USD/1M）<input class="adm-input" type="number" step="0.001" min="0" data-f="p-in" value="' + (state.priceIn || '') + '"></label>' +
+            '<label class="adm-muted">输出价（USD/1M）<input class="adm-input" type="number" step="0.001" min="0" data-f="p-out" value="' + (state.priceOut || '') + '"></label>' +
+          '</div>' +
+          '<div class="adm-row" style="margin-top:10px;flex-wrap:wrap">' +
+            '<button class="adm-btn adm-btn-primary adm-btn-sm" data-act="save-price">保存价格</button>' +
+            '<button class="adm-btn adm-btn-sm" data-act="import-prices">导入内置价目</button>' +
+            '<label class="adm-btn adm-btn-sm" style="cursor:pointer">从文件导入<input type="file" accept=".json,.csv,.txt" data-act-file="prices" style="display:none"></label>' +
+          '</div>' +
+          '<p class="adm-muted" style="margin-top:8px;font-size:12px">文件格式：JSON 数组 [{"model":"openai/gpt-5","in":1.25,"out":10}]，或每行一条「模型,输入价,输出价」。</p>' +
+        '</div>' +
+        (rows.length ?
+          rows.map(function (p) {
+            return '<div class="adm-card" style="margin-bottom:8px" data-model="' + esc(p.model) + '">' +
+              '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
+                '<b class="adm-mono" style="flex:1;font-size:13px">' + esc(p.model) + '</b>' +
+                '<span class="adm-badge" style="background:#3b5bfd22;color:#7da2ff">in $' + Number(p.input_price) + ' / out $' + Number(p.output_price) + '</span>' +
+                '<button class="adm-btn adm-btn-sm" data-act="edit-price">编辑</button>' +
+                '<button class="adm-btn adm-btn-sm" data-act="del-price">删除</button>' +
+              '</div>' +
+              '<div class="adm-muted" style="margin-top:4px;font-size:12px">更新于 ' + fmtDate(p.updated_at) + '</div>' +
+            '</div>';
+          }).join('')
+          : '<p class="adm-muted" style="text-align:center;padding:16px 0">云端还没有自定义价目（App 暂用内置价目）</p>');
+    }).catch(function (e) { body.innerHTML = '<p class="adm-muted">加载失败：' + esc(e.message) + '</p>'; });
+}
+
+function importPrices(rows, doneMsg) {
+  var i = 0, fail = 0;
+  toast('开始导入 ' + rows.length + ' 条价格…');
+  function next() {
+    if (i >= rows.length) { toast('导入完成：成功 ' + (rows.length - fail) + ' 条' + (fail ? '，失败 ' + fail + ' 条' : '')); renderBody(); return; }
+    var p = rows[i++];
+    loadSb().then(function (cli) {
+      return cli.rpc('admin_set_model_price', { pwd: PWD, p_model: p.model, p_in: p.in, p_out: p.out });
+    }).then(function (r) { if (r.error) fail++; next(); })
+      .catch(function () { fail++; next(); });
+  }
+  next();
+}
+
+/* ---------- 排行榜（云端综合榜） ---------- */
+function renderRank(body) {
+  body.innerHTML = '<p class="adm-muted">加载中…</p>';
+  loadSb().then(function (cli) { return cli.from('th_leaderboard').select('*').order('rank'); })
+    .then(function (r) {
+      if (r.error) throw r.error;
+      var rows = r.data || [];
+      body.innerHTML =
+        '<p class="adm-muted" style="margin-bottom:12px">这里维护 App「模型排行榜 → 综合榜」的展示数据。云端有数据时覆盖内置榜单；其余分类榜仍用内置快照。厂商 ID 用于显示图标（openai / anthropic / google / xai / moonshot / deepseek / aliyun / zhipu / minimax / bytedance / xiaomi / tencent / mistral…）。</p>' +
+        '<div class="adm-card" style="margin-bottom:12px">' +
+          '<b>' + (state.rankEdit != null ? '编辑名次 ' + state.rankEdit : '新增名次') + '</b>' +
+          '<div class="adm-form-grid" style="margin-top:8px">' +
+            '<label class="adm-muted">名次<input class="adm-input" type="number" min="1" data-f="r-rank" value="' + (state.rankEdit != null ? state.rankEdit : (rows.length + 1)) + '"></label>' +
+            '<label class="adm-muted">模型名<input class="adm-input" data-f="r-model" value="' + esc(state.rankModel || '') + '" placeholder="GPT-5.1"></label>' +
+            '<label class="adm-muted">厂商 ID<input class="adm-input" data-f="r-org" value="' + esc(state.rankOrg || '') + '" placeholder="openai"></label>' +
+            '<label class="adm-muted">综合分（0-100）<input class="adm-input" type="number" step="0.5" min="0" max="100" data-f="r-score" value="' + (state.rankScore || '') + '"></label>' +
+          '</div>' +
+          '<div class="adm-row" style="margin-top:10px;flex-wrap:wrap">' +
+            '<button class="adm-btn adm-btn-primary adm-btn-sm" data-act="save-rank">保存</button>' +
+            '<button class="adm-btn adm-btn-sm" data-act="import-rank">导入内置综合榜</button>' +
+          '</div>' +
+        '</div>' +
+        (rows.length ?
+          rows.map(function (x) {
+            return '<div class="adm-card" style="margin-bottom:8px" data-rank="' + x.rank + '">' +
+              '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
+                '<b style="width:28px">#' + x.rank + '</b>' +
+                '<b style="flex:1;font-size:14px">' + esc(x.model) + '</b>' +
+                '<span class="adm-badge" style="background:#3b5bfd22;color:#7da2ff">' + esc(x.org || '-') + ' · ' + Number(x.score) + ' 分</span>' +
+                '<button class="adm-btn adm-btn-sm" data-act="edit-rank">编辑</button>' +
+                '<button class="adm-btn adm-btn-sm" data-act="del-rank">删除</button>' +
+              '</div>' +
+            '</div>';
+          }).join('')
+          : '<p class="adm-muted" style="text-align:center;padding:16px 0">云端还没有排行榜数据（App 暂用内置榜单）</p>');
+    }).catch(function (e) { body.innerHTML = '<p class="adm-muted">加载失败：' + esc(e.message) + '</p>'; });
+}
+
 /* ---------- 会员定价 ---------- */
 function renderPlans(body) {
   body.innerHTML = '<p class="adm-muted">加载中…</p>';
@@ -585,7 +717,131 @@ document.addEventListener('click', function (e) {
       }).catch(function (err) { toast('操作失败：' + err.message, false); });
   } else if (act === 'save-paycfg') {
     savePayCfg();
+  } else if (act === 'toggle-invoice') {
+    var ivCard = t.closest('[data-iv]');
+    var ivId = ivCard.getAttribute('data-iv');
+    var nowDone = t.textContent.indexOf('待处理') >= 0; // 按钮显示“标记待处理”说明当前已开具
+    t.disabled = true;
+    loadSb().then(function (cli) { return cli.rpc('admin_set_invoice_status', { pwd: PWD, p_id: ivId, p_status: nowDone ? 'pending' : 'done' }); })
+      .then(function (r) {
+        if (r.error) throw r.error;
+        toast(nowDone ? '已标记为待处理' : '已标记为已开具');
+        renderBody();
+      }).catch(function (err) { toast('操作失败：' + err.message, false); t.disabled = false; });
+  } else if (act === 'save-price') {
+    var pm = $('[data-f="p-model"]').value.trim();
+    var pin = parseFloat($('[data-f="p-in"]').value);
+    var pout = parseFloat($('[data-f="p-out"]').value);
+    if (!pm) { toast('请填写模型键', false); return; }
+    if (isNaN(pin) || isNaN(pout)) { toast('请填写输入 / 输出价格', false); return; }
+    t.disabled = true;
+    loadSb().then(function (cli) { return cli.rpc('admin_set_model_price', { pwd: PWD, p_model: pm, p_in: pin, p_out: pout }); })
+      .then(function (r) {
+        if (r.error) throw r.error;
+        state.priceEdit = ''; state.priceIn = ''; state.priceOut = '';
+        toast('价格已保存，用户端下次启动生效');
+        renderBody();
+      }).catch(function (err) { toast('保存失败：' + err.message, false); t.disabled = false; });
+  } else if (act === 'edit-price') {
+    var pCard = t.closest('[data-model]');
+    state.priceEdit = pCard.getAttribute('data-model');
+    var m = pCard.querySelector('.adm-badge').textContent.match(/in \$([\d.]+) \/ out \$([\d.]+)/);
+    state.priceIn = m ? m[1] : ''; state.priceOut = m ? m[2] : '';
+    renderBody();
+  } else if (act === 'del-price') {
+    var dm = t.closest('[data-model]').getAttribute('data-model');
+    if (!confirm('删除 ' + dm + ' 的云端价格？删除后该模型回退到内置价目。')) return;
+    loadSb().then(function (cli) { return cli.rpc('admin_delete_model_price', { pwd: PWD, p_model: dm }); })
+      .then(function (r) {
+        if (r.error) throw r.error;
+        toast('已删除'); renderBody();
+      }).catch(function (err) { toast('删除失败：' + err.message, false); });
+  } else if (act === 'import-prices') {
+    if (!confirm('把 App 内置的完整价目导入云端？导入后云端价目优先生效，可随时再编辑。')) return;
+    import('./js/ai/ai-pricing.js').then(function (mod) {
+      var rows = Object.keys(mod.MODEL_PRICES).map(function (k) {
+        return { model: k, in: mod.MODEL_PRICES[k].in, out: mod.MODEL_PRICES[k].out };
+      });
+      importPrices(rows);
+    }).catch(function (e) { toast('读取内置价目失败：' + e.message, false); });
+  } else if (act === 'save-rank') {
+    var rr = parseInt($('[data-f="r-rank"]').value, 10);
+    var rm = $('[data-f="r-model"]').value.trim();
+    var ro = $('[data-f="r-org"]').value.trim();
+    var rs = parseFloat($('[data-f="r-score"]').value);
+    if (!rr || !rm) { toast('请填写名次和模型名', false); return; }
+    t.disabled = true;
+    loadSb().then(function (cli) { return cli.rpc('admin_upsert_leaderboard', { pwd: PWD, p_rank: rr, p_model: rm, p_org: ro, p_score: isNaN(rs) ? 0 : rs, p_note: '' }); })
+      .then(function (r) {
+        if (r.error) throw r.error;
+        state.rankEdit = null; state.rankModel = ''; state.rankOrg = ''; state.rankScore = '';
+        toast('排行榜已保存，用户端下次启动生效');
+        renderBody();
+      }).catch(function (err) { toast('保存失败：' + err.message, false); t.disabled = false; });
+  } else if (act === 'edit-rank') {
+    var rCard = t.closest('[data-rank]');
+    state.rankEdit = parseInt(rCard.getAttribute('data-rank'), 10);
+    state.rankModel = rCard.querySelectorAll('b')[1].textContent;
+    var badge = rCard.querySelector('.adm-badge').textContent;
+    var mm = badge.match(/^(.*) · ([\d.]+) 分$/);
+    state.rankOrg = mm ? mm[1].trim() : '';
+    state.rankScore = mm ? mm[2] : '';
+    renderBody();
+  } else if (act === 'del-rank') {
+    var dr = parseInt(t.closest('[data-rank]').getAttribute('data-rank'), 10);
+    if (!confirm('删除名次 #' + dr + '？')) return;
+    loadSb().then(function (cli) { return cli.rpc('admin_delete_leaderboard', { pwd: PWD, p_rank: dr }); })
+      .then(function (r) {
+        if (r.error) throw r.error;
+        toast('已删除'); renderBody();
+      }).catch(function (err) { toast('删除失败：' + err.message, false); });
+  } else if (act === 'import-rank') {
+    if (!confirm('把 App 内置综合榜导入云端？导入后覆盖 App 内置榜单，可随时再编辑。')) return;
+    import('./js/ai/ai-rankings.js').then(function (mod) {
+      var rows = mod.RANKINGS.overall;
+      var i = 0, fail = 0;
+      toast('开始导入 ' + rows.length + ' 名…');
+      (function next() {
+        if (i >= rows.length) { toast('导入完成' + (fail ? '（失败 ' + fail + ' 条）' : '')); renderBody(); return; }
+        var x = rows[i++];
+        loadSb().then(function (cli) {
+          return cli.rpc('admin_upsert_leaderboard', { pwd: PWD, p_rank: i, p_model: x.m, p_org: x.p, p_score: x.s, p_note: '' });
+        }).then(function (r) { if (r.error) fail++; next(); }).catch(function () { fail++; next(); });
+      })();
+    }).catch(function (e) { toast('读取内置榜单失败：' + e.message, false); });
   }
+});
+
+/* 文件选择（模型定价导入） */
+document.addEventListener('change', function (e) {
+  var f = e.target.closest('[data-act-file="prices"]');
+  if (!f || !f.files || !f.files[0]) return;
+  var file = f.files[0];
+  var reader = new FileReader();
+  reader.onload = function () {
+    var rows = [];
+    try {
+      var txt = String(reader.result || '');
+      if (/\.json$/i.test(file.name) || txt.trim().charAt(0) === '[' || txt.trim().charAt(0) === '{') {
+        var j = JSON.parse(txt);
+        if (Array.isArray(j)) {
+          j.forEach(function (x) { if (x && x.model) rows.push({ model: String(x.model), in: parseFloat(x.in != null ? x.in : x.input_price) || 0, out: parseFloat(x.out != null ? x.out : x.output_price) || 0 }); });
+        } else {
+          Object.keys(j).forEach(function (k) { var v = j[k]; rows.push({ model: k, in: parseFloat(v.in != null ? v.in : v.input_price) || 0, out: parseFloat(v.out != null ? v.out : v.output_price) || 0 }); });
+        }
+      } else {
+        txt.split(/\r?\n/).forEach(function (line) {
+          var parts = line.split(/[,\t]/);
+          if (parts.length >= 3 && parts[0].trim()) rows.push({ model: parts[0].trim(), in: parseFloat(parts[1]) || 0, out: parseFloat(parts[2]) || 0 });
+        });
+      }
+    } catch (err) { toast('文件解析失败：' + err.message, false); return; }
+    if (!rows.length) { toast('文件里没有可用的价格数据', false); return; }
+    if (!confirm('识别到 ' + rows.length + ' 条价格，导入云端？')) return;
+    importPrices(rows);
+  };
+  reader.readAsText(file);
+  f.value = '';
 });
 
 /* ---------- 启动 ---------- */

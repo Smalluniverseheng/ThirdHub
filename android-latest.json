@@ -1,10 +1,10 @@
 {
-  "version": "1.8",
-  "build": 7,
-  "notes": "ThirdHub 安卓版 v1.8 更新公告\n\n1. UI 与网页版 1:1 一致（内置完整网页版 v1.8）\n2. 密钥保险库：二级密码 + 本地/加密上传/明文上传\n3. 支付宝 / 微信支付预接，订单后台确认自动开通\n4. 管理后台重建：等级分组 / 关注用户 / 查看书源与密钥\n5. 会话长按菜单改 Kimi 式小弹窗，修复连跳两次\n6. 默认头像统一品牌商标、开屏显示版本号\n7. 自动检查更新：后台下载，完成后提示安装",
+  "version": "1.9",
+  "build": 8,
+  "notes": "修复白屏：优先加载线上最新版；新增真实设备名称显示",
   "apks": {
     "universal": "https://github.com/Smalluniverseheng/ThirdHub-Android/releases/download/v1.8/ThirdHub-Android-v1.8.apk"
   },
-  "releasePage": "https://github.com/Smalluniverseheng/ThirdHub-Android/releases",
-  "apkUrl": "https://github.com/Smalluniverseheng/ThirdHub-Android/releases/download/v1.8/ThirdHub-Android-v1.8.apk"
+  "releasePage": "https://github.com/Smalluniverseheng/ThirdHub-Android/releases/tag/v1.9",
+  "apkUrl": "https://github.com/Smalluniverseheng/ThirdHub-Android/releases/download/v1.9/ThirdHub-Android-v1.9.apk"
 }

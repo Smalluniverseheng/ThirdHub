@@ -1,5 +1,6 @@
 /* ===== ThirdHub js/modules/register-page.js — 注册子页面（昵称 + 真实邮箱验证码） =====
-   登录弹窗与首次引导共用。邮箱验证码经 Cloudflare Worker（163 SMTP）发送并校验。
+   登录弹窗与首次引导共用。邮箱验证码经 Supabase Edge Function（163 SMTP）真实发送并校验，
+   发送成功后 59 秒倒计时，倒计时结束才可重新发送。
    若发送失败（可能触发封控），允许用户跳过验证码直接注册。 */
 import { $, el, esc, icon, toast, openOverlay, confirmDialog } from '../ui.js';
 import { signUp } from '../auth.js';
@@ -10,7 +11,7 @@ export function showRegisterPage({ onDone = null, title = '注册账号' } = {})
     title,
     build: (body) => {
       let verified = false;
-      let ticket = null; // {expiry, sig}
+      let codeSent = false; // 是否已成功发送过验证码
       let countdown = 0, timer = null;
 
       body.innerHTML = `
@@ -42,7 +43,7 @@ export function showRegisterPage({ onDone = null, title = '注册账号' } = {})
 
       const emailOk = () => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailEl.value.trim());
       const refresh = () => {
-        verifyBtn.disabled = !(emailOk() && codeEl.value.trim().length === 6 && ticket) || verified;
+        verifyBtn.disabled = !(emailOk() && codeEl.value.trim().length === 6 && codeSent) || verified;
         submitBtn.disabled = !verified;
         verifyBtn.textContent = verified ? '✓ 已验证' : '验证邮箱';
       };
@@ -52,23 +53,26 @@ export function showRegisterPage({ onDone = null, title = '注册账号' } = {})
       sendBtn.onclick = async () => {
         if (!emailOk()) { toast('请先填写正确的邮箱'); return; }
         sendBtn.disabled = true;
+        sendBtn.textContent = '发送中…';
         hint.textContent = '正在发送验证码…';
         try {
-          const r = await sendEmailCode(emailEl.value.trim());
-          ticket = { expiry: r.expiry, sig: r.sig };
-          hint.textContent = '验证码已发送，请查收（10 分钟内有效）';
+          await sendEmailCode(emailEl.value.trim());
+          codeSent = true;
+          hint.textContent = '验证码已发送，请查收（10 分钟内有效；没收到请检查垃圾邮件）';
           toast('验证码已发送', 'ok');
-          countdown = 60;
+          countdown = 59;
+          sendBtn.textContent = `重新发送（${countdown}s）`;
           timer = setInterval(() => {
             countdown--;
-            sendBtn.textContent = countdown > 0 ? `重新发送（${countdown}s）` : '发送验证码';
+            sendBtn.textContent = countdown > 0 ? `重新发送（${countdown}s）` : '重新发送';
             sendBtn.disabled = countdown > 0;
             if (countdown <= 0) clearInterval(timer);
           }, 1000);
         } catch (e) {
-          hint.textContent = '发送失败：' + e.message + '（可能触发邮件服务封控，可选择跳过验证）';
-          toast('验证码发送失败，可跳过', 'err');
+          hint.textContent = '发送失败：' + e.message + '（可选择跳过验证）';
+          toast('验证码发送失败：' + e.message, 'err');
           sendBtn.disabled = false;
+          sendBtn.textContent = '发送验证码';
         }
         refresh();
       };
@@ -77,11 +81,11 @@ export function showRegisterPage({ onDone = null, title = '注册账号' } = {})
         verifyBtn.disabled = true;
         verifyBtn.textContent = '验证中…';
         try {
-          await verifyEmailCode(emailEl.value.trim(), codeEl.value.trim(), ticket.expiry, ticket.sig);
+          await verifyEmailCode(emailEl.value.trim(), codeEl.value.trim());
           verified = true;
           toast('邮箱验证成功', 'ok');
         } catch (e) {
-          toast('验证失败：' + e.message, 'err');
+          toast(e.message || '验证失败', 'err');
         }
         refresh();
       };

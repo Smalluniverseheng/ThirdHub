@@ -64,7 +64,11 @@
   flex-shrink: 0;
 }
 .overlay-title { font-size: 16px; font-weight: 700; flex: 1; min-width: 0; }
-.overlay-body { flex: 1; overflow: hidden; position: relative; display: flex; flex-direction: column; }
+.overlay-body { flex: 1; overflow-y: auto; overflow-x: hidden; position: relative; display: flex; flex-direction: column; -webkit-overflow-scrolling: touch; }
+.overlay-body > .ov-fill { flex: 1; display: flex; flex-direction: column; min-height: 100%; }
+
+/* AI 聊天页：输入栏紧贴底部导航，无额外留白 */
+.page.ai-page { padding-bottom: 0 !important; overflow: hidden; }
 
 /* 平板/桌面响应式（导航栏始终在底部） */
 @media (min-width: 768px) {

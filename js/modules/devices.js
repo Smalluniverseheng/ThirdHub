@@ -9,21 +9,48 @@ import { currentUser } from '../auth.js';
 
 const MAX_DEVICES = 20;
 
+/* 客户端平台：android-app（安装包）/ ios / browser（浏览器） */
+function clientPlatform() {
+  try {
+    if (window.ThirdHubNative && window.ThirdHubNative.isNative && window.ThirdHubNative.isNative()) {
+      return (window.ThirdHubNative.platform && window.ThirdHubNative.platform()) === 'android' ? 'android-app' : 'native';
+    }
+  } catch (e) {}
+  const ua = navigator.userAgent;
+  if (/iPhone|iPad|iPod/i.test(ua)) return 'ios';
+  return 'browser';
+}
+
 function deviceName() {
   const ua = navigator.userAgent;
+  const pf = clientPlatform();
+  // 安卓安装包：优先读取系统真实机型（如 "Xiaomi 14" / "HUAWEI Mate 60"）
+  if (pf === 'android-app') {
+    try {
+      const model = window.ThirdHubNative.getDeviceModel && window.ThirdHubNative.getDeviceModel();
+      if (model) return model;
+    } catch (e) {}
+  }
   let os = '未知系统';
+  let model = '';
   if (/Windows NT/i.test(ua)) os = 'Windows';
-  else if (/Android/i.test(ua)) os = 'Android';
+  else if (/Android/i.test(ua)) {
+    os = 'Android';
+    // 尽力从 UA 中提取机型（如 "Android 14; SM-S918B" / "Android 13; Pixel 7"）
+    const mm = ua.match(/Android[\s/][\d.]+;\s*(?:[a-zA-Z]{2,}_[a-zA-Z]{2,};\s*)?(?:wv;\s*)?([^;)]+)/);
+    if (mm && mm[1] && !/^(K|Build|wv)$/i.test(mm[1].trim())) model = mm[1].trim();
+  }
   else if (/iPhone|iPad/i.test(ua)) os = /iPad/.test(ua) ? 'iPad' : 'iPhone';
   else if (/Mac OS X/i.test(ua)) os = 'macOS';
   else if (/Linux/i.test(ua)) os = 'Linux';
+  if (pf === 'ios') return os; // iOS 浏览器 UA 不含具体机型
   let br = '浏览器';
   if (/Edg\//i.test(ua)) br = 'Edge';
   else if (/Chrome\//i.test(ua) && !/Chromium/i.test(ua)) br = 'Chrome';
   else if (/Safari\//i.test(ua) && !/Chrome/i.test(ua)) br = 'Safari';
   else if (/Firefox\//i.test(ua)) br = 'Firefox';
   else if (/MicroMessenger/i.test(ua)) br = '微信内置';
-  return `${br} · ${os}`;
+  return model ? `${model}（${br}）` : `${br} · ${os}`;
 }
 
 export async function myDeviceId() {
@@ -38,7 +65,7 @@ export async function registerDevice() {
   const u = await currentUser();
   if (!u) return;
   const id = await myDeviceId();
-  const info = { name: deviceName(), ua: navigator.userAgent.slice(0, 180), lastSeen: Date.now(), createdAt: (await kvGet('device:createdAt', 0)) || Date.now() };
+  const info = { name: deviceName(), platform: clientPlatform(), ua: navigator.userAgent.slice(0, 180), lastSeen: Date.now(), createdAt: (await kvGet('device:createdAt', 0)) || Date.now() };
   await kvSet('device:createdAt', info.createdAt);
   await syncPush('th_devices', { id, data: info }, u.id);
 
@@ -81,11 +108,16 @@ export async function showDevices() {
         rows.forEach((r) => {
           const d = r.data || {};
           const mine = r.id === myId;
+          // 平台标识：安卓App / iOS / 浏览器（老数据无 platform 字段时按 UA 推断）
+          let pf = d.platform;
+          if (!pf) pf = /iPhone|iPad/i.test(d.ua || '') ? 'ios' : 'browser';
+          const pfName = { 'android-app': '安卓App', native: '安卓App', ios: 'iOS', browser: '浏览器' }[pf] || '浏览器';
+          const pfColor = { 'android-app': 'tag-green', native: 'tag-green', ios: 'tag-purple', browser: 'tag-gray' }[pf] || 'tag-gray';
           const item = el(`<div class="list-item">
-            <span class="list-ico">${icon(/iPhone|Android/.test(d.ua || '') ? 'phone' : 'devices')}</span>
+            <span class="list-ico">${icon(pf === 'browser' ? 'devices' : 'phone')}</span>
             <div class="grow" style="min-width:0">
               <div style="font-size:14px;font-weight:600" class="ellipsis">${esc(d.name || '未知设备')}${mine ? ' <span class="tag tag-blue">本机</span>' : ''}</div>
-              <div class="muted">最近活跃 ${d.lastSeen ? fmtDate(d.lastSeen, true) : '未知'}</div>
+              <div class="muted"><span class="tag ${pfColor}" style="margin-right:4px">${pfName}</span>最近活跃 ${d.lastSeen ? fmtDate(d.lastSeen, true) : '未知'}</div>
             </div>
             ${mine ? '' : `<button class="btn btn-sm btn-danger" data-a="rm">移除</button>`}
           </div>`);

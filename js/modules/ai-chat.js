@@ -1,12 +1,12 @@
-/* ===== ThirdHub js/modules/ai-chat.js — AI 对话页（v1.5 全量重写） =====
-   工作区：聊天 / 图片 / 视频 · 抽屉：AI模型 / 智能体 / 灵感广场 + 历史会话搜索
-   输入栏：空时仅语音 · 按住说话 · 流式打字机 · 思考块折叠 · 可中断 · 长按重编辑 */
+/* ===== ThirdHub js/modules/ai-chat.js — AI 对话页（v1.6） =====
+   抽屉：历史会话(默认) / AI模型(厂商折叠) / 智能体 / 灵感广场 · 输入栏贴底 · 流式渐进渲染
+   上拉钉住+回到底部 · 长文本粘贴转附件 · 附件按模型能力置灰 · 对话设置/高级设置入口 */
 import { $, $$, el, esc, icon, toast, modal, actionSheet, openOverlay, confirmDialog, formRow, uid, fmtDate } from '../ui.js';
 import { db, kvGet, kvSet, on } from '../store.js';
 import {
   chat, drawImage, generateVideo, getApiKey, setApiKey, getBaseOverride, setBaseOverride,
   supportsWebSearch, refreshFreeModels, identifyApiKey, testProviderKey,
-  fetchRemoteModels, saveSyncedModels, getSyncedModels,
+  fetchRemoteModels, saveSyncedModels, getSyncedModels, transcribeAudio,
 } from '../ai/ai-api.js';
 import { SEARCH_SERVICES, getSearchConfig, setSearchConfig, hasSearchConfig, searchWeb, resultsToContext } from '../ai/web-search.js';
 import { PROVIDERS, providerById } from '../ai/ai-models.js';
@@ -14,10 +14,13 @@ import { vendorIcon } from '../ai/vendors.js';
 import { pickModel } from '../ai/model-selector.js';
 import { renderMarkdown, bindCopyButtons } from '../ai/markdown.js';
 import { getSessionStats, fmtTokens } from '../token-meter.js';
-import { startRecognition, stopRecognition, speak, stopSpeak } from '../voice.js';
+import { startRecognition, stopRecognition, speak, stopSpeak, startRecorder } from '../voice.js';
 import { listMcpServers, addMcpServer, connectMcp, disconnectMcp, removeMcpServer } from '../ai/mcp-client.js';
 import { AGENTS, INSPIRATIONS } from '../ai/ai-agents.js';
-import { RANK_CATEGORIES, RANKINGS } from '../ai/ai-rankings.js';
+import { RANK_CATEGORIES, RANKINGS, RADAR_DIMS } from '../ai/ai-rankings.js';
+import { showAdvSettings, showChatSettings, getChatPrefs, getCtxConf } from './ai-settings.js';
+import { openAgentStudio } from './ai-agent-studio.js';
+import { showInspirePage, showInspireDetail } from './ai-inspire.js';
 import { device } from '../device.js';
 
 const MODES = [
@@ -36,6 +39,7 @@ const IMG_RATIOS = ['1:1', '3:2', '2:3', '16:9', '9:16'];
 const VID_RATIOS = ['16:9', '9:16', '1:1'];
 const VID_DURS = [5, 10, 15];
 const DRAWER_TABS = [
+  { id: 'history', name: '历史会话' },
   { id: 'models',  name: 'AI模型' },
   { id: 'agents',  name: '智能体' },
   { id: 'inspire', name: '灵感广场' },
@@ -44,6 +48,9 @@ const DRAWER_FILTERS = [
   { id: 'all', name: '全部' }, { id: 'chat', name: '聊天' },
   { id: 'image', name: '图片' }, { id: 'video', name: '视频' },
 ];
+/* 同步模型里常见的非对话模型（ embeddings / 语音 / 图像 / 审核等），在对话列表中过滤掉 */
+const NON_CHAT_RE = /embed|whisper|tts|transcri|speech|audio|dall-e|image|imagen|moderation|rerank|babbage|davinci|clip|sora|veo|wanx|cogview|cogvideo|kolors|stable-diffusion|seedream|seedance|hailuo|sensemirage/i;
+export function isChatModel(m) { return !NON_CHAT_RE.test(m || ''); }
 
 let session = null;
 let currentModel = null;
@@ -55,10 +62,12 @@ let workspace = 'chat';
 let imgRatio = '1:1';
 let vidRatio = '16:9';
 let vidDur = 5;
-let drawerTab = 'models';
+let drawerTab = 'history';
 let drawerFilter = 'all';
 let abortCtl = null;
 let sending = false;
+let userPinned = false; // 流式期间用户上拉钉住
+const attachTexts = new Map(); // 文本附件内容（chip ref -> {name,text}）
 
 /* ================= 主渲染 ================= */
 export async function renderAIChat(page) {
@@ -85,8 +94,8 @@ export async function renderAIChat(page) {
         </div>
         <button class="icon-btn" data-a="new" title="新对话">${icon('plus')}</button>
       </div>
-      <div class="ai-ws-bar" id="ai-ws-bar"></div>
       <div class="ai-messages" id="ai-messages"></div>
+      <button class="ai-jump-btn" id="ai-jump-btn" hidden title="回到底部">${icon('arrowR')}</button>
       <div class="ai-inputbar">
         <div class="ai-attach-strip" id="ai-attach-strip" hidden></div>
         <div class="ai-input-row" id="ai-input-row">
@@ -106,22 +115,21 @@ export async function renderAIChat(page) {
     <div class="ai-peek-mask" id="ai-peek-mask"></div>
     <div class="ai-drawer-mask" data-a="drawer-mask"></div>
     <aside class="ai-drawer" id="ai-drawer">
-      <div class="ai-drawer-head">
+      <button class="ai-drawer-head" data-a="d-adv" title="高级设置">
         <span class="ai-drawer-logo">${icon('robot')}</span>
         <span class="ai-drawer-title">ThirdHub AI</span>
-      </div>
+        <span class="ai-drawer-arrow">${icon('arrowR')}</span>
+      </button>
       <button class="ai-drawer-item" data-a="d-models">${icon('cpu')}<span>模型设置</span><span class="ai-drawer-arrow">${icon('arrowR')}</span></button>
       <button class="ai-drawer-item" data-a="d-settings">${icon('settings')}<span>设置</span><span class="ai-drawer-arrow">${icon('arrowR')}</span></button>
       <div class="ai-dtabs" id="ai-dtabs">
         ${DRAWER_TABS.map(t => `<button class="ai-dtab ${t.id === drawerTab ? 'on' : ''}" data-dtab="${t.id}">${t.name}</button>`).join('')}
       </div>
-      <div class="ai-dfilters" id="ai-dfilters">
+      <div class="ai-dfilters" id="ai-dfilters" ${drawerTab === 'models' ? '' : 'hidden'}>
         ${DRAWER_FILTERS.map(f => `<button class="ai-dfilter ${f.id === drawerFilter ? 'on' : ''}" data-dfilter="${f.id}">${f.name}</button>`).join('')}
       </div>
       <div class="ai-drawer-scroll">
         <div id="ai-dtab-content"></div>
-        <div class="ai-drawer-sec">历史会话</div>
-        <div class="ai-drawer-sessions" id="ai-drawer-sessions"></div>
       </div>
       <div class="ai-drawer-bottom">
         <div class="ai-dsearch">${icon('search')}<input id="ai-dsearch-input" placeholder="搜索历史对话"></div>
@@ -131,17 +139,26 @@ export async function renderAIChat(page) {
     <div class="ai-plus-mask" data-a="plus-mask"></div>
     <div class="ai-plus-sheet" id="ai-plus-sheet">
       <div class="ai-plus-grid">
-        <button class="ai-plus-cell" data-plus="camera"><span class="ai-plus-ico">${icon('camera')}</span><span class="ai-plus-label">拍照</span></button>
-        <button class="ai-plus-cell" data-plus="photos"><span class="ai-plus-ico">${icon('image')}</span><span class="ai-plus-label">照片</span></button>
+        <button class="ai-plus-cell" data-plus="camera" data-cap="vision"><span class="ai-plus-ico">${icon('camera')}</span><span class="ai-plus-label">拍照</span></button>
+        <button class="ai-plus-cell" data-plus="photos" data-cap="vision"><span class="ai-plus-ico">${icon('image')}</span><span class="ai-plus-label">照片</span></button>
         <button class="ai-plus-cell" data-plus="file"><span class="ai-plus-ico">${icon('file')}</span><span class="ai-plus-label">本地文件</span></button>
-        <button class="ai-plus-cell" data-plus="draw"><span class="ai-plus-ico">${icon('brush')}</span><span class="ai-plus-label">AI绘画</span></button>
-        <button class="ai-plus-cell" data-plus="video"><span class="ai-plus-ico">${icon('film')}</span><span class="ai-plus-label">AI视频</span></button>
+        <button class="ai-plus-cell" data-plus="draw" data-cap="image"><span class="ai-plus-ico">${icon('brush')}</span><span class="ai-plus-label">AI绘画</span></button>
+        <button class="ai-plus-cell" data-plus="video" data-cap="video"><span class="ai-plus-ico">${icon('film')}</span><span class="ai-plus-label">AI视频</span></button>
       </div>
+      <div class="ai-plus-gen" id="ai-plus-gen" hidden></div>
       <div class="ai-plus-settings">
         <div class="ai-plus-row">
           <div class="ai-plus-row-info"><div class="ai-plus-row-name">联网搜索</div><div class="ai-plus-row-sub" id="ai-web-sub"></div></div>
           <button class="ai-toggle" data-a="web-toggle" id="ai-web-toggle"></button>
         </div>
+        <button class="ai-plus-row" data-a="chat-settings">
+          <div class="ai-plus-row-info"><div class="ai-plus-row-name">对话设置</div><div class="ai-plus-row-sub">系统提示 · 上下文 · 采样参数 · 背景</div></div>
+          <span class="ai-drawer-arrow">${icon('arrowR')}</span>
+        </button>
+        <button class="ai-plus-row" data-a="adv-settings">
+          <div class="ai-plus-row-info"><div class="ai-plus-row-name">更多设置</div><div class="ai-plus-row-sub">偏好 · 语音 · 记忆 · 用量 · 工具 · 专用模型</div></div>
+          <span class="ai-drawer-arrow">${icon('arrowR')}</span>
+        </button>
       </div>
       <input type="file" id="ai-cam-input" accept="image/*" capture="environment" hidden>
       <input type="file" id="ai-img-input" accept="image/*" multiple hidden>
@@ -151,10 +168,21 @@ export async function renderAIChat(page) {
   await newSession();
   renderMessages(page);
   updateTopbar(page);
-  renderWsBar(page);
+  updatePlusGen(page);
   updateTokenHint();
   updateInputBar(page);
   on('token:update', updateTokenHint);
+
+  /* ----- 上拉钉住 + 回到底部 ----- */
+  const msgBox = $('#ai-messages', page);
+  const jumpBtn = $('#ai-jump-btn', page);
+  userPinned = false;
+  msgBox.addEventListener('scroll', () => {
+    const dist = msgBox.scrollHeight - msgBox.scrollTop - msgBox.clientHeight;
+    if (dist > 120) { if (!userPinned) { userPinned = true; jumpBtn.hidden = false; } }
+    else if (dist < 40) { if (userPinned) { userPinned = false; jumpBtn.hidden = true; } }
+  }, { passive: true });
+  jumpBtn.onclick = () => { userPinned = false; jumpBtn.hidden = true; scrollBottom(page, true); };
 
   const ta = $('.ai-textarea', page);
   ta.addEventListener('input', () => {
@@ -167,12 +195,19 @@ export async function renderAIChat(page) {
       e.preventDefault(); sendMessage(page);
     }
   });
+  /* 长文本粘贴 → 自动转为文本附件，避免撑爆输入框 */
+  ta.addEventListener('paste', (e) => {
+    const txt = (e.clipboardData || window.clipboardData).getData('text');
+    if (!txt || txt.length < 400) return;
+    e.preventDefault();
+    addTextAttachment(page, '粘贴的长文本.txt', txt);
+    toast('长文本已转为附件（随消息一起发送）', 'ok');
+  });
 
   /* ----- 抽屉 ----- */
   const drawer = $('#ai-drawer', page), drawerMask = $('[data-a="drawer-mask"]', page), peek = $('#ai-peek-mask', page);
   const openDrawer = () => {
     renderDrawerTab(page);
-    renderDrawerSessions(page, $('#ai-dsearch-input', page).value || '');
     drawer.classList.add('open'); drawerMask.classList.add('open');
     if (device.isTouch && !device.isDesktop) peek.classList.add('show');
   };
@@ -186,10 +221,20 @@ export async function renderAIChat(page) {
   $('[data-a="d-new"]', drawer).onclick = () => { closeDrawer(); newSession(); renderMessages(page); toast('已开始新对话'); };
   $('[data-a="d-models"]', drawer).onclick = () => { closeDrawer(); showModelsPage(page); };
   $('[data-a="d-settings"]', drawer).onclick = () => { closeDrawer(); showAISettings(); };
-  $('#ai-dsearch-input', page).addEventListener('input', (e) => renderDrawerSessions(page, e.target.value));
+  $('[data-a="d-adv"]', drawer).onclick = () => { closeDrawer(); showAdvSettings(page); };
+  $('#ai-dsearch-input', page).addEventListener('input', (e) => {
+    // 搜索时自动切到「历史会话」tab
+    if (drawerTab !== 'history') {
+      drawerTab = 'history';
+      $$('#ai-dtabs .ai-dtab', page).forEach(x => x.classList.toggle('on', x.dataset.dtab === 'history'));
+      $('#ai-dfilters', page).hidden = true;
+    }
+    renderDrawerTab(page);
+  });
   $$('#ai-dtabs .ai-dtab', page).forEach(b => b.onclick = () => {
     drawerTab = b.dataset.dtab;
     $$('#ai-dtabs .ai-dtab', page).forEach(x => x.classList.toggle('on', x === b));
+    $('#ai-dfilters', page).hidden = drawerTab !== 'models';
     renderDrawerTab(page);
   });
   $$('#ai-dfilters .ai-dfilter', page).forEach(b => b.onclick = () => {
@@ -201,10 +246,12 @@ export async function renderAIChat(page) {
 
   /* ----- ＋ 面板 ----- */
   const plusSheet = $('#ai-plus-sheet', page), plusMask = $('[data-a="plus-mask"]', page);
-  const openPlus = () => { syncWebRow(); plusSheet.classList.add('open'); plusMask.classList.add('open'); };
+  const openPlus = () => { syncWebRow(); syncPlusCaps(page); updatePlusGen(page); plusSheet.classList.add('open'); plusMask.classList.add('open'); };
   const closePlus = () => { plusSheet.classList.remove('open'); plusMask.classList.remove('open'); };
   $('[data-a="plus"]', page).onclick = openPlus;
   plusMask.onclick = closePlus;
+  $('[data-a="chat-settings"]', page).onclick = () => { closePlus(); showChatSettings(page, session, () => { applySessionBg(page); updateTopbar(page); }); };
+  $('[data-a="adv-settings"]', page).onclick = () => { closePlus(); showAdvSettings(page); };
   const webOn = () => $('#ai-web-toggle', page).classList.contains('on');
   const webAvail = async () => (await hasSearchConfig()) || supportsWebSearch(currentModel.providerId);
   if (await kvGet('ai:web-on', false) && await webAvail()) $('#ai-web-toggle', page).classList.add('on');
@@ -236,16 +283,21 @@ export async function renderAIChat(page) {
   $('#ai-file-input', page).onchange = async (e) => {
     const f = e.target.files[0]; e.target.value = ''; closePlus();
     if (!f) return;
+    if (f.type.startsWith('image/')) { addImageFiles(page, [f]); return; }
     try {
       const txt = await f.text();
-      ta.value = (ta.value ? ta.value + '\n' : '') + `【文件 ${f.name}】\n` + txt.slice(0, 8000);
-      ta.dispatchEvent(new Event('input'));
-      toast('已读取文件内容到输入框', 'ok');
+      addTextAttachment(page, f.name, txt.slice(0, 20000));
+      toast('文件已添加为附件', 'ok');
     } catch (err) { toast('无法读取该文件', 'err'); }
   };
   plusSheet.addEventListener('click', (e) => {
     const cell = e.target.closest('.ai-plus-cell');
     if (!cell) return;
+    if (cell.classList.contains('disabled')) {
+      const cap = cell.dataset.cap;
+      toast(cap === 'vision' ? '当前模型不支持识图，请切换视觉模型' : cap === 'image' ? '当前厂商未配置绘画模型' : '当前厂商未配置视频模型');
+      return;
+    }
     const act = cell.dataset.plus;
     if (act === 'camera') $('#ai-cam-input', page).click();
     else if (act === 'photos') $('#ai-img-input', page).click();
@@ -268,7 +320,7 @@ export async function renderAIChat(page) {
 function setWorkspace(page, ws) {
   workspace = ws;
   kvSet('ai:workspace', ws);
-  renderWsBar(page);
+  updatePlusGen(page);
   updateTopbar(page);
   renderMessages(page);
   updateInputBar(page);
@@ -276,25 +328,48 @@ function setWorkspace(page, ws) {
   ta.placeholder = ws === 'image' ? '描述想要的图片…' : ws === 'video' ? '描述想要的视频…' : '输入消息…';
 }
 
-function renderWsBar(page) {
-  const bar = $('#ai-ws-bar', page);
-  if (!bar) return;
-  let extra = '';
+/* ＋面板里的生成选项（图片比例 / 视频比例+时长），从顶栏迁入 */
+function updatePlusGen(page) {
+  const box = $('#ai-plus-gen', page);
+  if (!box) return;
   if (workspace === 'image') {
-    extra = `<span class="ai-ws-sep"></span>` + IMG_RATIOS.map(r =>
-      `<button class="ai-ws-chip sm ${r === imgRatio ? 'on' : ''}" data-ratio="${r}">${r}</button>`).join('');
+    box.hidden = false;
+    box.innerHTML = `<div class="ai-plus-gen-title">画面比例</div><div class="ai-plus-gen-chips">`
+      + IMG_RATIOS.map(r => `<button class="ai-ws-chip sm ${r === imgRatio ? 'on' : ''}" data-ratio="${r}">${r}</button>`).join('') + `</div>`;
+    $$('[data-ratio]', box).forEach(b => b.onclick = () => { imgRatio = b.dataset.ratio; kvSet('ai:img-ratio', imgRatio); updatePlusGen(page); });
   } else if (workspace === 'video') {
-    extra = `<span class="ai-ws-sep"></span>` + VID_RATIOS.map(r =>
-      `<button class="ai-ws-chip sm ${r === vidRatio ? 'on' : ''}" data-vratio="${r}">${r}</button>`).join('') +
-      `<span class="ai-ws-sep"></span>` + VID_DURS.map(d =>
-      `<button class="ai-ws-chip sm ${d === vidDur ? 'on' : ''}" data-vdur="${d}">${d}s</button>`).join('');
+    box.hidden = false;
+    box.innerHTML = `<div class="ai-plus-gen-title">视频比例</div><div class="ai-plus-gen-chips">`
+      + VID_RATIOS.map(r => `<button class="ai-ws-chip sm ${r === vidRatio ? 'on' : ''}" data-vratio="${r}">${r}</button>`).join('')
+      + `</div><div class="ai-plus-gen-title">时长</div><div class="ai-plus-gen-chips">`
+      + VID_DURS.map(d => `<button class="ai-ws-chip sm ${d === vidDur ? 'on' : ''}" data-vdur="${d}">${d}s</button>`).join('') + `</div>`;
+    $$('[data-vratio]', box).forEach(b => b.onclick = () => { vidRatio = b.dataset.vratio; kvSet('ai:vid-ratio', vidRatio); updatePlusGen(page); });
+    $$('[data-vdur]', box).forEach(b => b.onclick = () => { vidDur = +b.dataset.vdur; kvSet('ai:vid-dur', vidDur); updatePlusGen(page); });
+  } else {
+    box.hidden = true;
+    box.innerHTML = '';
   }
-  bar.innerHTML = WORKSPACES.map(w =>
-    `<button class="ai-ws-chip ${w.id === workspace ? 'on' : ''}" data-ws="${w.id}">${icon(w.ico)} ${w.name}</button>`).join('') + extra;
-  $$('[data-ws]', bar).forEach(b => b.onclick = () => setWorkspace(page, b.dataset.ws));
-  $$('[data-ratio]', bar).forEach(b => b.onclick = () => { imgRatio = b.dataset.ratio; kvSet('ai:img-ratio', imgRatio); renderWsBar(page); });
-  $$('[data-vratio]', bar).forEach(b => b.onclick = () => { vidRatio = b.dataset.vratio; kvSet('ai:vid-ratio', vidRatio); renderWsBar(page); });
-  $$('[data-vdur]', bar).forEach(b => b.onclick = () => { vidDur = +b.dataset.vdur; kvSet('ai:vid-dur', vidDur); renderWsBar(page); });
+}
+
+/* 按当前模型能力置灰＋面板按钮：拍照/照片需视觉模型，AI绘画/视频需对应模型已配置 */
+async function syncPlusCaps(page) {
+  const vision = workspace === 'chat' && isVisionModel(currentModel);
+  const imgOk = !!(providerById(imageModel.providerId).image || []).length && !!(await getApiKey(imageModel.providerId));
+  const vidOk = !!(providerById(videoModel.providerId).video || []).length && !!(await getApiKey(videoModel.providerId));
+  $$('.ai-plus-cell', page).forEach((c) => {
+    const cap = c.dataset.cap;
+    const dis = (cap === 'vision' && !vision) || (cap === 'image' && !imgOk) || (cap === 'video' && !vidOk);
+    c.classList.toggle('disabled', !!dis);
+  });
+}
+
+/* 会话背景图（对话设置里上传） */
+function applySessionBg(page) {
+  const box = $('#ai-messages', page);
+  if (!box) return;
+  const bg = session && session.settings && session.settings.bgImage;
+  box.style.backgroundImage = bg ? `url(${bg})` : '';
+  box.classList.toggle('has-bg', !!bg);
 }
 
 function updateTopbar(page) {
@@ -405,18 +480,19 @@ function bindDrawerSwipe(page, drawer, openDrawer, closeDrawer) {
     const p = startOpen ? Math.max(0, Math.min(1, 1 + dx / w)) : Math.max(0, Math.min(1, dx / w));
     drawer.classList.remove('ai-noanim'); wrap.classList.remove('ai-noanim');
     clearPos();
-    if (p >= 0.4) { renderDrawerTab(page); renderDrawerSessions(page, $('#ai-dsearch-input', page).value || ''); drawer.classList.add('open'); peek.classList.add('show'); }
+    if (p >= 0.4) { renderDrawerTab(page); drawer.classList.add('open'); peek.classList.add('show'); }
     else closeDrawer();
   };
   wrap.addEventListener('touchend', finish);
   wrap.addEventListener('touchcancel', finish);
 }
 
-/* ================= 抽屉：AI模型 / 智能体 / 灵感广场 ================= */
+/* ================= 抽屉：历史会话 / AI模型 / 智能体 / 灵感广场 ================= */
 function renderDrawerTab(page) {
   const box = $('#ai-dtab-content', page);
   if (!box) return;
-  if (drawerTab === 'models') renderDrawerModels(page, box);
+  if (drawerTab === 'history') renderDrawerSessions(page, box, $('#ai-dsearch-input', page).value || '');
+  else if (drawerTab === 'models') renderDrawerModels(page, box);
   else if (drawerTab === 'agents') renderDrawerAgents(page, box);
   else renderDrawerInspire(page, box);
 }
@@ -430,22 +506,42 @@ async function renderDrawerModels(page, box) {
       let ms = t === 'chat' ? (p.models || []) : t === 'image' ? (p.image || []) : (p.video || []);
       if (t === 'chat') {
         const synced = await getSyncedModels(p.id);
-        ms = ms.concat(synced.filter(m => !ms.includes(m) && !(p.deprecated || []).includes(m)));
+        // 过滤不可用/非对话的同步模型
+        ms = ms.concat(synced.filter(m => !ms.includes(m) && !(p.deprecated || []).includes(m) && isChatModel(m)));
       }
       ms.forEach(m => rows.push({ t, m }));
     }
     if (!rows.length) continue;
     const hasKey = !!(await getApiKey(p.id));
+    const cur = rows.find(r => (r.t === 'chat' && r.m === currentModel.model && p.id === currentModel.providerId)
+      || (r.t === 'image' && r.m === imageModel.model && p.id === imageModel.providerId)
+      || (r.t === 'video' && r.m === videoModel.model && p.id === videoModel.providerId));
     html.push(`
       <div class="ai-dm-vendor">
-        <div class="ai-dm-vhead">${vendorIcon(p.id)}<span>${esc(p.name)}</span>${hasKey ? '<span class="tag tag-green">已配置</span>' : ''}</div>
-        ${rows.map(r => `<button class="ai-dm-item" data-p="${p.id}" data-m="${esc(r.m)}" data-t="${r.t}">
+        <button class="ai-dm-vhead" data-vhead>
+          ${vendorIcon(p.id)}<span class="ellipsis grow">${esc(p.name)}</span>
+          <span class="ai-dm-count">${rows.length}</span>
+          ${hasKey ? '<span class="tag tag-green">已配置</span>' : ''}
+          <span class="ai-dm-chev">${icon('arrowR')}</span>
+        </button>
+        <div class="ai-dm-items" hidden>
+        ${rows.map(r => `<button class="ai-dm-item ${cur === r ? 'on' : ''}" data-p="${p.id}" data-m="${esc(r.m)}" data-t="${r.t}">
           <span class="ai-dm-type ${r.t}">${r.t === 'chat' ? '聊' : r.t === 'image' ? '图' : '视'}</span>
           <span class="ellipsis">${esc(r.m)}</span>
+          ${cur === r ? icon('check') : ''}
         </button>`).join('')}
+        </div>
       </div>`);
   }
   box.innerHTML = html.join('') || '<div class="ai-drawer-empty">没有匹配的模型</div>';
+  $$('.ai-dm-vendor', box).forEach((v) => {
+    const head = $('[data-vhead]', v), items = $('.ai-dm-items', v);
+    head.onclick = () => {
+      const open = items.hidden;
+      items.hidden = !open;
+      v.classList.toggle('open', open);
+    };
+  });
   $$('.ai-dm-item', box).forEach(b => b.onclick = async () => {
     const sel = { providerId: b.dataset.p, model: b.dataset.m };
     const t = b.dataset.t;
@@ -458,51 +554,92 @@ async function renderDrawerModels(page, box) {
   });
 }
 
+/* 智能体工作室 hooks（闭包访问会话状态） */
+function makeAgentHooks(page) {
+  return {
+    model: () => currentModel,
+    begin: (agent) => {
+      newSession(agent);
+      if (agent.cat === 'image') setWorkspace(page, 'image');
+      else if (agent.cat === 'video') setWorkspace(page, 'video');
+      else setWorkspace(page, 'chat');
+      renderMessages(page);
+      toast('已进入智能体：' + agent.name, 'ok');
+    },
+    pushUser: (text) => { session.messages.push({ role: 'user', content: text, ts: Date.now() }); },
+    pushAssistant: (m) => { session.messages.push(m); },
+    save: () => saveSession(),
+    refresh: () => renderMessages(page),
+    gotoWorkspace: (ws, prompt) => {
+      setWorkspace(page, ws);
+      const ta = $('.ai-textarea', page);
+      ta.value = prompt;
+      ta.dispatchEvent(new Event('input'));
+      renderMessages(page);
+      toast('提示词已填入，点击发送开始创作', 'ok');
+    },
+  };
+}
+
+/* 灵感作品 → 切换模型/工作区并填入提示词 */
+async function useInspireWork(page, work) {
+  const t = work.type || 'chat';
+  if (work.model) {
+    const sel = { providerId: work.model.providerId, model: work.model.model };
+    if (t === 'image') { imageModel = sel; await kvSet('ai:image-model', sel); }
+    else if (t === 'video') { videoModel = sel; await kvSet('ai:video-model', sel); }
+    else {
+      currentModel = sel; await kvSet('ai:last-model', sel);
+      if (currentMode !== 'single') { currentMode = 'single'; kvSet('ai:last-mode', 'single'); }
+    }
+  }
+  page.__closeDrawer && page.__closeDrawer();
+  setWorkspace(page, t);
+  const ta = $('.ai-textarea', page);
+  ta.value = work.p;
+  ta.dispatchEvent(new Event('input'));
+  renderMessages(page);
+  toast(work.model ? '已切换模型并填入提示词' : '提示词已填入', 'ok');
+}
+
 function renderDrawerAgents(page, box) {
-  const list = AGENTS.filter(a => drawerFilter === 'all' || a.cat === drawerFilter);
+  const list = AGENTS;
   box.innerHTML = `<div class="ai-dagent-grid">${list.map(a => `
     <button class="ai-dagent" data-aid="${a.id}">
       <span class="ai-dagent-ico">${icon(a.icon)}</span>
       <span class="ai-dagent-name">${esc(a.name)}</span>
       <span class="ai-dagent-desc">${esc(a.desc)}</span>
-    </button>`).join('')}</div>` || '<div class="ai-drawer-empty">没有匹配的智能体</div>';
+      ${a.steps ? `<span class="ai-dagent-steps">${a.steps.length} 步工作流</span>` : ''}
+    </button>`).join('')}</div>`;
   $$('.ai-dagent', box).forEach(b => b.onclick = () => {
     const agent = AGENTS.find(a => a.id === b.dataset.aid);
     if (!agent) return;
-    newSession(agent);
-    if (agent.cat === 'image') setWorkspace(page, 'image');
-    else if (agent.cat === 'video') setWorkspace(page, 'video');
-    else setWorkspace(page, 'chat');
-    renderMessages(page);
     page.__closeDrawer && page.__closeDrawer();
-    toast('已进入智能体：' + agent.name, 'ok');
+    openAgentStudio(page, agent, makeAgentHooks(page));
   });
 }
 
 function renderDrawerInspire(page, box) {
-  const groups = INSPIRATIONS.filter(g => {
-    if (drawerFilter === 'all') return true;
-    if (drawerFilter === 'image') return !!g.image;
-    if (drawerFilter === 'video') return !!g.video;
-    return !g.image && !g.video;
+  const works = [];
+  INSPIRATIONS.forEach((g) => {
+    const type = g.image ? 'image' : g.video ? 'video' : 'chat';
+    g.cards.forEach((c) => works.push({ t: c.t, p: c.p, type, model: c.model || null, self: !!c.self, source: '官方精选' }));
   });
-  box.innerHTML = groups.map(g => `
-    <div class="ai-di-group">
-      <div class="ai-di-cat">${esc(g.cat)}${g.image ? ' · 图片' : ''}${g.video ? ' · 视频' : ''}</div>
-      <div class="ai-di-cards">${g.cards.map(c => `
-        <button class="ai-di-card" data-p="${esc(c.p)}" data-img="${g.image ? 1 : ''}" data-vid="${g.video ? 1 : ''}">
-          <span class="ai-di-t">${esc(c.t)}</span><span class="ai-di-p ellipsis">${esc(c.p)}</span>
-        </button>`).join('')}</div>
-    </div>`).join('') || '<div class="ai-drawer-empty">没有匹配的灵感</div>';
-  $$('.ai-di-card', box).forEach(b => b.onclick = () => {
-    if (b.dataset.img) setWorkspace(page, 'image');
-    else if (b.dataset.vid) setWorkspace(page, 'video');
-    else setWorkspace(page, 'chat');
-    const ta = $('.ai-textarea', page);
-    ta.value = b.dataset.p;
-    ta.dispatchEvent(new Event('input'));
+  box.innerHTML = `
+    <button class="ai-di-open" data-a="open-inspire">${icon('sparkle')}<span class="grow" style="text-align:left">打开灵感广场</span><span class="muted">成品示例 · 上传分享</span>${icon('arrowR')}</button>
+    <div class="ai-di-cards">${works.map((w, i) => `
+      <button class="ai-di-card" data-i="${i}">
+        <span class="ai-di-t">${esc(w.t)}</span>
+        <span class="ai-di-p ellipsis">${esc(w.p)}</span>
+        <span class="ai-di-meta">${w.type === 'image' ? '图片' : w.type === 'video' ? '视频' : '聊天'}${w.model ? ' · ' + esc(w.model.model) : ' · 自创'}</span>
+      </button>`).join('')}</div>`;
+  $('[data-a="open-inspire"]', box).onclick = () => {
     page.__closeDrawer && page.__closeDrawer();
-    ta.focus();
+    showInspirePage(page, { useWork: (w) => useInspireWork(page, w) });
+  };
+  $$('.ai-di-card', box).forEach(b => b.onclick = () => {
+    const w = works[+b.dataset.i];
+    if (w) showInspireDetail(page, w, { useWork: (x) => useInspireWork(page, x) });
   });
 }
 
@@ -510,6 +647,12 @@ function renderDrawerInspire(page, box) {
 async function newSession(agent = null) {
   session = { id: uid(), title: agent ? agent.name : '新对话', createdAt: Date.now(), messages: [] };
   if (agent) { session.system = agent.system; session.agentId = agent.id; }
+  session.settings = await kvGet('ai:chat-def', {});
+}
+
+/* 供高级设置中心打开的当前会话对话设置 */
+export async function openChatSettings(page) {
+  showChatSettings(page, session, () => { applySessionBg(page); updateTopbar(page); });
 }
 
 async function saveSession() {
@@ -524,8 +667,7 @@ async function saveSession() {
   await db.put('chats', JSON.parse(JSON.stringify(session)));
 }
 
-async function renderDrawerSessions(page, kw = '') {
-  const box = $('#ai-drawer-sessions', page);
+async function renderDrawerSessions(page, box, kw = '') {
   if (!box) return;
   const key = (kw || '').trim().toLowerCase();
   let list = (await db.all('chats')).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
@@ -562,7 +704,17 @@ async function renderDrawerSessions(page, kw = '') {
   });
 }
 
-/* ================= 图片附件 ================= */
+/* ================= 附件（图片 + 文本文件，展示在输入文字上方） ================= */
+function bindChipX(page, chip) {
+  const strip = $('#ai-attach-strip', page);
+  $('[data-x]', chip).onclick = () => {
+    if (chip.dataset.ref) attachTexts.delete(chip.dataset.ref);
+    chip.remove();
+    if (!strip.children.length) strip.hidden = true;
+    updateInputBar(page);
+  };
+}
+
 function addImageFiles(page, files) {
   if (!files || !files.length) return;
   const strip = $('#ai-attach-strip', page);
@@ -571,9 +723,9 @@ function addImageFiles(page, files) {
     const rd = new FileReader();
     rd.onload = () => {
       strip.hidden = false;
-      const chip = el(`<span class="ai-attach-chip"><img src="${rd.result}"><span class="ai-attach-x" data-x>${icon('close')}</span></span>`);
+      const chip = el(`<span class="ai-attach-chip" data-kind="image"><img src="${rd.result}"><span class="ai-attach-x" data-x>${icon('close')}</span></span>`);
       chip.dataset.url = rd.result;
-      $('[data-x]', chip).onclick = () => { chip.remove(); if (!strip.children.length) strip.hidden = true; updateInputBar(page); };
+      bindChipX(page, chip);
       strip.appendChild(chip);
       updateInputBar(page);
     };
@@ -581,11 +733,33 @@ function addImageFiles(page, files) {
   });
 }
 
+function addTextAttachment(page, name, text) {
+  const strip = $('#ai-attach-strip', page);
+  const ref = uid();
+  attachTexts.set(ref, { name, text });
+  strip.hidden = false;
+  const chip = el(`<span class="ai-attach-chip text-chip" data-kind="text" data-ref="${ref}" title="${esc(name)}">
+    <span class="ai-attach-file-ico">${icon('file')}</span>
+    <span class="ai-attach-file-name ellipsis">${esc(name)}</span>
+    <span class="ai-attach-x" data-x>${icon('close')}</span>
+  </span>`);
+  bindChipX(page, chip);
+  strip.appendChild(chip);
+  updateInputBar(page);
+}
+
 function takeAttachments(page) {
   const strip = $('#ai-attach-strip', page);
-  const urls = $$('.ai-attach-chip', strip).map((c) => c.dataset.url);
+  const images = [], files = [];
+  $$('.ai-attach-chip', strip).forEach((c) => {
+    if (c.dataset.kind === 'text') {
+      const f = attachTexts.get(c.dataset.ref);
+      if (f) files.push(f);
+      attachTexts.delete(c.dataset.ref);
+    } else images.push(c.dataset.url);
+  });
   strip.innerHTML = ''; strip.hidden = true;
-  return urls;
+  return { images, files };
 }
 
 /* ================= 输入栏状态（空→仅语音键；发送中→方形停止键） ================= */
@@ -630,14 +804,38 @@ function bindHoldToTalk(page) {
   const hint = $('#ai-voice-hint', page);
   const ta = $('.ai-textarea', page);
   let baseText = '', recognized = '', startY = 0, canceling = false, active = false;
+  let recorder = null; // 模型 ASR 模式
 
-  hold.addEventListener('pointerdown', (e) => {
+  const done = (txt) => {
+    // 识别完成：写入输入框（可编辑）并退出语音条，露出发送键
+    if (txt) {
+      ta.value = baseText + txt;
+      ta.dispatchEvent(new Event('input'));
+    }
+    exitVoiceBar(page);
+    ta.focus();
+  };
+
+  hold.addEventListener('pointerdown', async (e) => {
     e.preventDefault();
     hold.setPointerCapture(e.pointerId);
     active = true; canceling = false;
     baseText = ta.value ? ta.value + ' ' : '';
     recognized = '';
     startY = e.clientY;
+    const asr = await kvGet('ai:asr', { engine: 'browser' });
+    if (asr.engine === 'model' && asr.providerId && asr.model) {
+      // 模型 ASR：录音 → /audio/transcriptions
+      recorder = await startRecorder();
+      if (!recorder) {
+        toast('无法访问麦克风，请授权', 'err');
+        active = false; recorder = null; return;
+      }
+      hold.classList.add('recording');
+      hold.textContent = '正在录音…';
+      hint.hidden = false;
+      return;
+    }
     const ok = startRecognition({
       continuous: true,
       onResult: (final, interim) => {
@@ -664,17 +862,31 @@ function bindHoldToTalk(page) {
     hold.classList.toggle('canceling', canceling);
     hint.textContent = canceling ? '松开取消' : '松开发送 · 上滑取消';
   });
-  const finish = () => {
+  const finish = async () => {
     if (!active) return;
     active = false;
-    stopRecognition();
     hold.classList.remove('recording', 'canceling');
     hint.hidden = true;
-    if (!canceling && recognized) {
-      ta.value = baseText + recognized;
-      ta.dispatchEvent(new Event('input'));
+    if (recorder) {
+      const rec = recorder; recorder = null;
+      hold.textContent = '按住 说话';
+      if (canceling) { rec.cancel(); return; }
+      const blob = await rec.stop();
+      if (!blob || !blob.size) { toast('录音为空', 'err'); return; }
+      const asr = await kvGet('ai:asr', { engine: 'browser' });
+      hold.textContent = '识别中…';
+      try {
+        const txt = await transcribeAudio({ providerId: asr.providerId, model: asr.model, blob, lang: asr.lang });
+        done((txt || '').trim());
+      } catch (err) {
+        toast('模型识别失败：' + err.message, 'err');
+        exitVoiceBar(page);
+      }
+      return;
     }
+    stopRecognition();
     hold.textContent = '按住 说话';
+    if (!canceling && recognized) done(recognized);
   };
   hold.addEventListener('pointerup', finish);
   hold.addEventListener('pointercancel', finish);
@@ -727,6 +939,7 @@ function createThink(bubble, reasoning = '') {
 function renderMessages(page) {
   const box = $('#ai-messages', page);
   box.innerHTML = '';
+  applySessionBg(page);
   if (!session.messages.length) {
     if (workspace !== 'chat') {
       const isImg = workspace === 'image';
@@ -793,7 +1006,7 @@ function appendMessage(page, m, msgIndex = -1) {
   const wrap = el(`<div class="msg ${isUser ? 'user' : 'assistant'}">
     <div class="msg-avatar">${isUser ? icon('user') : vendorIcon(m.providerId || currentModel.providerId)}</div>
     <div class="msg-body">
-      <div class="msg-meta">${m.debateRole ? `<span class="debate-side debate-${m.debateRole}">${m.debateRole === 'pro' ? '正方' : m.debateRole === 'con' ? '反方' : '裁判'}</span>` : ''}<span>${esc(m.model || '')}</span></div>
+      <div class="msg-meta">${m.debateRole ? `<span class="debate-side debate-${m.debateRole}">${m.debateRole === 'pro' ? '正方' : m.debateRole === 'con' ? '反方' : '裁判'}</span>` : ''}<span>${esc(m.model || '')}</span>${m.ms ? `<span class="msg-ms">${m.ms}ms</span>` : ''}</div>
       <div class="msg-bubble"></div>
       ${isUser ? '' : '<div class="msg-actions"><button class="msg-act" data-act="copy" title="复制">' + icon('bookmark') + '</button><button class="msg-act" data-act="speak" title="朗读">' + icon('mic') + '</button></div>'}
     </div>
@@ -801,7 +1014,12 @@ function appendMessage(page, m, msgIndex = -1) {
   const bubble = $('.msg-bubble', wrap);
   if (m.video) bubble.innerHTML = `<div>${esc(m.content || '')}</div><video src="${m.video}" controls playsinline style="max-width:100%;border-radius:10px"></video>`;
   else if (m.image) bubble.innerHTML = `<div>${esc(m.content || '')}</div><img src="${m.image}" alt="生成图片">`;
-  else if (isUser && m.images && m.images.length) bubble.innerHTML = `<div class="msg-imgs">${m.images.map((u) => `<img src="${u}">`).join('')}</div><div>${esc(m.content)}</div>`;
+  else if (isUser && ((m.images && m.images.length) || (m.files && m.files.length))) {
+    bubble.innerHTML =
+      (m.images && m.images.length ? `<div class="msg-imgs">${m.images.map((u) => `<img src="${u}">`).join('')}</div>` : '')
+      + (m.files && m.files.length ? m.files.map((f) => `<div class="msg-file-chip">${icon('file')}<span class="ellipsis">${esc(f.name)}</span></div>`).join('') : '')
+      + `<div>${esc(m.content)}</div>`;
+  }
   else if (isUser) bubble.textContent = m.content;
   else if (m.reasoning) {
     const th = createThink(bubble, m.reasoning);
@@ -868,9 +1086,11 @@ function bindLastUserEdit(page, wrap, idx) {
   }
 }
 
-function scrollBottom(page) {
+function scrollBottom(page, force = false) {
   const box = $('#ai-messages', page);
-  if (box) box.scrollTop = box.scrollHeight;
+  if (!box) return;
+  if (userPinned && !force) return; // 用户上拉后钉住，不再自动滚底
+  box.scrollTop = box.scrollHeight;
 }
 
 /* ================= 发送 ================= */
@@ -878,17 +1098,34 @@ async function sendMessage(page) {
   const ta = $('.ai-textarea', page);
   let text = ta.value.trim();
   if (sending) return;
-  if (!text && !$$('.ai-attach-chip', page).length) return;
-  if (!text) text = '请描述这张图片';
+  const chips = $$('.ai-attach-chip', page);
+  if (!text && !chips.length) return;
+  if (!text) text = chips.some((c) => c.dataset.kind === 'text') ? '请阅读附件内容并回应' : '请描述这张图片';
   ta.value = ''; ta.style.height = 'auto';
   sending = true;
   updateInputBar(page);
   abortCtl = new AbortController();
 
-  const images = takeAttachments(page);
-  const userMsg = { role: 'user', content: text, images: images.length ? images : undefined, ts: Date.now() };
+  const at = takeAttachments(page);
+  // 「记住…」自动写入记忆库
+  if (/^(请?记住|remember)\s*[:：，, ]?/i.test(text) && await kvGet('ai:mem-on', false) && await kvGet('ai:mem-write', true)) {
+    const memText = text.replace(/^(请?记住|remember)\s*[:：，, ]?/i, '').trim();
+    if (memText) {
+      const mems = await kvGet('ai:memories', []);
+      mems.push({ id: Date.now(), text: memText, ts: Date.now() });
+      await kvSet('ai:memories', mems);
+      toast('已保存到记忆库', 'ok');
+    }
+  }
+  const userMsg = {
+    role: 'user', content: text,
+    images: at.images.length ? at.images : undefined,
+    files: at.files.length ? at.files : undefined,
+    ts: Date.now(),
+  };
   session.messages.push(userMsg);
   appendMessage(page, userMsg, session.messages.length - 1);
+  userPinned = false; const jb = $('#ai-jump-btn', page); if (jb) jb.hidden = true;
 
   try {
     if (workspace === 'image') {
@@ -938,25 +1175,54 @@ function isVisionModel(sel) {
   return /vl|vision|4o|4\.1|gemini|grok|pixtral|glm-4v|kimi-latest|qwen3|omni/i.test(sel.model || '');
 }
 
-function historyMessages(limit = 20, sel = null) {
+async function historyMessages(limit = 20, sel = null) {
   const vision = sel && isVisionModel(sel);
   const msgs = session.messages
     .filter((m) => m.role === 'user' || (m.role === 'assistant' && !m.debateRole && !m.image && !m.video))
     .slice(-limit)
     .map((m) => {
+      let text = m.content || '';
+      if (m.role === 'user' && m.files && m.files.length) {
+        text += m.files.map((f) => `\n\n【附件 ${f.name}】\n${String(f.text || '').slice(0, 6000)}`).join('');
+      }
       if (m.role === 'user' && m.images && m.images.length) {
         if (vision) {
-          return { role: 'user', content: [{ type: 'text', text: m.content || '请描述这张图片' }, ...m.images.map((u) => ({ type: 'image_url', image_url: { url: u } }))] };
+          return { role: 'user', content: [{ type: 'text', text: text || '请描述这张图片' }, ...m.images.map((u) => ({ type: 'image_url', image_url: { url: u } }))] };
         }
-        return { role: 'user', content: (m.content || '') + '\n[用户上传了 ' + m.images.length + ' 张图片，当前模型不支持识图]' };
+        return { role: 'user', content: text + '\n[用户上传了 ' + m.images.length + ' 张图片，当前模型不支持识图]' };
       }
-      return { role: m.role, content: m.content };
+      return { role: m.role, content: text };
     });
-  if (session.system) msgs.unshift({ role: 'system', content: session.system });
+  // 系统提示：智能体 / 会话自定义 + 记忆注入
+  let sys = (session.settings && session.settings.system) || session.system || '';
+  const memOn = await kvGet('ai:mem-on', false);
+  if (memOn) {
+    const mems = await kvGet('ai:memories', []);
+    if (mems.length) sys += (sys ? '\n\n' : '') + '【长期记忆】以下是关于用户的已知信息，请在对话中自然参考：\n' + mems.map((x) => '- ' + x.text).join('\n');
+  }
+  if (sys) msgs.unshift({ role: 'system', content: sys });
   return msgs;
 }
 
+/* 汇总采样参数：会话设置覆盖全局偏好 */
+async function samplingParams() {
+  const prefs = await getChatPrefs();
+  const s = (session && session.settings) || {};
+  const params = {};
+  const temp = s.temperature != null ? s.temperature : (prefs.tempOn ? prefs.temperature : null);
+  const topP = s.topP != null ? s.topP : (prefs.topPOn ? prefs.topP : null);
+  if (temp != null) params.temperature = temp;
+  if (topP != null) params.top_p = topP;
+  if (s.maxTokens != null) params.max_tokens = s.maxTokens;
+  if (prefs.usageInStream) params.stream_options = { include_usage: true };
+  return params;
+}
+
 async function runSingle(page, text, webCtx = null) {
+  const prefs = await getChatPrefs();
+  const ctx = await getCtxConf();
+  const s = session.settings || {};
+  const ctxLimit = s.ctxLimit || ctx.ctxLimit || 20;
   const m = { role: 'assistant', content: '', model: currentModel.model, providerId: currentModel.providerId, ts: Date.now() };
   const { wrap, bubble } = appendMessage(page, m);
   bubble.classList.add('streaming');
@@ -966,8 +1232,9 @@ async function runSingle(page, text, webCtx = null) {
     contentEl.innerHTML = renderMarkdown(t);
     scrollBottom(page);
   });
+  const t0 = Date.now();
   try {
-    let msgs = historyMessages(20, currentModel);
+    let msgs = await historyMessages(ctxLimit, currentModel);
     if (webCtx && msgs.length) {
       const li = msgs.length - 1;
       const last = msgs[li];
@@ -977,20 +1244,28 @@ async function runSingle(page, text, webCtx = null) {
         msgs = [...msgs.slice(0, -1), { role: 'user', content: [{ type: 'text', text: webCtx }, ...last.content] }];
       }
     }
+    const streamOn = prefs.stream !== false;
     const { text: full, reasoning } = await chat({
       ...currentModel,
       messages: msgs,
       signal: abortCtl.signal,
-      onReasoning: (chunk) => {
+      params: await samplingParams(),
+      onReasoning: prefs.thinkSummary === false ? null : (chunk) => {
         if (!think) { think = createThink(bubble); contentEl = think.content; }
         think.push(chunk);
       },
-      onToken: (chunk, acc) => { tw.push(null, acc); },
+      onToken: streamOn ? (chunk, acc) => { tw.push(null, acc); } : null,
     });
     tw.flush();
+    if (!streamOn) contentEl.innerHTML = renderMarkdown(full);
     if (think) think.done();
     m.content = full;
-    if (reasoning) m.reasoning = reasoning;
+    if (reasoning && prefs.cotReturn !== false) m.reasoning = reasoning;
+    if (prefs.speedTest) m.ms = Date.now() - t0;
+    // 上下文压缩提醒
+    if (ctx.compressHint && session.messages.length >= (ctx.compressThreshold || 40)) {
+      toast('当前会话上下文较长，建议开启新对话以获得更稳定的回答', 'err');
+    }
   } catch (e) {
     tw.flush();
     if (think) think.done();
@@ -1006,6 +1281,34 @@ async function runSingle(page, text, webCtx = null) {
     bindCopyButtons(wrap);
   }
   session.messages.push(m);
+  // 回复完成后自动朗读
+  if (m.content && await kvGet('ai:tts-autoread', false)) {
+    const rate = await kvGet('ai:tts-rate', 1), pitch = await kvGet('ai:tts-pitch', 1);
+    speak(m.content, { rate, pitch }).catch(() => {});
+  }
+  // 自动生成话题标题（首轮问答后）
+  autoTitle().catch(() => {});
+}
+
+/* 用当前/专用标题模型自动生成会话标题 */
+async function autoTitle() {
+  const ctx = await getCtxConf();
+  if (!ctx.autoTitle) return;
+  if (!session || session.messages.length !== 2) return;
+  if (session.title && session.title !== '新对话' && session.agentId) return;
+  const first = session.messages.find((x) => x.role === 'user');
+  const reply = session.messages.find((x) => x.role === 'assistant');
+  if (!first || !reply || !reply.content) return;
+  const tm = await kvGet('ai:model-title', null);
+  const use = tm || currentModel;
+  try {
+    const { text: t } = await chat({
+      ...use,
+      messages: [{ role: 'user', content: `请为以下对话起一个 10 字以内的简短标题，只输出标题本身，不要标点结尾：\n用户：${String(first.content).slice(0, 200)}\n助手：${String(reply.content).slice(0, 200)}` }],
+    });
+    const title = (t || '').trim().replace(/[。.\n]/g, '').slice(0, 20);
+    if (title) { session.title = title; await saveSession(); }
+  } catch (e) {}
 }
 
 async function runCompare(page, text) {
@@ -1013,12 +1316,13 @@ async function runCompare(page, text) {
   const m = { role: 'compare', results: models.map((x) => ({ ...x, text: '', error: null })), ts: Date.now() };
   const gridMsg = appendMessage(page, m);
   const cells = $$('.compare-content', gridMsg.wrap);
+  const ctxL = ((session.settings || {}).ctxLimit) || (await getCtxConf()).ctxLimit || 20;
   await Promise.all(models.map(async (x, i) => {
     cells[i].classList.add('streaming');
     try {
       const { text: full } = await chat({
         ...x,
-        messages: [...historyMessages(20, x).slice(0, -1), { role: 'user', content: text }],
+        messages: [...(await historyMessages(ctxL, x)).slice(0, -1), { role: 'user', content: text }],
         signal: abortCtl.signal,
         onToken: (c, acc) => { cells[i].innerHTML = renderMarkdown(acc); },
       });
@@ -1072,8 +1376,9 @@ async function runDebate(page, topic) {
 async function runCollab(page, text) {
   const models = compareModels.length >= 2 ? compareModels : [currentModel];
   const answers = [];
+  const ctxL2 = ((session.settings || {}).ctxLimit) || (await getCtxConf()).ctxLimit || 20;
   for (const x of models) {
-    const { text: full } = await chat({ ...x, messages: [...historyMessages(20, x).slice(0, -1), { role: 'user', content: text }], signal: abortCtl.signal });
+    const { text: full } = await chat({ ...x, messages: [...(await historyMessages(ctxL2, x)).slice(0, -1), { role: 'user', content: text }], signal: abortCtl.signal });
     answers.push({ model: x, text: full });
   }
   const editor = models[0];
@@ -1182,7 +1487,7 @@ export async function showModelsPage(page = null, focus = null) {
         for (const p of PROVIDERS) {
           const hasKey = !!(await getApiKey(p.id));
           const synced = await getSyncedModels(p.id);
-          const fresh = synced.filter(m => !(p.models || []).includes(m) && !(p.deprecated || []).includes(m));
+          const fresh = synced.filter(m => !(p.models || []).includes(m) && !(p.deprecated || []).includes(m) && isChatModel(m));
           const main = [...(p.models || []), ...fresh];
           const imgs = p.image || [], vids = p.video || [], dep = p.deprecated || [];
           const matchKw = (m) => !kw || m.toLowerCase().includes(kw) || p.name.toLowerCase().includes(kw) || p.id.includes(kw);
@@ -1285,36 +1590,56 @@ export async function showModelsPage(page = null, focus = null) {
       };
       await render();
       $('#mp-search', body).addEventListener('input', render);
-      $('#mp-rank', body).onclick = () => showRankingsPage();
+      $('#mp-rank', body).onclick = () => showRankingsPage(page);
     },
   });
 }
 
-/* ================= 模型排行榜 ================= */
-export function showRankingsPage() {
+/* ================= 模型排行榜（雷达图仅综合榜 · 六维 · TOP3 叠加；其余榜单为普通排名） ================= */
+export function showRankingsPage(page = null) {
   let curCat = RANK_CATEGORIES[0].id;
-  openOverlay({
+  const ref = openOverlay({
     title: '模型排行榜',
     build: (body) => {
       body.innerHTML = `
         <div class="rank-layout">
           <div class="rank-side">${RANK_CATEGORIES.map(c => `<button class="rank-cat ${c.id === curCat ? 'on' : ''}" data-c="${c.id}">${esc(c.name)}</button>`).join('')}</div>
           <div class="rank-main">
-            <div class="rank-radar-wrap"><canvas id="rank-radar"></canvas><div class="rank-radar-tip">TOP 10 雷达图</div></div>
+            <div class="rank-radar-wrap" id="rank-radar-wrap">
+              <canvas id="rank-radar"></canvas>
+              <div class="rank-radar-tip">六维能力雷达 · TOP 3 对比</div>
+              <div class="rank-radar-legend" id="rank-radar-legend"></div>
+            </div>
             <div class="rank-list" id="rank-list"></div>
+            <div class="rank-disclaimer">评分综合公开榜单与官方基准整理（2026-08），仅供参考；点击任意模型可直接发起对话</div>
           </div>
         </div>`;
       const renderCat = () => {
         $$('.rank-cat', body).forEach(x => x.classList.toggle('on', x.dataset.c === curCat));
         const data = RANKINGS[curCat] || [];
-        drawRadar($('#rank-radar', body), data.slice(0, 10));
-        $('#rank-list', body).innerHTML = data.map((r, i) => `
-          <div class="rank-row-item">
+        const isOverall = curCat === 'overall';
+        $('#rank-radar-wrap', body).style.display = isOverall ? '' : 'none';
+        if (isOverall) drawRadar($('#rank-radar', body), data.slice(0, 3), $('#rank-radar-legend', body));
+        const list = $('#rank-list', body);
+        list.innerHTML = data.map((r, i) => `
+          <button class="rank-row-item" data-i="${i}">
             <span class="rank-no ${i < 3 ? 'top' : ''}">${i + 1}</span>
             <span class="rank-ico">${vendorIcon(r.p)}</span>
             <div class="rank-model"><div class="rank-mname ellipsis">${esc(r.m)}</div><div class="rank-pname">${esc((PROVIDERS.find(p => p.id === r.p) || {}).name || r.p)}</div></div>
             <div class="rank-score"><div class="rank-bar"><i style="width:${r.s}%"></i></div><span>${r.s}</span></div>
-          </div>`).join('');
+          </button>`).join('');
+        $$('.rank-row-item', list).forEach(b => b.onclick = async () => {
+          const r = data[+b.dataset.i];
+          if (!r) return;
+          const ok = await confirmDialog('使用此模型对话？', `${r.m} · ${(PROVIDERS.find(p => p.id === r.p) || {}).name || r.p}`, '开始对话', false);
+          if (!ok) return;
+          currentModel = { providerId: r.p, model: r.m };
+          await kvSet('ai:last-model', currentModel);
+          if (currentMode !== 'single') { currentMode = 'single'; kvSet('ai:last-mode', 'single'); }
+          ref.close();
+          if (page) { setWorkspace(page, 'chat'); renderMessages(page); updateTopbar(page); }
+          toast('已切换到 ' + r.m, 'ok');
+        });
       };
       $$('.rank-cat', body).forEach(x => x.onclick = () => { curCat = x.dataset.c; renderCat(); });
       renderCat();
@@ -1322,52 +1647,71 @@ export function showRankingsPage() {
   });
 }
 
-function drawRadar(canvas, data) {
+/* 六维雷达：固定六个能力轴，叠加 TOP N 模型（不同颜色），附维度和图例 */
+const RADAR_COLORS = ['#3B5BFD', '#FF7A45', '#22B07D'];
+function drawRadar(canvas, data, legendEl) {
   if (!canvas) return;
+  const dims = RADAR_DIMS;
+  const n = dims.length;
   const dpr = window.devicePixelRatio || 1;
   const size = Math.min(300, canvas.parentElement.clientWidth || 300);
   canvas.width = size * dpr; canvas.height = size * dpr;
   canvas.style.width = size + 'px'; canvas.style.height = size + 'px';
   const ctx = canvas.getContext('2d');
   ctx.scale(dpr, dpr);
-  const cx = size / 2, cy = size / 2, R = size / 2 - 48;
-  const n = data.length;
-  if (!n) return;
+  const cx = size / 2, cy = size / 2, R = size / 2 - 46;
   const css = getComputedStyle(document.body);
   const cBorder = css.getPropertyValue('--border').trim() || '#333';
   const cText = css.getPropertyValue('--text-secondary').trim() || '#888';
-  const cPrimary = css.getPropertyValue('--primary').trim() || '#3B5BFD';
   const angle = i => -Math.PI / 2 + (2 * Math.PI * i) / n;
   ctx.clearRect(0, 0, size, size);
+  // 环
   for (let ring = 1; ring <= 4; ring++) {
     ctx.beginPath();
     for (let i = 0; i <= n; i++) {
       const a = angle(i % n), r = (R * ring) / 4;
-      const x = cx + r * Math.cos(a), y = cy + r * Math.sin(a);
-      i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+      i ? ctx.lineTo(cx + r * Math.cos(a), cy + r * Math.sin(a)) : ctx.moveTo(cx + r * Math.cos(a), cy + r * Math.sin(a));
     }
     ctx.strokeStyle = cBorder; ctx.lineWidth = 1; ctx.stroke();
   }
-  ctx.beginPath();
-  data.forEach((d, i) => {
-    const a = angle(i), r = R * (d.s / 100);
-    const x = cx + r * Math.cos(a), y = cy + r * Math.sin(a);
-    i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
-  });
-  ctx.closePath();
-  ctx.fillStyle = cPrimary + '33'; ctx.fill();
-  ctx.strokeStyle = cPrimary; ctx.lineWidth = 2; ctx.stroke();
-  data.forEach((d, i) => {
-    const a = angle(i), r = R * (d.s / 100);
+  // 轴 + 维度标签
+  dims.forEach((d, i) => {
+    const a = angle(i);
     ctx.beginPath();
-    ctx.arc(cx + r * Math.cos(a), cy + r * Math.sin(a), 3, 0, Math.PI * 2);
-    ctx.fillStyle = cPrimary; ctx.fill();
-    const lx = cx + (R + 16) * Math.cos(a), ly = cy + (R + 16) * Math.sin(a);
-    ctx.fillStyle = cText; ctx.font = '10px sans-serif';
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + R * Math.cos(a), cy + R * Math.sin(a));
+    ctx.strokeStyle = cBorder; ctx.stroke();
+    const lx = cx + (R + 18) * Math.cos(a), ly = cy + (R + 15) * Math.sin(a);
+    ctx.fillStyle = cText; ctx.font = '11px sans-serif';
     ctx.textAlign = Math.abs(Math.cos(a)) < 0.35 ? 'center' : (Math.cos(a) > 0 ? 'left' : 'right');
     ctx.textBaseline = 'middle';
-    const name = d.m.length > 12 ? d.m.slice(0, 11) + '…' : d.m;
-    ctx.fillText(name, lx, ly);
+    ctx.fillText(d, lx, ly);
+  });
+  // 模型多边形叠加
+  if (legendEl) legendEl.innerHTML = '';
+  data.forEach((d, di) => {
+    const vals = d.dims || dims.map(() => d.s);
+    const color = RADAR_COLORS[di % RADAR_COLORS.length];
+    ctx.beginPath();
+    vals.forEach((v, i) => {
+      const a = angle(i), r = R * (v / 100);
+      i ? ctx.lineTo(cx + r * Math.cos(a), cy + r * Math.sin(a)) : ctx.moveTo(cx + r * Math.cos(a), cy + r * Math.sin(a));
+    });
+    ctx.closePath();
+    ctx.fillStyle = color + '2E'; ctx.fill();
+    ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.stroke();
+    vals.forEach((v, i) => {
+      const a = angle(i), r = R * (v / 100);
+      ctx.beginPath();
+      ctx.arc(cx + r * Math.cos(a), cy + r * Math.sin(a), 2.5, 0, Math.PI * 2);
+      ctx.fillStyle = color; ctx.fill();
+    });
+    if (legendEl) {
+      const item = document.createElement('span');
+      item.className = 'rank-legend-item';
+      item.innerHTML = `<i style="background:${color}"></i>${esc(d.m.length > 16 ? d.m.slice(0, 15) + '…' : d.m)}`;
+      legendEl.appendChild(item);
+    }
   });
 }
 
@@ -1558,38 +1902,44 @@ function showIdentifyDialog(onSaved) {
   };
 }
 
-/* ================= 联网搜索服务配置 ================= */
+/* ================= 联网搜索服务配置（单选卡片 + 按服务动态表单） ================= */
 async function showSearchServiceDialog() {
   const cfg = await getSearchConfig();
   const body = el(`<div>
-    <div class="muted" style="margin-bottom:10px;line-height:1.7">已内置主流联网搜索服务，填入对应 Key 即可在对话中使用「联网搜索」。</div>
+    <div class="muted" style="margin-bottom:10px;line-height:1.7">选择一个搜索服务并填入凭据，对话页「＋ → 联网搜索」即可使用。</div>
     <div class="col gap8" data-v="list"></div>
-    <div data-v="form" style="display:none;margin-top:12px">
-      ${formRow('API Key', '<input class="input" data-f="key" type="password" placeholder="搜索服务的 Key">')}
-      ${formRow('实例地址（仅 SearXNG 需要）', '<input class="input" data-f="url" placeholder="https://searx.example.com">')}
-    </div>
+    <div data-v="form" style="display:none;margin-top:12px"></div>
   </div>`);
   const listEl = $('[data-v="list"]', body);
   const formEl = $('[data-v="form"]', body);
   let sel = cfg.service || '';
+
+  function renderForm() {
+    const s = SEARCH_SERVICES.find((x) => x.id === sel);
+    if (!s) { formEl.style.display = 'none'; formEl.innerHTML = ''; return; }
+    formEl.style.display = 'block';
+    formEl.innerHTML =
+      (s.needUrl ? formRow('实例地址', `<input class="input" data-f="url" placeholder="https://searx.example.com" value="${sel === cfg.service ? esc(cfg.url || '') : ''}">`) : '')
+      + formRow(s.needUrl ? 'API Key（可留空）' : 'API Key',
+        `<input class="input" data-f="key" type="password" placeholder="${esc(s.keyHint || '搜索服务的 Key')}" value="${sel === cfg.service ? esc(cfg.key || '') : ''}" autocomplete="off">`);
+  }
   function renderList() {
     listEl.innerHTML = '';
     SEARCH_SERVICES.forEach((s) => {
-      const b = el(`<button class="list-item" style="width:100%;${sel === s.id ? 'border-color:var(--primary)' : ''}">
-        <span class="list-ico">${icon('globe')}</span>
+      const on = sel === s.id;
+      const b = el(`<button class="search-svc ${on ? 'sel' : ''}">
+        <span class="search-svc-radio">${on ? icon('check') : ''}</span>
         <div class="grow" style="text-align:left;min-width:0">
-          <div style="font-size:14px;font-weight:600">${esc(s.name)} ${cfg.service === s.id ? '<span class="tag tag-green">已配置</span>' : ''}</div>
+          <div style="font-size:14px;font-weight:600">${esc(s.name)} ${cfg.service === s.id && (cfg.key || cfg.url) ? '<span class="tag tag-green">已配置</span>' : ''}</div>
           <div class="muted">${esc(s.desc)}</div>
         </div>
       </button>`);
-      b.onclick = () => { sel = s.id; formEl.style.display = 'block'; renderList(); };
+      b.onclick = () => { sel = s.id; renderList(); renderForm(); };
       listEl.appendChild(b);
     });
-    if (sel) formEl.style.display = 'block';
   }
   renderList();
-  if (cfg.key) $('[data-f="key"]', body).value = cfg.key;
-  if (cfg.url) $('[data-f="url"]', body).value = cfg.url;
+  renderForm();
 
   const m = modal({
     title: '联网搜索服务', body,
@@ -1598,7 +1948,12 @@ async function showSearchServiceDialog() {
   $('[data-a="cancel"]', m.mask).onclick = m.close;
   $('[data-a="save"]', m.mask).onclick = async () => {
     if (!sel) return toast('请选择一个搜索服务');
-    await setSearchConfig({ service: sel, key: $('[data-f="key"]', body).value, url: $('[data-f="url"]', body).value });
+    const s = SEARCH_SERVICES.find((x) => x.id === sel);
+    const key = ($('[data-f="key"]', formEl) || {}).value || '';
+    const url = ($('[data-f="url"]', formEl) || {}).value || '';
+    if (s.needUrl && !url.trim()) return toast('请填写 SearXNG 实例地址');
+    if (!s.needUrl && !key.trim()) return toast('请填写 API Key');
+    await setSearchConfig({ service: sel, key, url });
     m.close();
     toast('联网搜索服务已保存', 'ok');
   };

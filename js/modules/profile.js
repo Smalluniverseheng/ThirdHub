@@ -53,7 +53,7 @@ export async function renderProfile(page) {
     const box = $('[data-role="usercard"]', page);
     box.innerHTML = `
       <div class="user-card card" data-a="profile" style="cursor:pointer">
-        <div class="user-avatar">${u && u.avatar ? `<img src="${esc(u.avatar)}">` : icon('user')}</div>
+        <div class="user-avatar">${u && u.avatar ? `<img src="${esc(u.avatar)}">` : '<img src="icons/brand.jpg" style="object-fit:cover">'}</div>
         <div class="grow" style="min-width:0">
           <div class="row gap8">
             <span style="font-size:17px;font-weight:800" class="ellipsis">${esc(u ? u.nickname : '未登录')}</span>
@@ -64,11 +64,8 @@ export async function renderProfile(page) {
           <div class="storage-bar"><div class="storage-fill" style="width:${lv.storage === Infinity ? 0 : Math.min(100, ((u.storageUsed || 0) / lv.storage) * 100)}%"></div></div>` : ''}
         </div>
         <span class="list-arrow">${icon('arrowR')}</span>
-      </div>
-      ${u ? '' : '<button class="btn btn-primary btn-block mt8" data-a="login">登录</button>'}`;
+      </div>`;
     $('[data-a="profile"]', box).onclick = () => u ? showProfileSubpage() : showAuthDialog();
-    const loginBtn = $('[data-a="login"]', box);
-    if (loginBtn) loginBtn.onclick = showAuthDialog;
   }
 
   function showAuthDialog() {
@@ -110,7 +107,7 @@ export async function renderProfile(page) {
         body.innerHTML = `
           <div class="profile-hero">
             <div class="user-avatar lg" id="pf-avatar" style="position:relative">
-              ${u.avatar ? `<img src="${esc(u.avatar)}">` : icon('user')}
+              ${u.avatar ? `<img src="${esc(u.avatar)}">` : '<img src="icons/brand.jpg" style="object-fit:cover">'}
               <span class="avatar-edit-badge">${icon('camera')}</span>
             </div>
             <div style="font-size:17px;font-weight:800">${esc(u.nickname)}</div>
@@ -465,6 +462,7 @@ export async function renderProfile(page) {
       { a: 'vip', ico: 'crown', name: '会员中心', desc: '套餐 / 额度 / 发票 · 会员云端代理' },
       { a: 'devices', ico: 'devices', name: '多设备管理', desc: '已登录的设备与浏览器（上限 20 台）' },
       { a: 'applock', ico: 'lock', name: '应用锁', desc: '6 位数字密码或九宫格图案，进入应用需验证' },
+      { a: 'secpwd', ico: 'lock', name: '二级密码', desc: '加密 API 密钥等隐私信息，丢失无法解密' },
       { a: 'devlog', ico: 'bug', name: '设备日志管理', desc: '本机运行日志抓取，用于排查 Bug' },
       { a: 'feedback', ico: 'message', name: '意见反馈', desc: '提建议 / 报 Bug，可公开讨论或仅管理员可见' },
     ].map((m) => `
@@ -479,6 +477,7 @@ export async function renderProfile(page) {
     $('[data-a="vip"]', box).onclick = async () => (await import('./vip.js')).showVipCenter();
     $('[data-a="devices"]', box).onclick = async () => (await import('./devices.js')).showDevices();
     $('[data-a="applock"]', box).onclick = async () => (await import('./applock.js')).showAppLockSettings();
+    $('[data-a="secpwd"]', box).onclick = async () => (await import('./keyvault.js')).showSecPwdSettings();
     $('[data-a="devlog"]', box).onclick = async () => (await import('./devlog.js')).showDevLogs();
     $('[data-a="feedback"]', box).onclick = async () => (await import('./feedback.js')).showFeedback();
   }
@@ -496,6 +495,7 @@ export async function renderProfile(page) {
       { a: 'proxy', ico: 'globe', name: '模块代理设置', desc: '各模块独立选择直连 / 自有代理 / 云端代理' },
       { a: 'sources', ico: 'plug', name: '连接器管理', desc: '导入 / 管理内容连接器' },
       { a: 'update', ico: 'refresh', name: '检查更新', desc: '当前 v' + APP_VERSION },
+      { a: 'autoupdate', ico: 'sync', name: '自动检查更新', desc: '开启后每次启动自动检查并下载新版本' },
       { a: 'changelog', ico: 'history', name: '历史版本', desc: '各版本更新日志' },
       { a: 'about', ico: 'info', name: '关于 ThirdHub', desc: '版本与许可' },
     ].map((m) => `
@@ -536,6 +536,26 @@ export async function renderProfile(page) {
       openOverlay({ title: '连接器管理', build: async (body) => { body.style.overflowY = 'auto'; await renderCategory(body); const h = body.querySelector('.page-head'); if (h) h.remove(); } });
     };
     $('[data-a="update"]', box).onclick = () => checkUpdate(true);
+    $('[data-a="autoupdate"]', box).onclick = async () => {
+      const cur = await kvGet('update:auto', true);
+      const b2 = el(`<div>
+        <div class="row gap8" style="align-items:center;margin-bottom:12px">
+          <div class="grow"><div style="font-weight:600;font-size:14px">启动时自动检查更新</div>
+          <div class="muted">每次打开应用时后台检查新版本；发现新版会自动下载安装包，下载完成后提示你安装。</div></div>
+          <button class="ai-toggle ${cur ? 'on' : ''}" data-v="sw"></button>
+        </div>
+        <button class="btn btn-block" data-a="now">${icon('refresh')} 立即检查更新</button>
+      </div>`);
+      const m2 = modal({ title: '自动检查更新', body: b2, footer: '<button class="btn btn-block" data-a="c">关闭</button>' });
+      $('[data-a="c"]', m2.mask).onclick = m2.close;
+      $('[data-v="sw"]', b2).onclick = async (e) => {
+        const on = !e.target.classList.contains('on');
+        e.target.classList.toggle('on', on);
+        await kvSet('update:auto', on);
+        toast(on ? '已开启自动检查更新' : '已关闭自动检查更新', 'ok');
+      };
+      $('[data-a="now"]', b2).onclick = () => { m2.close(); checkUpdate(true); };
+    };
     $('[data-a="changelog"]', box).onclick = showChangelog;
     $('[data-a="about"]', box).onclick = () => {
       modal({

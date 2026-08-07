@@ -1,5 +1,5 @@
 /* ===== ThirdHub app.js — 应用入口 / 路由 / 初始化 ===== */
-export const APP_VERSION = '1.7';
+export const APP_VERSION = '1.8';
 
 import { $, $$, icon, toast } from './ui.js';
 import { getSetting, setSetting, on, emit, openDB, kvGet, kvSet } from './store.js';
@@ -148,6 +148,8 @@ async function boot() {
     /* v1.7：进入浏览器即拉取最新设置（多设备一致）；登记本设备 */
     try { const { initSettingsSync } = await import('./modules/settings-sync.js'); await initSettingsSync(); } catch (e) { console.warn('设置同步失败', e); }
     try { const { registerDevice } = await import('./modules/devices.js'); await registerDevice(); } catch (e) {}
+    try { const { pullKeysFromCloud } = await import('./modules/keyvault.js'); await pullKeysFromCloud(); } catch (e) {}
+    try { const { initSourceSync } = await import('./engine/source-sync.js'); await initSourceSync(); } catch (e) {}
   })();
   await Promise.race([cloudReady, new Promise((r) => setTimeout(r, 6000))]);
 
@@ -156,6 +158,13 @@ async function boot() {
 
   /* v1.7：应用锁门禁（开启后需先解锁才能进入） */
   try { const { gateIfLocked } = await import('./modules/applock.js'); await gateIfLocked(); } catch (e) {}
+
+  /* 自动检查更新（可在「我的 → 全局设置 → 自动检查更新」中关闭） */
+  try {
+    if (await kvGet('update:auto', true)) {
+      setTimeout(() => checkUpdate(false), 3500);
+    }
+  } catch (e) {}
 
   /* 首次进入：介绍 → 登录（可跳过）→ 新用户使用目的 */
   const { maybeOnboard } = await import('./modules/onboarding.js');

@@ -4,6 +4,7 @@
    可在「我的 → 设置 → 开屏动画」中关闭 */
 import { el } from '../ui.js';
 import { kvGet } from '../store.js';
+import { APP_VERSION } from '../app.js';
 
 export async function maybeSplash() {
   /* 首访用户走产品介绍页，不放开屏动画 */
@@ -18,6 +19,7 @@ export async function maybeSplash() {
     <div class="th-splash-inner">
       <div class="th-splash-card"><img src="icons/brand.jpg" alt="第三方科技"></div>
       <div class="th-splash-slogan">纵横四海·引领无限</div>
+      <div class="th-splash-ver">v${APP_VERSION}</div>
     </div>
     <div class="th-splash-brand">第三方科技</div>
   </div>`);

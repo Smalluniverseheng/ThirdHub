@@ -9,18 +9,31 @@ import { signIn } from '../auth.js';
 import { hasCloud } from '../supabase.js';
 import { BOARDS, MAX_TABS } from '../boards.js';
 import { vendorIcon } from '../ai/vendors.js';
+import { PROVIDERS } from '../ai/ai-models.js';
 import { showRegisterPage } from './register-page.js';
 
 const ORBIT_VENDORS = ['openai', 'anthropic', 'google', 'xai', 'deepseek', 'moonshot', 'aliyun', 'zhipu'];
 const ORBIT_VENDORS_2 = ['bytedance', 'xiaomi', 'minimax', 'tencent', 'groq'];
 
-const FEATURES = [
-  { ico: 'robot', title: 'AI 助手', desc: '聚合全球 33 家厂商 300+ 大模型，打字机流式输出、深度思考展示、MCP 工具与联网搜索。' },
-  { ico: 'books', title: '娱乐聚合', desc: '小说、漫画、音乐、有声、视频、游戏。不预置任何内容源，导入你自己的连接器即可使用。' },
-  { ico: 'cloud', title: '云端同步', desc: '书架、进度、会话多设备同步，注册即送免费云存储空间。' },
-  { ico: 'shield', title: '隐私优先', desc: '数据默认保存在本地，API Key 只存在你的设备上，绝不上传。' },
+const HERO_STATS = [
+  { n: 33, suf: '+', label: '模型厂商' },
+  { n: 300, suf: '+', label: 'AI 模型' },
+  { n: 6, suf: ' 类', label: '内容板块' },
+  { n: 0, suf: '', label: '预置内容源' },
 ];
-const MODEL_CHIPS = ['GPT-5', 'Claude Opus 4.1', 'Gemini 3 Pro', 'Grok 4.1', 'DeepSeek V3.2', 'Kimi K2', 'Qwen3 Max', 'GLM-4.6', 'MiMo v2.5', '豆包 Seed 1.6', 'MiniMax M2', '混元 T1', 'Sora 2', 'Veo 3', 'Seedream 4.0', 'Hailuo 02', '万相 2.1', 'Suno'];
+const CAPABILITIES = [
+  { no: '01', t: '即换即用', d: '同一个对话里随时切换 GPT、Claude、Gemini、DeepSeek……上下文不断，答案好坏当场对照。' },
+  { no: '02', t: 'Key 自持', d: 'API Key 只保存在你的设备本地，请求从浏览器直连厂商接口，不经过任何中间服务器。' },
+  { no: '03', t: '只属于你', d: '数据本地优先、云端同步可选。对话与书架仅自己可见，随时可以彻底删除。' },
+];
+const CREATE_CARDS = [
+  { no: '01', ico: 'robot', t: 'AI 对话', d: '写作、编程、翻译、学习提问。流式回复、深度思考展示、联网搜索与 MCP 工具，随时切换模型对照答案。',
+    chips: ['GPT-5.1', 'Claude Opus 4.5', 'Gemini 3 Pro', 'DeepSeek V3.2', 'Kimi K2', 'Qwen3 Max'] },
+  { no: '02', ico: 'brush', t: 'AI 绘画', d: '一句话直接出图。多个主流绘画模型同台可选，风格、比例自由控制，提示词灵感广场一键复用。',
+    chips: ['GPT-Image', 'Seedream 4.0', 'Imagen 3', '万相 2.1', 'Kolors'] },
+  { no: '03', ico: 'film', t: 'AI 视频', d: '文生视频，多档时长与比例可选。分镜脚本智能体先写脚本再出片，成片在线预览、直接下载。',
+    chips: ['Sora 2', 'Veo 3', 'Seedance', '可灵', 'Hailuo 02'] },
+];
 const FAQS = [
   { q: 'ThirdHub 是免费的吗？', a: '应用完全免费开源（MIT License）。AI 对话使用你自己的 API Key，费用与厂商直接结算；会员仅扩容云存储。' },
   { q: '为什么软件里没有任何内容？', a: 'ThirdHub 不预置任何内容源，这是一个设计原则。你可以在「连接器管理」中导入自己信任的内容连接器，导入后即可搜索、阅读、播放。' },
@@ -42,13 +55,22 @@ export async function maybeOnboard() {
       setTimeout(() => { ov.remove(); resolve(true); }, 260);
     };
 
-    /* ---------- ① 产品落地页 ---------- */
+    /* ---------- ① 产品落地页（流光风格重制：滚动显现 / 流光标题 / 跑马灯 / 数字动画） ---------- */
     function stepLanding() {
       const ring = (vendors, r, dur, rev) => `
         <div class="obl-ring" style="--r:${r}px;--dur:${dur}s">
           ${vendors.map((v, i) => `
             <span class="obl-badge ${rev ? 'rev' : ''}" style="--a0:${(360 / vendors.length) * i}deg;--r:${r}px;--dur:${dur}s">${vendorIcon(v)}</span>`).join('')}
         </div>`;
+      // 跑马灯内容（模型名，双份无缝循环）
+      const marqueeModels = [];
+      PROVIDERS.forEach((p) => (p.models || []).slice(0, 2).forEach((m) => marqueeModels.push(m)));
+      const marquee = marqueeModels.map((m) => `<span class="obl-mq-chip">${esc(m)}</span>`).join('');
+      // 模型库：按厂商分组（取模型数最多的 12 家）
+      const libVendors = [...PROVIDERS].filter((p) => (p.models || []).length)
+        .sort((a, b) => (b.models.length + (b.image || []).length + (b.video || []).length) - (a.models.length + (a.image || []).length + (a.video || []).length))
+        .slice(0, 12);
+
       ov.innerHTML = `
         <div class="ob-landing">
           <div class="obl-hero">
@@ -57,35 +79,67 @@ export async function maybeOnboard() {
               ${ring(ORBIT_VENDORS_2, 72, 24, true)}
               <div class="obl-core">${icon('robot')}</div>
             </div>
-            <div class="obl-title">ThirdHub</div>
+            <div class="obl-kicker">第三方科技 · 开源 MIT</div>
+            <div class="obl-title obl-shine">ThirdHub</div>
             <div class="obl-tag">一个入口 · 连接所有 AI 与内容</div>
+            <div class="obl-stats">
+              ${HERO_STATS.map((s) => `<div class="obl-stat"><div class="obl-stat-n" data-n="${s.n}" data-suf="${s.suf}">0${s.suf}</div><div class="obl-stat-l">${s.label}</div></div>`).join('')}
+            </div>
             <div class="obl-cta">
               <button class="btn btn-primary ob-btn" data-a="go">开始体验</button>
               <button class="ob-skip" data-a="guest">先看看，不登录 →</button>
             </div>
           </div>
-          <div class="obl-sec">
-            <div class="obl-sec-title">能做什么</div>
-            <div class="obl-feats">
-              ${FEATURES.map((f) => `
-                <div class="obl-feat">
-                  <span class="obl-feat-ico">${icon(f.ico)}</span>
-                  <div class="obl-feat-t">${f.title}</div>
-                  <div class="obl-feat-d">${f.desc}</div>
+          <div class="obl-marquee"><div class="obl-mq-track">${marquee}${marquee}</div></div>
+
+          <div class="obl-sec rv">
+            <div class="obl-sec-kicker">CAPABILITIES</div>
+            <div class="obl-sec-big">聚合不是把模型堆在一起，<br>是把体验做到顺滑无感</div>
+            <div class="obl-caps">
+              ${CAPABILITIES.map((c) => `
+                <div class="obl-cap">
+                  <div class="obl-cap-no">${c.no}</div>
+                  <div class="obl-cap-t">${c.t}</div>
+                  <div class="obl-cap-d">${c.d}</div>
                 </div>`).join('')}
             </div>
           </div>
-          <div class="obl-sec">
-            <div class="obl-sec-title">模型库</div>
-            <div class="obl-chips">${MODEL_CHIPS.map((m) => `<span class="obl-chip">${esc(m)}</span>`).join('')}</div>
-            <div class="muted" style="font-size:12px;margin-top:8px">33 家厂商 · 300+ 模型 · 持续同步更新</div>
+
+          <div class="obl-sec rv">
+            <div class="obl-sec-kicker">CREATE ANYTHING</div>
+            <div class="obl-sec-big">一个对话框，三种创作</div>
+            <div class="obl-creates">
+              ${CREATE_CARDS.map((c) => `
+                <div class="obl-create">
+                  <div class="obl-create-head"><span class="obl-create-ico">${icon(c.ico)}</span><span class="obl-create-no">${c.no}</span></div>
+                  <div class="obl-cap-t">${c.t}</div>
+                  <div class="obl-cap-d">${c.d}</div>
+                  <div class="obl-chips">${c.chips.map((m) => `<span class="obl-chip">${esc(m)}</span>`).join('')}</div>
+                </div>`).join('')}
+            </div>
           </div>
-          <div class="obl-sec">
-            <div class="obl-sec-title">常见问题</div>
+
+          <div class="obl-sec rv">
+            <div class="obl-sec-kicker">MODEL LIBRARY</div>
+            <div class="obl-sec-big">33 家厂商 · 300+ 模型</div>
+            <div class="obl-lib">
+              ${libVendors.map((p) => `
+                <div class="obl-lib-row">
+                  <div class="obl-lib-v">${vendorIcon(p.id)}<span class="obl-lib-name">${esc(p.name)}</span><span class="obl-lib-count">${(p.models || []).length + (p.image || []).length + (p.video || []).length}</span></div>
+                  <div class="obl-lib-models">${[...(p.models || []), ...(p.image || []), ...(p.video || [])].slice(0, 6).map((m) => `<span class="obl-chip sm">${esc(m)}</span>`).join('')}</div>
+                </div>`).join('')}
+            </div>
+            <div class="muted" style="font-size:12px;margin-top:10px">更多厂商与模型在应用内「模型设置」中查看 · 支持从厂商接口实时同步新模型</div>
+          </div>
+
+          <div class="obl-sec rv">
+            <div class="obl-sec-kicker">FAQ</div>
+            <div class="obl-sec-big">常见问题</div>
             ${FAQS.map((f) => `
               <details class="obl-faq"><summary>${esc(f.q)}</summary><div class="obl-faq-a">${esc(f.a)}</div></details>`).join('')}
           </div>
-          <div class="obl-sec" style="text-align:center;padding-bottom:40px">
+
+          <div class="obl-sec rv" style="text-align:center;padding-bottom:44px">
             <button class="btn btn-primary ob-btn" data-a="go2">立即开始</button>
             <div class="muted" style="font-size:12px;margin-top:14px">第三方科技 · MIT License · 不预置任何内容源</div>
           </div>
@@ -93,6 +147,22 @@ export async function maybeOnboard() {
       $('[data-a="go"]', ov).onclick = stepAuth;
       $('[data-a="go2"]', ov).onclick = stepAuth;
       $('[data-a="guest"]', ov).onclick = () => finish(['ai']);
+
+      /* 滚动显现 + 数字动画 */
+      const io = new IntersectionObserver((es) => {
+        es.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+      }, { threshold: 0.12, root: ov });
+      $$('.rv', ov).forEach((x) => io.observe(x));
+      $$('.obl-stat-n', ov).forEach((x) => {
+        const target = +x.dataset.n, suf = x.dataset.suf || '';
+        const t0 = performance.now();
+        const step = (t) => {
+          const p = Math.min(1, (t - t0) / 1200);
+          x.textContent = Math.round(target * (1 - Math.pow(1 - p, 3))) + suf;
+          if (p < 1) requestAnimationFrame(step);
+        };
+        setTimeout(() => requestAnimationFrame(step), 350);
+      });
     }
 
     /* ---------- ② 登录页（可跳过） ---------- */

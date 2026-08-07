@@ -10,6 +10,7 @@ import { getApiKey, setApiKey } from '../ai/ai-api.js';
 import { TTS_ENGINES } from '../voice.js';
 import { listMcpServers } from '../ai/mcp-client.js';
 import { listCustom, addCustom, updateCustom, removeCustom } from '../ai/custom-providers.js';
+import { getLocalBackend, saveLocalBackend, testLocalBackend, mixedContentRisk, normalizeBase } from '../ai/local-backend.js';
 import { getTotalStats, getDailyStats, getModelStats, getCostBreakdown, fmtTokens } from '../token-meter.js';
 import { fmtUsd, usdToCnyRate } from '../ai/ai-pricing.js';
 
@@ -765,6 +766,81 @@ function editMyProvider(cp, onDone) {
   };
 }
 
+/* ---------- 本地 AI 后端（v2.3 · 文档第一阶段：设置 + 健康检查 + 协议适配） ---------- */
+function showLocalBackend(page) {
+  openOverlay({
+    title: '本地 AI 后端',
+    build: async (body) => {
+      const conf = await getLocalBackend();
+      let enabled = !!conf.enabled;
+      let fallback = conf.fallback !== false;
+      const lastTest = await kvGet('ai:local-backend:last-test', null);
+
+      body.innerHTML = `<div class="set-wrap">
+        <div class="muted" style="font-size:12px;line-height:1.75;margin-bottom:10px">
+          连接你自己部署的本地后端（Termux / Node.js），对话改走局域网 SSE 流式。
+          本地后端只负责对话 / 工具 / Agent / 记忆；登录、会员、全局设置仍由云端处理。
+        </div>
+        <div data-v="warn"></div>
+        <div data-v="enable"></div>
+        ${formRow('后端地址', `<input class="input" data-f="url" value="${esc(conf.url || '')}" placeholder="http://192.168.1.100:3000" inputmode="url" autocomplete="off">`)}
+        ${formRow('访问令牌（可选）', `<input class="input" data-f="token" type="password" value="${esc(conf.token || '')}" placeholder="后端如设置鉴权令牌则填写" autocomplete="off">`)}
+        <div data-v="fallback"></div>
+        <div class="set-row">
+          <div class="set-row-info"><div class="set-row-name">连接测试</div><div class="set-row-sub" data-v="status">${esc(lastTest ? (lastTest.ok ? `上次成功 · ${new Date(lastTest.at).toLocaleString()} · ${lastTest.ms}ms` : `上次失败 · ${new Date(lastTest.at).toLocaleString()}`) : '尚未测试')}</div></div>
+          <button class="btn btn-sm" data-a="test">测试连接</button>
+        </div>
+        <div class="row gap8" style="margin-top:16px">
+          <button class="btn btn-primary btn-block" data-a="save">保存</button>
+        </div>
+      </div>`;
+
+      const urlInput = $('[data-f="url"]', body);
+      const tokenInput = $('[data-f="token"]', body);
+      const statusEl = $('[data-v="status"]', body);
+
+      const renderWarn = () => {
+        const u = normalizeBase(urlInput.value);
+        $('[data-v="warn"]', body).innerHTML = mixedContentRisk(u)
+          ? `<div style="background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.35);color:#b45309;border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.7;margin-bottom:10px">
+              当前网页以 HTTPS 打开，浏览器会拦截到 <b>http://</b> 局域网地址的请求（混合内容限制）。<br>
+              解决办法：用 http:// 方式打开本站，或为本地后端配置 HTTPS / 内网穿透（开发文档 Phase 2）。
+            </div>`
+          : '';
+      };
+      renderWarn();
+      urlInput.addEventListener('input', renderWarn);
+
+      $('[data-v="enable"]', body).appendChild(toggleRow('启用本地后端', '开启后 AI 对话优先走本地后端', enabled, (on) => { enabled = on; }));
+      $('[data-v="fallback"]', body).appendChild(toggleRow('失败自动回退', '本地连接失败时自动退回厂商直连；已开始输出则不回退', fallback, (on) => { fallback = on; }));
+
+      $('[data-a="test"]', body).onclick = async () => {
+        const url = normalizeBase(urlInput.value);
+        const token = tokenInput.value.trim();
+        if (!url) return toast('请先填写后端地址');
+        statusEl.textContent = '正在连接…';
+        try {
+          const r = await testLocalBackend(url, token);
+          statusEl.textContent = `连接成功 · ${r.ms}ms` + (r.info && r.info.version ? ` · 后端 v${r.info.version}` : '');
+          await kvSet('ai:local-backend:last-test', { ok: true, at: Date.now(), ms: r.ms });
+          toast('本地后端连接成功', 'ok');
+        } catch (e) {
+          statusEl.textContent = '连接失败：' + (e && e.message || e);
+          await kvSet('ai:local-backend:last-test', { ok: false, at: Date.now() });
+          toast(e && e.message || '连接失败', 'err');
+        }
+      };
+
+      $('[data-a="save"]', body).onclick = async () => {
+        const url = normalizeBase(urlInput.value);
+        if (enabled && !url) return toast('启用前请先填写后端地址');
+        await saveLocalBackend({ enabled, url, token: tokenInput.value.trim(), fallback });
+        toast(enabled ? '已保存：AI 对话将优先走本地后端' : '已保存', 'ok');
+      };
+    },
+  });
+}
+
 /* ---------- 提供商与模型管理 ---------- */
 function subProviders(page) {
   openOverlay({
@@ -776,6 +852,7 @@ function subProviders(page) {
       add('cpu', '模型设置', '厂商模型列表 · 实时同步 · 排行榜', async () => { const m = await import('./ai-chat.js'); m.showModelsPage(page); });
       add('key', 'API 密钥 / 联网搜索 / MCP', '厂商凭据与搜索服务配置', async () => { const m = await import('./ai-chat.js'); m.showAISettings(); });
       add('plus', '我的模型 / 自定义厂商', '可一直添加；进入模型选择器「我的模型」分组', () => showMyModels(page));
+      add('server', '本地 AI 后端', '连接自建 Termux / Node 后端，对话走局域网 SSE（实验）', () => showLocalBackend(page));
       // 专用模型
       const special = [
         { key: 'ai:model-title', name: '标题生成模型', desc: '自动生成话题标题所用模型（默认跟随当前模型）' },

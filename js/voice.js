@@ -2,7 +2,7 @@
    TTS 引擎：系统自带 / 小米 MiMo TTS / 火山引擎 / 自定义 OpenAI 兼容接口
    ASR：浏览器 Web Speech API（按住说话 continuous 模式） */
 import { canSpeechRecognize, canTTS } from './device.js';
-import { getSetting } from './store.js';
+import { getSetting, kvGet } from './store.js';
 
 let recog = null;
 
@@ -24,6 +24,32 @@ export function startRecognition({ lang = 'zh-CN', continuous = false, onResult,
   return recog;
 }
 export function stopRecognition() { try { recog && recog.stop(); } catch (e) {} recog = null; }
+
+/* ---------- 录音（模型 ASR：MediaRecorder → Blob） ---------- */
+export async function startRecorder() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined') return null;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const mr = new MediaRecorder(stream);
+    const chunks = [];
+    mr.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+    mr.start(200);
+    let canceled = false;
+    const cleanup = () => { try { stream.getTracks().forEach((t) => t.stop()); } catch (e) {} };
+    return {
+      cancel() { canceled = true; try { mr.stop(); } catch (e) {} cleanup(); },
+      stop() {
+        return new Promise((resolve) => {
+          mr.onstop = () => {
+            cleanup();
+            resolve(canceled ? null : new Blob(chunks, { type: mr.mimeType || 'audio/webm' }));
+          };
+          try { mr.stop(); } catch (e) { cleanup(); resolve(null); }
+        });
+      },
+    };
+  } catch (e) { return null; }
+}
 
 /* ---------- TTS 引擎 ---------- */
 export const TTS_ENGINES = [
@@ -74,12 +100,19 @@ export async function speak(text, { rate = 1, pitch = 1, lang = 'zh-CN' } = {}) 
   stopSpeak();
   const clean = String(text).replace(/[#*`>\-]|```[\s\S]*?```/g, ' ').slice(0, 2000);
   const engine = await getSetting('ttsEngine');
-  if (engine && engine !== 'system' && TTS_CONF[engine]) {
+  const mode = await kvGet('ai:tts-mode', 'auto'); // system | cloud | auto
+  if (mode !== 'system' && engine && engine !== 'system' && TTS_CONF[engine]) {
+    const conf = { ...TTS_CONF[engine] };
+    const v = await kvGet('ai:tts-voice', '');
+    if (v) conf.voice = v;
+    const mdl = await kvGet('ai:tts-model', '');
+    if (mdl) conf.model = mdl;
     try {
-      return await speakCloud(clean, TTS_CONF[engine]);
+      return await speakCloud(clean, conf);
     } catch (e) {
+      if (mode === 'cloud') { console.warn('云端 TTS 失败：', e.message); return false; }
       console.warn('云端 TTS 失败，回退系统语音：', e.message);
-      // 失败后回退系统语音
+      // auto 模式：失败后回退系统语音
     }
   }
   if (!canTTS()) return false;

@@ -22,7 +22,7 @@ import { showAdvSettings, showChatSettings, getChatPrefs, getCtxConf } from './a
 import { openAgentStudio } from './ai-agent-studio.js';
 import { showInspirePage, showInspireDetail } from './ai-inspire.js';
 import { device } from '../device.js';
-import { currentUser } from '../auth.js';
+import { currentUser, zhErr } from '../auth.js';
 import { trashChat, recycleDays } from './recycle-bin.js';
 
 /* 当前用户头像缓存（消息头像 + 抽屉头部同步） */
@@ -108,6 +108,7 @@ export async function renderAIChat(page) {
       <button class="ai-jump-btn" id="ai-jump-btn" hidden title="回到底部">${icon('arrowR')}</button>
       <div class="ai-inputbar">
         <div class="ai-attach-strip" id="ai-attach-strip" hidden></div>
+        <button class="ai-nokey-pill" id="ai-nokey" hidden><span>当前模型未配置 API Key</span><span class="ai-nokey-arrow">${icon('arrowR')}</span></button>
         <div class="ai-input-row" id="ai-input-row">
           <button class="ai-plus-btn" data-a="plus" title="更多功能">${icon('plus')}</button>
           <textarea class="ai-textarea" rows="1" placeholder="输入消息…"></textarea>
@@ -326,6 +327,11 @@ export async function renderAIChat(page) {
   $('[data-a="kb"]', page).onclick = () => exitVoiceBar(page);
   bindHoldToTalk(page);
   $('[data-a="model"]', page).onclick = () => pickModelFlow(page);
+  const nokeyPill = $('#ai-nokey', page);
+  if (nokeyPill) nokeyPill.onclick = () => {
+    const sel = workspace === 'image' ? imageModel : workspace === 'video' ? videoModel : currentModel;
+    showAISettings(sel.providerId);
+  };
   $('[data-a="mode"]', page).onclick = () => pickModeFlow(page);
   $('[data-a="new"]', page).onclick = () => { newSession(); renderMessages(page); toast('已开始新对话'); };
 }
@@ -400,6 +406,19 @@ function updateTopbar(page) {
   }
   $('[data-a="mode"] .pill-text', page).textContent = '模式: ' + MODES.find(m => m.id === currentMode).name;
   $('[data-a="mode"]', page).style.display = inChat ? '' : 'none';
+  syncNokeyPill(page);
+}
+
+/* 未配置提示：当前模型所属厂商没有 API Key 时，在输入框上方显示「未配置 →」 */
+async function syncNokeyPill(page) {
+  const pill = $('#ai-nokey', page);
+  if (!pill) return;
+  const sel = workspace === 'image' ? imageModel : workspace === 'video' ? videoModel : currentModel;
+  const prov = providerById(sel.providerId);
+  let need = false;
+  try { need = !!(prov && !(await getApiKey(sel.providerId))); } catch (_) { need = false; }
+  pill.hidden = !need;
+  if (need) pill.querySelector('span').textContent = `${prov.name} 未配置 API Key，点击去配置`;
 }
 
 function updateTokenHint() {
@@ -456,18 +475,20 @@ function bindDrawerSwipe(page, drawer, openDrawer, closeDrawer) {
   };
   const clearPos = () => { drawer.style.transform = ''; wrap.style.transform = ''; };
 
-  wrap.addEventListener('touchstart', (e) => {
-    if (e.target.closest('textarea, input, .ai-hold-btn, .ai-messages .msg-bubble')) {
+  const onStart = (e, fromDrawer) => {
+    if (!fromDrawer && e.target.closest('textarea, input, .ai-hold-btn, .ai-messages .msg-bubble')) {
       // 消息气泡上允许纵向滚动，但仍可识别明显的横向滑动；输入控件直接忽略
       if (e.target.closest('textarea, input, .ai-hold-btn')) return;
     }
+    if (fromDrawer && e.target.closest('textarea, input')) return;
+    if (fromDrawer && !drawer.classList.contains('open')) return;
     if (e.touches.length !== 1) return;
     tracking = true; dragging = false;
     sx = e.touches[0].clientX; sy = e.touches[0].clientY;
     startOpen = drawer.classList.contains('open');
-  }, { passive: true });
+  };
 
-  wrap.addEventListener('touchmove', (e) => {
+  const onMove = (e) => {
     if (!tracking) return;
     const dx = e.touches[0].clientX - sx, dy = e.touches[0].clientY - sy;
     if (!dragging) {
@@ -482,7 +503,7 @@ function bindDrawerSwipe(page, drawer, openDrawer, closeDrawer) {
     const w = W();
     const p = startOpen ? Math.max(0, Math.min(1, 1 + dx / w)) : Math.max(0, Math.min(1, dx / w));
     setPos(p);
-  }, { passive: true });
+  };
 
   const finish = (e) => {
     if (!tracking) return;
@@ -497,8 +518,17 @@ function bindDrawerSwipe(page, drawer, openDrawer, closeDrawer) {
     if (p >= 0.4) { renderDrawerTab(page); drawer.classList.add('open'); peek.classList.add('show'); }
     else closeDrawer();
   };
+
+  // 主区域：右滑展开 / 打开态左滑关闭（穿透到 wrap 的情况）
+  wrap.addEventListener('touchstart', (e) => onStart(e, false), { passive: true });
+  wrap.addEventListener('touchmove', onMove, { passive: true });
   wrap.addEventListener('touchend', finish);
   wrap.addEventListener('touchcancel', finish);
+  // 抽屉本身：打开后可直接按住抽屉右滑（左滑手势）拖动关闭
+  drawer.addEventListener('touchstart', (e) => onStart(e, true), { passive: true });
+  drawer.addEventListener('touchmove', onMove, { passive: true });
+  drawer.addEventListener('touchend', finish);
+  drawer.addEventListener('touchcancel', finish);
 }
 
 /* ================= 抽屉：历史会话 / AI模型 / 智能体 / 灵感广场 ================= */
@@ -1342,8 +1372,8 @@ async function sendMessage(page) {
         toast('请先配置 ' + providerById(sel.providerId).name + ' 的 API Key');
         showAISettings(sel.providerId);
       }
-      else toast(e.message || '请求失败', 'err');
-      const errMsg = { role: 'assistant', content: '⚠️ ' + (e.message || '请求失败'), ts: Date.now() };
+      else toast(zhErr(e) || '请求失败', 'err');
+      const errMsg = { role: 'assistant', content: '⚠️ ' + (zhErr(e) || '请求失败'), ts: Date.now() };
       session.messages.push(errMsg);
       appendMessage(page, errMsg);
     }
@@ -2060,6 +2090,8 @@ async function afterKeySavedHook(p) {
     const base = await getBaseOverride(p.id);
     await kv.afterKeySaved(p.id, p.name, base);
   } catch (_) {}
+  // 密钥变化后刷新「未配置」提示
+  try { syncNokeyPill(document); } catch (_) {}
 }
 
 /* ================= 自动识别 API Key（并行真实对话验证） ================= */

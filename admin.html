@@ -6,27 +6,65 @@
 <meta name="theme-color" content="#0f1117">
 <title>ThirdHub 管理后台</title>
 <link rel="icon" href="icons/icon-192.png">
-<link rel="stylesheet" href="css/base.css?v=1.7">
-<link rel="stylesheet" href="css/theme.css?v=1.7">
-<link rel="stylesheet" href="css/layout.css?v=1.7">
-<link rel="stylesheet" href="css/profile.css?v=1.7">
 <style>
-  body { background: var(--bg-page, #0f1117); }
-  .adm-wrap { max-width: 860px; margin: 0 auto; padding: 24px 16px 80px; }
-  .adm-head { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+  :root {
+    --bg: #0f1117; --card: #171a23; --border: #2a2f3a;
+    --text: #e6e9f0; --muted: #9aa3b2; --primary: #3b5bfd;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { background: var(--bg); color: var(--text); font: 14px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; }
+  .adm-wrap { max-width: 880px; margin: 0 auto; padding: 20px 14px 90px; }
+  .adm-head { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
   .adm-head img { width: 44px; height: 44px; border-radius: 12px; }
-  .adm-tabs { display: flex; gap: 8px; margin-bottom: 18px; flex-wrap: wrap; }
-  .adm-tab { padding: 8px 16px; border-radius: 10px; border: 1px solid var(--border, #2a2f3a); background: var(--bg-card, #171a23); color: var(--text-secondary, #9aa3b2); cursor: pointer; font-size: 13px; }
-  .adm-tab.on { background: var(--primary, #3b5bfd); color: #fff; border-color: var(--primary, #3b5bfd); }
-  .adm-login { max-width: 340px; margin: 15vh auto 0; text-align: center; }
+  .adm-muted { color: var(--muted); font-size: 12px; }
+  .adm-mono { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); word-break: break-all; }
+  .adm-tabs { display: flex; gap: 8px; margin-bottom: 16px; overflow-x: auto; padding-bottom: 4px; -webkit-overflow-scrolling: touch; }
+  .adm-tabs::-webkit-scrollbar { display: none; }
+  .adm-tab { flex: 0 0 auto; padding: 8px 16px; border-radius: 10px; border: 1px solid var(--border); background: var(--card); color: var(--muted); cursor: pointer; font-size: 13px; }
+  .adm-tab.on { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .adm-tab-sm { padding: 6px 12px; font-size: 12px; }
+  .adm-subtabs { display: flex; gap: 6px; margin-bottom: 12px; overflow-x: auto; padding-bottom: 4px; }
+  .adm-subtabs::-webkit-scrollbar { display: none; }
+  .adm-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 14px; }
+  .adm-stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .adm-stat { text-align: center; cursor: pointer; }
+  .adm-stat-num { font-size: 22px; font-weight: 800; }
+  .adm-bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .adm-bar-label { width: 36px; font-size: 12px; color: var(--muted); flex: 0 0 auto; }
+  .adm-bar-track { flex: 1; height: 10px; border-radius: 6px; background: #0d0f14; overflow: hidden; }
+  .adm-bar-fill { height: 100%; border-radius: 6px; transition: width .4s; }
+  .adm-bar-num { width: 28px; text-align: right; font-size: 12px; flex: 0 0 auto; }
+  .adm-input { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: #0d0f14; color: var(--text); font-size: 14px; margin-bottom: 10px; }
+  .adm-input:focus { outline: none; border-color: var(--primary); }
+  textarea.adm-input { resize: vertical; font-family: inherit; }
+  .adm-btn { padding: 9px 16px; border-radius: 10px; border: 1px solid var(--border); background: var(--card); color: var(--text); cursor: pointer; font-size: 13px; }
+  .adm-btn:active { opacity: .8; }
+  .adm-btn:disabled { opacity: .5; }
+  .adm-btn-primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .adm-btn-sm { padding: 5px 12px; font-size: 12px; }
+  .adm-btn-block { width: 100%; }
+  .adm-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .adm-badge { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 11px; }
+  .adm-login { max-width: 340px; margin: 14vh auto 0; text-align: center; }
   .adm-login img { width: 72px; height: 72px; border-radius: 18px; margin-bottom: 14px; }
-  .plan-edit { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
-  .plan-edit .input { width: 100%; }
-  @media (max-width: 560px) { .plan-edit { grid-template-columns: 1fr; } }
+  .adm-user { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; position: relative; }
+  .adm-avatar { width: 38px; height: 38px; border-radius: 50%; background: var(--primary); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; flex: 0 0 auto; }
+  .adm-star { position: absolute; top: 8px; right: 10px; background: none; border: none; font-size: 18px; cursor: pointer; padding: 4px; }
+  .adm-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; }
+  .adm-form-grid label { font-size: 12px; }
+  .adm-sec-title { font-size: 15px; font-weight: 700; margin-bottom: 10px; }
+  .adm-reply { margin-top: 8px; padding: 8px 10px; border-radius: 8px; background: #3b5bfd18; border-left: 3px solid var(--primary); font-size: 13px; }
+  .adm-toast { position: fixed; left: 50%; bottom: 60px; transform: translateX(-50%); padding: 10px 20px; border-radius: 10px; color: #fff; font-size: 14px; z-index: 9999; }
+  .adm-toast.ok { background: #22c55e; }
+  .adm-toast.err { background: #ef4444; }
+  @media (max-width: 640px) {
+    .adm-stat-grid { grid-template-columns: 1fr 1fr; }
+    .adm-form-grid { grid-template-columns: 1fr; }
+  }
 </style>
 </head>
-<body data-theme="dark">
+<body>
 <div id="app"></div>
-<script type="module" src="js/admin.js?v=1.7"></script>
+<script src="js/admin.js?v=1.8"></script>
 </body>
 </html>

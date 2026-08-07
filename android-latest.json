@@ -1,7 +1,7 @@
 {
   "version": "2.0",
-  "build": 10,
-  "notes": "修复慢网/弱网下白屏：内置包直答架构秒开（登录态保留），自动清理旧缓存，线上新版热更新",
+  "build": 11,
+  "notes": "彻底修复白屏：改为纯本地架构，打开即显与网络无关；自动清理旧缓存；介绍页与图标细节优化",
   "apks": {
     "universal": "https://github.com/Smalluniverseheng/ThirdHub-Android/releases/download/v2.0/ThirdHub-Android-v2.0.apk"
   },

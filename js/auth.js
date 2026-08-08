@@ -6,7 +6,7 @@ import { toast } from './ui.js';
 /* 会员等级定义（只卖存储容量，不卖 Token） */
 export const LEVELS = [
   { id: 'guest',     name: '游客', cls: 'lv-guest',     tag: 'tag-gray',   storage: 0,                price: 0 },
-  { id: 'satellite', name: '卫星', cls: 'lv-satellite', tag: 'tag-blue',   storage: 100 * 1024 ** 2,   price: 0 },
+  { id: 'satellite', name: '卫星', cls: 'lv-satellite', tag: 'tag-blue',   storage: 10 * 1024 ** 2,    price: 0 },
   { id: 'planet',    name: '行星', cls: 'lv-planet',    tag: 'tag-green',  storage: 1024 ** 3,         price: 29 },
   { id: 'star',      name: '恒星', cls: 'lv-star',      tag: 'tag-orange', storage: 5 * 1024 ** 3,     price: 99 },
   { id: 'galaxy',    name: '星系', cls: 'lv-galaxy',    tag: 'tag-purple', storage: 20 * 1024 ** 3,    price: 199 },

@@ -1,8 +1,8 @@
 {
-  "version": "2.4",
+  "version": "2.5",
   "type": "optional",
-  "title": "ThirdHub v2.4",
-  "content": "1. 新增「云端后端」（会员专属）：与本地后端同一套 SSE 协议，登录即可用\n2. 发布可自建后端代码（backend/local-server），Termux / Node.js 部署，含会话与记忆存储\n3. AI 后端设置升级为双模式：云端会员后端 / 本地自建后端，支持连接测试与失败回退",
+  "title": "ThirdHub v2.5",
+  "content": "1. 修复历史会话右侧 1/5 区域无法滑动返回的问题\n2. 新增「AI 模型头像隐藏」设置（默认开启），AI 回复铺满整行\n3. 厂商商标按官方原图展示，不再额外衬底\n4. 会员中心改版：账号区居中、付费周期切换下移；免费版云存储修正为 10MB，套餐英文名更正",
   "downloadUrl": "https://github.com/Smalluniverseheng/ThirdHub-Android/releases/download/v2.2/ThirdHub-Android-v2.2.apk",
   "releaseDate": "2026-08-08"
 }

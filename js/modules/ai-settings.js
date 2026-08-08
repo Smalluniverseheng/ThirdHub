@@ -2,7 +2,7 @@
    对话设置：名称 / 系统提示 / 上下文上限 / 温度 / TopP / 最大输出Token / 背景图
    更多设置：偏好设置 · 会话与上下文 · 语音输入(ASR) · 语音合成(TTS) · 记忆系统 · 用量统计 · 工具中心 · 提供商与模型管理 */
 import { $, $$, el, esc, icon, toast, openOverlay, confirmDialog, formRow, modal, actionSheet } from '../ui.js';
-import { kvGet, kvSet, getSetting, setSetting, db } from '../store.js';
+import { kvGet, kvSet, getSetting, setSetting, db, emit } from '../store.js';
 import { PROVIDERS, providerById, refreshCustomProviders } from '../ai/ai-models.js';
 import { vendorIcon } from '../ai/vendors.js';
 import { pickModel } from '../ai/model-selector.js';
@@ -19,6 +19,7 @@ const PREF_DEF = {
   tempOn: false, temperature: 0.7, topPOn: false, topP: 0.9,
   stream: true, thinkSummary: true, cotReturn: true,
   speedTest: false, usageInStream: false,
+  hideAvatar: true,
 };
 const CTX_DEF = { autoTitle: false, ctxLimit: 20, compressHint: false, compressThreshold: 40 };
 
@@ -105,6 +106,7 @@ export async function showChatSettings(page, session, onChange) {
           </div>
           <input type="file" accept="image/*" data-f="bgfile" hidden>
         </div>
+        <div data-v="hideava"></div>
         <div class="row gap8" style="margin-top:18px">
           <button class="btn grow" data-a="reset">恢复默认</button>
           <button class="btn btn-primary grow" data-a="save">保存</button>
@@ -136,6 +138,18 @@ export async function showChatSettings(page, session, onChange) {
       };
       const bgClear = $('[data-a="bgclear"]', body);
       if (bgClear) bgClear.onclick = () => { bgImage = ''; toast('已清除背景，保存后生效'); };
+
+      /* AI 模型头像显隐：即时生效，无需点保存 */
+      getChatPrefs().then((prefsNow) => {
+        const slot = $('[data-v="hideava"]', body);
+        if (!slot) return;
+        slot.appendChild(toggleRow('AI 模型头像隐藏', '隐藏后 AI 回复铺满整行、更省空间；关闭则显示厂商头像', prefsNow.hideAvatar !== false, async (on2) => {
+          const p = await getChatPrefs();
+          p.hideAvatar = on2;
+          await kvSet('ai:prefs', p);
+          emit('ai:prefs-changed');
+        }));
+      });
 
       const toggles = $$('.ai-toggle', body);
       $('[data-a="save"]', body).onclick = async () => {

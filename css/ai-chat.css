@@ -123,6 +123,10 @@
 .msg.user { flex-direction: row-reverse; }
 .msg.user .msg-avatar { background: linear-gradient(135deg, var(--primary), var(--primary-deep)); color: #fff; }
 .msg-body { min-width: 0; max-width: calc(100% - 46px); }
+/* 用户气泡不顶到对侧边缘：最长也留出约 20% 的距离 */
+.msg.user .msg-body { max-width: min(80%, calc(100% - 46px)); }
+/* 隐藏 AI 头像（默认）：回复内容铺满整行 */
+.msg.assistant.msg-noava .msg-body { max-width: 100%; }
 .msg-meta { font-size: 11px; color: var(--text-tertiary); margin-bottom: 4px; display: flex; gap: 8px; align-items: center; }
 .msg.user .msg-meta { justify-content: flex-end; }
 .msg-bubble {
@@ -350,10 +354,13 @@
 /* 官方品牌图标（v1.3）：圆角方形白底 + 品牌色字形 / 彩色官方 PNG；raw 模式直接显示原图标 */
 .vendor-ico.brand { display: inline-grid; place-items: center; border-radius: 26%; overflow: hidden; position: relative; box-shadow: var(--shadow-card); }
 .vendor-ico.brand svg { width: 68%; height: 68%; }
-.vendor-ico.brand img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #fff; }
+.vendor-ico.brand img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
 .vendor-ico.brand .brand-letter { font-size: 12px; font-weight: 700; font-family: system-ui, sans-serif; }
 .vendor-ico.brand.raw { background: transparent !important; box-shadow: none !important; border: 0 !important; }
 .vendor-ico.brand.raw img { background: transparent !important; }
+/* 自带色底的完整商标：原样展示，不额外衬底、不投影、不裁角 */
+.vendor-ico.brand.self-bg { background: transparent !important; box-shadow: none !important; border-radius: 0; overflow: visible; }
+.vendor-ico.brand.self-bg svg { width: 100%; height: 100%; }
 
 /* Key 自动识别日志 */
 .identify-log {
@@ -957,10 +964,18 @@ button.rank-row-item:active { background: var(--bg-input); }
   padding: 5px 12px; border-radius: 8px; border: 1px solid var(--border);
   background: var(--bg-card); color: var(--text-secondary); font-size: 12px; cursor: pointer;
 }
-.vip-hero { padding: 8px 2px 16px; }
-.vip-hero-name { font-size: 20px; font-weight: 800; }
-.vip-hero-sub { color: var(--text-secondary); font-size: 13px; margin-top: 4px; }
-.vip-cycle { display: flex; gap: 8px; margin-bottom: 16px; }
+/* 顶部账号区：居中头像 + 昵称 + 等级徽章 */
+.vip-hero { padding: 12px 2px 18px; display: flex; flex-direction: column; align-items: center; text-align: center; }
+.vip-hero-ava {
+  width: 60px; height: 60px; border-radius: 50%; overflow: hidden;
+  background: var(--bg-card); box-shadow: var(--shadow-card); margin-bottom: 10px;
+}
+.vip-hero-ava img { width: 100%; height: 100%; object-fit: cover; }
+.vip-hero-name { font-size: 17px; font-weight: 800; word-break: break-all; }
+.vip-hero-sub { color: var(--text-secondary); font-size: 12.5px; margin-top: 6px; display: flex; align-items: center; gap: 8px; justify-content: center; }
+.vip-hero-badge { padding: 3px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 700; }
+.vip-hero-exp { color: var(--text-tertiary); font-size: 11.5px; }
+.vip-cycle { display: flex; gap: 8px; margin: 14px 0 2px; }
 .vip-cycle-btn {
   flex: 1; padding: 10px; border-radius: 12px; border: 1px solid var(--border);
   background: var(--bg-card); color: var(--text-secondary); font-size: 13px; cursor: pointer;

@@ -48,7 +48,14 @@
   background: linear-gradient(135deg, var(--primary), var(--primary-deep)); color: #fff;
 }
 .ai-drawer-logo svg { width: 20px; height: 20px; }
-.ai-drawer-title { font-size: 15px; font-weight: 800; }
+.ai-drawer-user { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.ai-drawer-title { font-size: 15px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 34vw; }
+/* 会员等级牌（Kimi 同款黑底胶囊，深浅色自适应反转） */
+.ai-drawer-level {
+  flex: none; background: var(--text-primary); color: var(--bg-page);
+  font-size: 10px; font-weight: 700; line-height: 1; padding: 4px 8px;
+  border-radius: 999px; letter-spacing: .02em;
+}
 .ai-drawer-item {
   display: flex; align-items: center; gap: 11px;
   width: 100%; text-align: left;
@@ -61,7 +68,7 @@
 .ai-drawer-item svg { width: 19px; height: 19px; flex-shrink: 0; color: var(--text-secondary); }
 .ai-drawer-item span:nth-child(2) { flex: 1; }
 .ai-drawer-arrow { color: var(--text-tertiary); display: inline-flex; }
-.ai-drawer-arrow svg { width: 15px; height: 15px; }
+.ai-drawer-arrow svg { width: 17px; height: 17px; }
 .ai-drawer-sec { font-size: 12px; font-weight: 700; color: var(--text-tertiary); padding: 14px 8px 8px; }
 .ai-drawer-sessions { flex: 1; overflow-y: auto; min-height: 0; display: flex; flex-direction: column; gap: 2px; }
 .ai-drawer-empty { text-align: center; color: var(--text-tertiary); font-size: 12.5px; padding: 18px 0; }

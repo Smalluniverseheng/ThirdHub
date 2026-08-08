@@ -23,7 +23,7 @@ import { showAdvSettings, showChatSettings, getChatPrefs, getCtxConf } from './a
 import { openAgentStudio } from './ai-agent-studio.js';
 import { showInspirePage, showInspireDetail } from './ai-inspire.js';
 import { device } from '../device.js';
-import { currentUser, zhErr } from '../auth.js';
+import { currentUser, zhErr, levelById } from '../auth.js';
 import { trashChat, recycleDays } from './recycle-bin.js';
 
 /* 当前用户头像缓存（消息头像 + 抽屉头部同步） */
@@ -32,7 +32,32 @@ export function userAvatarHtml(cls = '') {
   return `<img class="${cls}" src="${__userAvatar ? esc(__userAvatar) : 'icons/brand.jpg'}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">`;
 }
 currentUser().then((u) => { __userAvatar = (u && u.avatar) || ''; }).catch(() => {});
-on('auth:changed', () => { currentUser().then((u) => { __userAvatar = (u && u.avatar) || ''; }).catch(() => {}); });
+on('auth:changed', () => {
+  currentUser().then((u) => { __userAvatar = (u && u.avatar) || ''; }).catch(() => {});
+  const dr = document.getElementById('ai-drawer');
+  if (dr) updateDrawerHead(dr);
+});
+
+/* 抽屉头部同步：用户头像（默认商标）、昵称（未登录显示品牌名）、会员等级牌 */
+async function updateDrawerHead(drawer) {
+  try {
+    const u = await currentUser();
+    __userAvatar = (u && u.avatar) || '';
+    const av = $('[data-role="d-avatar"]', drawer);
+    if (av) av.innerHTML = userAvatarHtml();
+    const nameEl = $('[data-role="d-name"]', drawer);
+    if (nameEl) nameEl.textContent = (u && u.nickname) || 'ThirdHub AI';
+    const lvEl = $('[data-role="d-level"]', drawer);
+    if (lvEl) {
+      if (u) {
+        lvEl.textContent = levelById(u.level).name;
+        lvEl.hidden = false;
+      } else {
+        lvEl.hidden = true;
+      }
+    }
+  } catch (e) { /* 忽略：保持默认品牌形态 */ }
+}
 
 /* AI 头像显隐（默认隐藏：回复铺满整行；对话设置中可改回显示） */
 let hideAiAvatar = true;
@@ -142,10 +167,13 @@ export async function renderAIChat(page) {
     <div class="ai-peek-mask" id="ai-peek-mask"></div>
     <div class="ai-drawer-mask" data-a="drawer-mask"></div>
     <aside class="ai-drawer" id="ai-drawer">
-      <button class="ai-drawer-head" data-a="d-adv" title="高级设置">
+      <button class="ai-drawer-head" data-a="d-adv" title="设置">
         <span class="ai-drawer-logo" data-role="d-avatar">${userAvatarHtml()}</span>
-        <span class="ai-drawer-title">ThirdHub AI</span>
-        <span class="ai-drawer-arrow">${icon('arrowR')}</span>
+        <span class="ai-drawer-user">
+          <span class="ai-drawer-title" data-role="d-name">ThirdHub AI</span>
+          <span class="ai-drawer-level" data-role="d-level" hidden></span>
+        </span>
+        <span class="ai-drawer-arrow">${icon('settings')}</span>
       </button>
       <button class="ai-drawer-item" data-a="d-models">${icon('cpu')}<span>模型</span><span class="ai-drawer-arrow">${icon('arrowR')}</span></button>
       <div class="ai-dtabs" id="ai-dtabs">
@@ -247,12 +275,8 @@ export async function renderAIChat(page) {
   $('[data-a="d-new"]', drawer).onclick = () => { closeDrawer(); newSession(); renderMessages(page); toast('已开始新对话'); };
   $('[data-a="d-models"]', drawer).onclick = () => { closeDrawer(); showModelsPage(page); };
   $('[data-a="d-adv"]', drawer).onclick = () => { closeDrawer(); showAdvSettings(page); };
-  /* 抽屉头部头像与账号头像实时同步 */
-  currentUser().then((u) => {
-    __userAvatar = (u && u.avatar) || '';
-    const av = $('[data-role="d-avatar"]', drawer);
-    if (av) av.innerHTML = userAvatarHtml();
-  }).catch(() => {});
+  /* 抽屉头部：头像 / 昵称 / 会员等级牌，与账号实时同步 */
+  updateDrawerHead(drawer);
   $('#ai-dsearch-input', page).addEventListener('input', (e) => {
     // 搜索时自动切到「历史会话」tab
     if (drawerTab !== 'history') {

@@ -34,6 +34,20 @@ export function userAvatarHtml(cls = '') {
 currentUser().then((u) => { __userAvatar = (u && u.avatar) || ''; }).catch(() => {});
 on('auth:changed', () => { currentUser().then((u) => { __userAvatar = (u && u.avatar) || ''; }).catch(() => {}); });
 
+/* AI 头像显隐（默认隐藏：回复铺满整行；对话设置中可改回显示） */
+let hideAiAvatar = true;
+let lastPage = null;
+getChatPrefs().then((p) => { hideAiAvatar = p.hideAvatar !== false; }).catch(() => {});
+on('ai:prefs-changed', () => {
+  getChatPrefs().then((p) => {
+    const nv = p.hideAvatar !== false;
+    if (nv !== hideAiAvatar) {
+      hideAiAvatar = nv;
+      if (lastPage && document.contains(lastPage)) renderMessages(lastPage);
+    }
+  }).catch(() => {});
+});
+
 const MODES = [
   { id: 'single',  name: '单模型',   desc: '一对一对话' },
   { id: 'compare', name: '多模型对比', desc: '同一问题多模型并排回答' },
@@ -536,6 +550,11 @@ function bindDrawerSwipe(page, drawer, openDrawer, closeDrawer) {
   drawer.addEventListener('touchmove', onMove, { passive: true });
   drawer.addEventListener('touchend', finish);
   drawer.addEventListener('touchcancel', finish);
+  // 右侧露出的 1/5 遮罩区：同样支持左滑拖动关闭（轻点仍为直接关闭）
+  peek.addEventListener('touchstart', (e) => onStart(e, true), { passive: true });
+  peek.addEventListener('touchmove', onMove, { passive: true });
+  peek.addEventListener('touchend', finish);
+  peek.addEventListener('touchcancel', finish);
 }
 
 /* ================= 抽屉：历史会话 / AI模型 / 智能体 / 灵感广场 ================= */
@@ -1157,6 +1176,7 @@ function createThink(bubble, reasoning = '') {
 
 /* ================= 消息渲染 ================= */
 function renderMessages(page) {
+  lastPage = page;
   const box = $('#ai-messages', page);
   box.innerHTML = '';
   applySessionBg(page);
@@ -1224,8 +1244,9 @@ function appendMessage(page, m, msgIndex = -1) {
   }
 
   const isUser = m.role === 'user';
-  const wrap = el(`<div class="msg ${isUser ? 'user' : 'assistant'}">
-    <div class="msg-avatar">${isUser ? userAvatarHtml() : vendorIcon(m.providerId || currentModel.providerId)}</div>
+  const noAva = !isUser && hideAiAvatar;
+  const wrap = el(`<div class="msg ${isUser ? 'user' : 'assistant'}${noAva ? ' msg-noava' : ''}">
+    ${noAva ? '' : `<div class="msg-avatar">${isUser ? userAvatarHtml() : vendorIcon(m.providerId || currentModel.providerId)}</div>`}
     <div class="msg-body">
       <div class="msg-meta">${m.debateRole ? `<span class="debate-side debate-${m.debateRole}">${m.debateRole === 'pro' ? '正方' : m.debateRole === 'con' ? '反方' : '裁判'}</span>` : ''}<span>${esc(m.model || '')}</span>${m.ms ? `<span class="msg-ms">${m.ms}ms</span>` : ''}</div>
       <div class="msg-bubble"></div>

@@ -18,6 +18,11 @@ if (typeof window !== 'undefined') {
       img.dataset.fb = rest.slice(1).join('|');
       img.src = rest[0];
     } else {
+      const span = img.parentElement;
+      if (span) {
+        span.classList.remove('self-bg', 'has-img'); // 解除原图模式，恢复字母徽标衬底
+        if (span.dataset.cb) span.style.background = span.dataset.cb; // 兜底字母徽标补回品牌色
+      }
       img.remove(); // 露出底层首字母徽标
     }
   };
@@ -32,18 +37,26 @@ export function clearCustomVendorIcons() {
 }
 const escAttr = (s) => String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 
+/* 自带色底的完整商标（标志本身已含背景，不再额外衬底、不裁切） */
+const SELF_BG = { xiaomi: true };
+
 export function vendorIcon(id, opts = {}) {
   const raw = !!(opts && opts.raw);
   const custom = CUSTOM_ICONS[id];
   if (custom) {
-    return '<span class="vendor-ico brand has-img custom-icon' + (raw ? ' raw' : '') + '"' + (raw ? '' : ' style="background:#fff"') + '><img src="' + escAttr(custom) + '" loading="lazy" alt=""></span>';
+    // 自定义图标按原图展示，不额外衬白底
+    return '<span class="vendor-ico brand has-img custom-icon self-bg"><img src="' + escAttr(custom) + '" loading="lazy" alt=""></span>';
   }
   const b = BRANDS[id] || BRANDS.custom;
   // 1. 内嵌官方 SVG（离线可用，品牌色字形）
   if (b.emb && PATHS[b.emb]) {
+    if (SELF_BG[id]) {
+      // 商标本身带背景（如小米橙底方块）：原样绘制，不再加白底衬层
+      return '<span class="vendor-ico brand self-bg"><svg viewBox="0 0 24 24" fill="' + b.color + '" aria-hidden="true"><path d="' + PATHS[b.emb] + '"/></svg></span>';
+    }
     return '<span class="vendor-ico brand' + (raw ? ' raw' : '') + '"' + (raw ? '' : ' style="background:#fff"') + '><svg viewBox="0 0 24 24" fill="' + b.color + '" aria-hidden="true"><path d="' + PATHS[b.emb] + '"/></svg></span>';
   }
-  // 2. CDN 官方图标链 + 首字母兜底
+  // 2. CDN 官方图标链 + 首字母兜底（官方图多为自带色底的完整商标：原样展示，不再额外衬底）
   const urls = [];
   if (b.lobe) { urls.push(LOBE_PRIMARY + b.lobe + '.png'); urls.push(LOBE_FALLBACK + b.lobe + '.png'); }
   if (b.simple) urls.push(SIMPLE_CDN + b.simple);
@@ -51,7 +64,10 @@ export function vendorIcon(id, opts = {}) {
   if (urls.length) {
     inner += '<img src="' + urls[0] + '" data-fb="' + encodeURIComponent(urls.slice(1).join('|')) + '" onerror="__thBrandErr(this)" loading="lazy" alt="">';
   }
-  return '<span class="vendor-ico brand' + (urls.length ? ' has-img' : '') + (raw ? ' raw' : '') + '"' + (raw ? '' : ' style="background:' + b.color + '"') + '>' + inner + '</span>';
+  // 图片加载全部失败时，由 __thBrandErr 把 data-cb 的品牌色补回到底层字母徽标上
+  const cb = (urls.length && !raw) ? ' data-cb="' + b.color + '"' : '';
+  const bg = raw ? '' : (urls.length ? '' : ' style="background:' + b.color + '"');
+  return '<span class="vendor-ico brand' + (urls.length ? ' has-img self-bg' : '') + (raw ? ' raw' : '') + '"' + bg + cb + '>' + inner + '</span>';
 }
 
 export function vendorIconRaw(id) { return vendorIcon(id, { raw: true }); }

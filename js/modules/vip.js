@@ -1,5 +1,5 @@
-/* ===== ThirdHub js/modules/vip.js — 会员中心（v1.7，仿 Kimi 版式） =====
-   横向滑动套餐卡片（卫星 Andante / 行星 Moderato / 恒星 Allegretto / 星系 Allegro）
+/* ===== ThirdHub js/modules/vip.js — 会员中心 =====
+   横向滑动套餐卡片（卫星 Satellite / 行星 Planet / 恒星 Star / 星系 Galaxy）
    每个卡片内权益内容竖向滚动 · 月付/年付切换 · 右上角 额度 / 发票
    套餐定价存云端 th_vip_plans，管理员后台可随时修改 */
 import { $, $$, el, esc, icon, toast, openOverlay, modal, formRow, fmtBytes, fmtDate } from '../ui.js';
@@ -8,11 +8,29 @@ import { currentUser, redeemCard, levelById } from '../auth.js';
 
 /* 本地兜底定价（云端不可用时） */
 const FALLBACK_PLANS = [
-  { id: 'satellite', name: '卫星版 Andante', level: 'satellite', monthly: 0, yearly: 0, storage: '100MB', tagline: '轻装起步', benefits: ['100MB 云存储空间', '云端同步书架 / 历史 / 收藏', '设置多端同步', '多设备管理'] },
-  { id: 'planet', name: '行星版 Moderato', level: 'planet', monthly: 12, yearly: 118, storage: '1GB', tagline: '稳步前行', benefits: ['1GB 云存储空间', '云端同步全部数据', '设置多端同步', '多设备管理', '会员云端代理（多设备同步输出）', '意见反馈优先处理'] },
-  { id: 'star', name: '恒星版 Allegretto', level: 'star', monthly: 30, yearly: 298, storage: '5GB', tagline: '明亮闪耀', benefits: ['5GB 云存储空间', '云端同步全部数据', '设置多端同步', '多设备管理', '会员云端代理（多设备同步输出）', '专属客服通道', '新功能优先体验'] },
-  { id: 'galaxy', name: '星系版 Allegro', level: 'galaxy', monthly: 68, yearly: 668, storage: '20GB', tagline: '浩瀚无垠', benefits: ['20GB 云存储空间', '云端同步全部数据', '设置多端同步', '多设备管理', '会员云端代理（多设备同步输出）', '专属客服通道', '新功能优先体验', '定制化支持'] },
+  { id: 'satellite', name: '卫星版 Satellite', level: 'satellite', monthly: 0, yearly: 0, storage: '10MB', tagline: '轻装起步', benefits: ['10MB 云存储空间', '云端同步书架 / 历史 / 收藏', '设置多端同步', '多设备管理'] },
+  { id: 'planet', name: '行星版 Planet', level: 'planet', monthly: 12, yearly: 118, storage: '1GB', tagline: '稳步前行', benefits: ['1GB 云存储空间', '云端同步全部数据', '设置多端同步', '多设备管理', '会员云端代理（多设备同步输出）', '意见反馈优先处理'] },
+  { id: 'star', name: '恒星版 Star', level: 'star', monthly: 30, yearly: 298, storage: '5GB', tagline: '明亮闪耀', benefits: ['5GB 云存储空间', '云端同步全部数据', '设置多端同步', '多设备管理', '会员云端代理（多设备同步输出）', '专属客服通道', '新功能优先体验'] },
+  { id: 'galaxy', name: '星系版 Galaxy', level: 'galaxy', monthly: 68, yearly: 668, storage: '20GB', tagline: '浩瀚无垠', benefits: ['20GB 云存储空间', '云端同步全部数据', '设置多端同步', '多设备管理', '会员云端代理（多设备同步输出）', '专属客服通道', '新功能优先体验', '定制化支持'] },
 ];
+
+/* 云端历史数据的品牌名修正（价格 / 额度等仍以云端为准，管理后台可改） */
+const PLAN_FIX = {
+  satellite: { name: '卫星版 Satellite', storage: '10MB' },
+  planet: { name: '行星版 Planet' },
+  star: { name: '恒星版 Star' },
+  galaxy: { name: '星系版 Galaxy' },
+};
+
+function applyPlanFix(p) {
+  const fix = PLAN_FIX[p.id];
+  if (!fix) return p;
+  const out = { ...p, ...fix };
+  if (p.id === 'satellite' && Array.isArray(p.benefits) && p.benefits.length && /MB|GB/.test(p.benefits[0])) {
+    out.benefits = ['10MB 云存储空间', ...p.benefits.slice(1)];
+  }
+  return out;
+}
 
 export async function getVipPlans() {
   if (hasCloud()) {
@@ -21,6 +39,7 @@ export async function getVipPlans() {
       if (!error && data && data.length) {
         const order = ['satellite', 'planet', 'star', 'galaxy'];
         return data.map((r) => ({ id: r.id, ...(r.data || {}) }))
+          .map(applyPlanFix)
           .sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
       }
     } catch (e) {}
@@ -50,17 +69,21 @@ export async function showVipCenter() {
       <button class="vip-head-btn" id="vip-invoice">发票</button>`,
     build: async (body) => {
       const curLevel = u ? u.level : 'guest';
+      const lv = levelById(curLevel);
       body.innerHTML = `
         <div class="vip-hero">
+          <div class="vip-hero-ava"><img src="${u && u.avatar ? esc(u.avatar) : 'icons/brand.jpg'}" alt=""></div>
           <div class="vip-hero-name">${u ? esc(u.nickname || '用户') : '游客'}</div>
-          <div class="vip-hero-sub">${u ? `当前：${levelById(curLevel).name}${u.expireAt ? ' · ' + fmtDate(new Date(u.expireAt).getTime()) + ' 到期' : ''}` : '登录后可开通会员'}</div>
+          <div class="vip-hero-sub">${u
+            ? `<span class="vip-hero-badge ${lv.tag}">${lv.name}${lv.price > 0 ? '会员' : ''}</span>${u.expireAt ? `<span class="vip-hero-exp">${fmtDate(new Date(u.expireAt).getTime())} 到期</span>` : ''}`
+            : '登录后可开通会员'}</div>
         </div>
+        <div class="vip-slider" id="vip-slider"></div>
+        <div class="vip-dots" id="vip-dots"></div>
         <div class="vip-cycle">
           <button class="vip-cycle-btn on" data-c="monthly">按月付费</button>
           <button class="vip-cycle-btn" data-c="yearly">按年付费 <span class="vip-save">省约 2 个月</span></button>
         </div>
-        <div class="vip-slider" id="vip-slider"></div>
-        <div class="vip-dots" id="vip-dots"></div>
         <div class="muted" style="text-align:center;font-size:12px;margin-top:14px;line-height:1.7">
           会员扩容云存储并解锁云端代理等能力；AI 对话始终使用你自己的 API Key，不额外计费。<br>
           支持支付宝 / 微信支付，也可以使用卡密激活。

@@ -122,24 +122,49 @@ function reqHeaders() {
   }
   return h;
 }
-/* 规则引擎（v2.8 重写，兼容阅读APP语法）：
-   - 列表/链式规则用 @ 分段：'ul.1@a' = 第 2 个 ul 内的所有 a（.N 为 0 起索引，阅读APP扩展语法）
+/* 规则引擎（v3.0 重写，兼容阅读APP语法）：
+   - 列表/链式规则用 @ 分段：'ul.1@a' = 第 2 个 ul 内的所有 a（.N 为 0 起索引）
+   - 前缀：id.xxx / class.a b / tag.a / text.文本（按自身文本匹配元素）
+   - 排除：'tag.tr!0' 排除第 1 个，'li!0:2' 排除区间
+   - 净化：规则后接 '##正则' 删除、'##正则##替换' 替换
    - 叶规则 'h3@text' / 'img@src'：尾段是属性关键字则提取属性，否则视为链式段
    - 多条备用规则用 || 分隔 */
 const RULE_ATTRS = ['text', 'html', 'href', 'src', 'ownText', 'textNodes', 'alt', 'title', 'value', 'id', 'class', 'style'];
 function parseSeg(seg) {
-  const m = String(seg).match(/^(.*)\\.(\\d+)$/);
-  if (m && m[1]) return { sel: m[1], index: parseInt(m[2], 10) };
-  return { sel: String(seg), index: null };
+  seg = String(seg).trim();
+  let exclude = null;
+  const em = seg.match(/!(\\d+(:\\d+)?)$/);
+  if (em) { exclude = em[1]; seg = seg.slice(0, seg.length - em[0].length); }
+  let index = null;
+  const im = seg.match(/^(.*)\\.(\\d+)$/);
+  if (im && im[1] && !/^(id|class|tag|text)$/.test(im[1])) { index = parseInt(im[2], 10); seg = im[1]; }
+  return { sel: seg, index: index, exclude: exclude };
 }
+function segToCss(sel) {
+  if (sel.indexOf('id.') === 0) return '#' + sel.slice(3).trim();
+  if (sel.indexOf('class.') === 0) return sel.slice(6).trim().split(/\\s+/).map(function (c) { return '.' + c; }).join('');
+  if (sel.indexOf('tag.') === 0) return sel.slice(4).trim();
+  return sel;
+}
+function ownTextOf(el) { return [...el.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join('').trim(); }
 function querySeg(roots, seg) {
-  const { sel, index } = parseSeg(seg);
-  if (!sel) return roots;
+  const p = parseSeg(seg);
+  if (!p.sel) return roots;
   const out = [];
   roots.forEach((r) => {
-    let els;
-    try { els = [...r.querySelectorAll(sel)]; } catch (e) { els = []; }
-    if (index != null) { if (els[index]) out.push(els[index]); }
+    let els = [];
+    if (p.sel.indexOf('text.') === 0) {
+      const want = p.sel.slice(5).trim();
+      try { els = [...r.querySelectorAll('*')].filter((el) => ownTextOf(el).indexOf(want) >= 0); } catch (e) { els = []; }
+    } else {
+      const css = segToCss(p.sel);
+      try { els = [...r.querySelectorAll(css)]; } catch (e) { els = []; }
+    }
+    if (p.exclude) {
+      const parts = p.exclude.split(':').map(Number);
+      els = els.filter((_, i) => (parts.length === 2 ? (i < parts[0] || i >= parts[1]) : i !== parts[0]));
+    }
+    if (p.index != null) { if (els[p.index]) out.push(els[p.index]); }
     else out.push(...els);
   });
   return out;
@@ -157,8 +182,19 @@ function extractAttr(t, attr) {
   if (!t) return '';
   if (attr === 'text') return (t.textContent || '').trim();
   if (attr === 'html') return t.innerHTML || '';
-  if (attr === 'ownText') return [...t.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join('').trim();
+  if (attr === 'ownText') return ownTextOf(t);
+  if (attr === 'textNodes') return ownTextOf(t);
   return t.getAttribute(attr) || t.getAttribute('data-' + attr) || '';
+}
+function applyPurify(v, segs) {
+  let s = String(v);
+  for (let i = 0; i < segs.length; i += 2) {
+    const pat = segs[i];
+    const rep = segs[i + 1] || '';
+    if (!pat) continue;
+    try { s = s.replace(new RegExp(pat, 'g'), rep); } catch (e) { s = s.split(pat).join(rep); }
+  }
+  return s;
 }
 function pickOne(el, rule, defaultAttr) {
   if (!rule) return '';
@@ -166,6 +202,9 @@ function pickOne(el, rule, defaultAttr) {
   for (let alt of alts) {
     alt = alt.trim();
     if (!alt) continue;
+    const hash = alt.split('##');
+    alt = hash[0].trim();
+    const psegs = hash.slice(1);
     const ai = alt.lastIndexOf('@');
     const tail = ai >= 0 ? alt.slice(ai + 1).trim() : '';
     let chain = alt, attr = defaultAttr || 'text';
@@ -173,18 +212,21 @@ function pickOne(el, rule, defaultAttr) {
     else if (ai === 0) { chain = ''; attr = tail || attr; }
     const els = chain ? selectChain(el, chain) : [el];
     if (!els.length) continue;
-    const v = extractAttr(els[0], attr);
+    const v = applyPurify(extractAttr(els[0], attr), psegs);
     if (v) return String(v).trim();
   }
   return '';
 }
 function pickAll(el, rule, defaultAttr) {
   if (!rule) return [];
-  const ai = String(rule).lastIndexOf('@');
-  const tail = ai >= 0 ? String(rule).slice(ai + 1).trim() : '';
-  let chain = String(rule), attr = defaultAttr || 'text';
-  if (ai > 0 && (RULE_ATTRS.includes(tail) || tail.startsWith('data-'))) { chain = String(rule).slice(0, ai); attr = tail; }
-  return selectChain(el, chain).map((t) => extractAttr(t, attr)).filter(Boolean);
+  const hash = String(rule).split('##');
+  const body = hash[0].trim();
+  const psegs = hash.slice(1);
+  const ai = body.lastIndexOf('@');
+  const tail = ai >= 0 ? body.slice(ai + 1).trim() : '';
+  let chain = body, attr = defaultAttr || 'text';
+  if (ai > 0 && (RULE_ATTRS.includes(tail) || tail.startsWith('data-'))) { chain = body.slice(0, ai); attr = tail; }
+  return selectChain(el, chain).map((t) => applyPurify(extractAttr(t, attr), psegs).trim()).filter(Boolean);
 }
 async function fetchDoc(url) {
   const html = await legado.http.get(url, reqHeaders());
@@ -310,7 +352,7 @@ export function basicToJsSources(text) {
 
 /* v2.9：旧版适配器生成的连接器代码存在用户本地库中，规则引擎 bug 也一起被存了下来。
    这里从旧代码里提取内嵌的 SRC 规则 JSON，用新版引擎重新生成代码（返回 null 表示无需升级）。 */
-const NEW_ENGINE_MARK = '规则引擎（v2.8 重写';
+const NEW_ENGINE_MARK = '规则引擎（v3.0';
 export function regenLegacyCode(code) {
   const text = String(code || '');
   if (!text.includes('const SRC = ')) return null;      // 不是适配器生成的连接器

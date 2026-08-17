@@ -22,6 +22,7 @@ ThirdHub 网站版有三层备份，任何一层都可以把站点恢复到历�
 | v2.6 | `3cff4e1` | `v2.6` | `252592a1`（wrangler 部署，含云端后端） | `0dcb5c2` |
 | v2.7 | 待补推（GitHub token 失效+API 故障，代码见 CF 部署） | `backup/v2.6-before-source-fix` 待补 | `094e36e4`（wrangler 部署，含 /api/proxy 中转） | `d5fc399` |
 | v2.8 | 待补推（同 v2.7，等新 token） | 待补 | `f860b407`（代码）、`8a7a3042`（含回滚文档） | `e7d2529` |
+| v2.9 | 待补推（同 v2.7，等新 token） | 待补 | `5e0a4886`（旧连接器自动升级新规则引擎） | `d87c1b6` |
 
 ## 回退方法
 

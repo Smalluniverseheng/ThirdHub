@@ -5,7 +5,7 @@ import { isTvboxConfig, loadTvboxSites, tvboxToJsSource } from '../engine/tvbox-
 import { isLegadoJson, legadoToJsSources, isBasicJson, basicToJsSources } from '../engine/legado-adapter.js';
 import { isVeneraJs, isVeneraIndex, veneraToJsSource } from '../engine/venera-adapter.js';
 import { getEngine, destroyEngines } from '../engine/source-engine.js';
-import { on } from '../store.js';
+import { on, kvGet, kvSet } from '../store.js';
 
 export async function renderCategory(page) {
   page.innerHTML = `
@@ -18,6 +18,10 @@ export async function renderCategory(page) {
     <div class="cat-section">
       <div class="section-head" style="padding:0 18px 10px">${icon('plug')}<span>源管理</span></div>
       <div class="cat-manager" data-role="manager"></div>
+    </div>
+    <div class="cat-section">
+      <div class="section-head" style="padding:0 18px 10px">${icon('cloud')}<span>源仓库</span><span class="muted" data-v="repocount"></span></div>
+      <div data-role="repos" style="padding:0 16px"></div>
     </div>
     <div class="cat-section">
       <div class="section-head" style="padding:0 18px 10px">${icon('folder')}<span>我的连接器</span><span class="muted" data-v="count"></span></div>
@@ -210,6 +214,14 @@ export async function renderCategory(page) {
 
   async function importText(text, from) {
     try {
+      /* v3.0：粘贴的是裸 URL 时自动下载后导入 */
+      const bare = String(text || '').trim();
+      if (/^https?:\/\/\S+$/.test(bare) && bare !== from) {
+        toast('正在下载链接内容…');
+        const { httpGet } = await import('../engine/proxy.js');
+        const dl = await httpGet(bare);
+        return await importText(dl, bare);
+      }
       if (isVeneraIndex(text)) return await importVeneraIndex(text, from);
       if (isVeneraJs(text)) {
         const s2 = await importSource(veneraToJsSource(text, /^https?:\/\//.test(from || '') ? from : ''));
@@ -322,6 +334,137 @@ export async function renderCategory(page) {
     if (a === 'proxy') b.onclick = proxyFlow;
   });
 
+  /* ---------- v3.0 源仓库：添加你自己的仓库地址（index.json），只从你的仓库选源导入 ---------- */
+  const REPOS_KEY = 'source:repos';
+  const getRepos = async () => (await kvGet(REPOS_KEY, [])) || [];
+  const saveRepos = (list) => kvSet(REPOS_KEY, list);
+
+  /* 拉取仓库索引，识别两种格式：
+     - Venera 图源仓库：[{ name, fileName, key, version }]（图源文件与 index.json 同目录）
+     - 阅读APP书源合集：[{ bookSourceName, bookSourceUrl, ... }]（每条即完整书源） */
+  async function fetchRepo(repo) {
+    const { httpGet } = await import('../engine/proxy.js');
+    const text = await httpGet(repo.url);
+    const base = repo.url.slice(0, repo.url.lastIndexOf('/') + 1);
+    if (isVeneraIndex(text)) {
+      const arr = JSON.parse(String(text).trim());
+      return { fmt: 'venera', entries: arr.map((it) => ({ name: it.name || it.key, version: it.version || '', file: base + it.fileName })) };
+    }
+    if (isLegadoJson(text)) {
+      const arr = JSON.parse(String(text).trim());
+      const list = Array.isArray(arr) ? arr : [arr];
+      return { fmt: 'legado', entries: list.filter((it) => it && (it.bookSourceName || it.bookSourceUrl)).map((it) => ({ name: it.bookSourceName || it.bookSourceUrl, version: '', raw: it })) };
+    }
+    throw new Error('无法识别的仓库索引格式（支持 Venera 图源仓库 / 阅读APP书源合集 JSON）');
+  }
+
+  async function addRepoEntry(repo, entry, btn) {
+    if (btn) { btn.disabled = true; btn.textContent = '导入中…'; }
+    try {
+      const existing = await listSources();
+      if (existing.some((s) => s.name === entry.name)) { toast(`「${entry.name}」已存在`, 'err'); return; }
+      if (repo.fmt === 'venera') {
+        const { httpGet } = await import('../engine/proxy.js');
+        const code = await httpGet(entry.file);
+        await importSource(veneraToJsSource(code, entry.file));
+      } else {
+        await importSource(legadoToJsSources(JSON.stringify([entry.raw]))[0]);
+      }
+      toast(`已添加「${entry.name}」`, 'ok');
+      if (btn) btn.textContent = '已添加';
+    } catch (e) {
+      toast('添加失败：' + e.message, 'err');
+      if (btn) { btn.disabled = false; btn.textContent = '添加'; }
+    }
+  }
+
+  async function openRepo(repo) {
+    const body = el('<div class="muted" style="padding:12px 4px">正在读取仓库…</div>');
+    const m = modal({
+      title: '源仓库', body,
+      footer: '<button class="btn grow" data-a="close">关闭</button>',
+    });
+    $('[data-a="close"]', m.mask).onclick = m.close;
+    try {
+      const data = await fetchRepo(repo);
+      repo.fmt = data.fmt;
+      body.innerHTML = `<div class="muted" style="padding:2px 4px 10px;font-size:12px;word-break:break-all">${esc(repo.url)}<br>共 ${data.entries.length} 个源（${data.fmt === 'venera' ? 'Venera 图源' : '阅读APP书源'}）</div>` +
+        data.entries.map((e2, i) => `
+          <div class="row gap8" style="padding:8px 4px;border-top:1px solid var(--line)">
+            <div class="grow" style="min-width:0">
+              <div style="font-size:14px;font-weight:600" class="ellipsis">${esc(e2.name)}</div>
+              ${e2.version ? `<div class="muted" style="font-size:12px">v${esc(e2.version)}</div>` : ''}
+            </div>
+            <button class="btn btn-primary" style="flex:none;padding:6px 14px" data-add="${i}">添加</button>
+          </div>`).join('');
+      $$('[data-add]', body).forEach((b) => {
+        b.onclick = () => addRepoEntry(repo, data.entries[Number(b.dataset.add)], b);
+      });
+    } catch (e) {
+      body.innerHTML = `<div class="muted" style="padding:12px 4px">读取失败：${esc(e.message)}</div>`;
+    }
+  }
+
+  async function renderRepos() {
+    const repos = await getRepos();
+    $('[data-v="repocount"]', page).textContent = repos.length ? `（${repos.length}）` : '';
+    const box = $('[data-role="repos"]', page);
+    box.innerHTML = repos.map((r, i) => `
+      <div class="list-item" style="margin-bottom:8px">
+        <span class="list-ico">${icon('cloud')}</span>
+        <button class="grow card-press" style="text-align:left;min-width:0;background:none;border:none;padding:0" data-open="${i}">
+          <div style="font-size:14px;font-weight:600" class="ellipsis">${esc(r.name || r.url)}</div>
+          <div class="muted ellipsis" style="font-size:12px">${esc(r.url)}</div>
+        </button>
+        <button class="icon-btn" data-del="${i}" title="删除仓库">${icon('trash')}</button>
+      </div>`).join('') + `
+      <button class="btn grow" data-a="addrepo" style="margin-bottom:4px">＋ 添加源仓库地址</button>
+      <div class="muted" style="font-size:12px;padding:2px 2px 8px;line-height:1.7">填入你维护的 index.json 地址（GitHub / jsDelivr 均可），仓库里整理的书源、图源会列在这里，随取随用。</div>`;
+    $$('[data-open]', box).forEach((b) => { b.onclick = async () => openRepo((await getRepos())[Number(b.dataset.open)]); });
+    $$('[data-del]', box).forEach((b) => {
+      b.onclick = async () => {
+        const repos2 = await getRepos();
+        const r = repos2[Number(b.dataset.del)];
+        if (!(await confirmDialog('删除仓库', `仅删除仓库地址「${r.name || r.url}」，已导入的连接器不受影响。`))) return;
+        repos2.splice(Number(b.dataset.del), 1);
+        await saveRepos(repos2);
+        renderRepos();
+      };
+    });
+    $('[data-a="addrepo"]', box).onclick = () => {
+      const body = el(`<div>${formRow('仓库地址', '<input class="input" data-f="repo" placeholder="https://…/index.json">')}<div class="muted" style="font-size:12px;padding-top:8px">该地址应指向一个 index.json：可以是 Venera 图源仓库索引，也可以是阅读APP书源合集 JSON。</div></div>`);
+      const m = modal({
+        title: '添加源仓库', body,
+        footer: '<button class="btn grow" data-a="cancel">取消</button><button class="btn btn-primary grow" data-a="ok">验证并添加</button>',
+      });
+      $('[data-a="cancel"]', m.mask).onclick = m.close;
+      $('[data-a="ok"]', m.mask).onclick = async () => {
+        const url = $('[data-f="repo"]', body).value.trim();
+        if (!/^https?:\/\/\S+$/.test(url)) return toast('请输入有效的 http(s) 地址', 'err');
+        const okBtn = $('[data-a="ok"]', m.mask);
+        okBtn.disabled = true; okBtn.textContent = '验证中…';
+        try {
+          const repo = { url, addedAt: Date.now() };
+          const data = await fetchRepo(repo);
+          repo.fmt = data.fmt;
+          repo.name = url.replace(/^https?:\/\//, '').slice(0, 40);
+          const repos2 = await getRepos();
+          if (repos2.some((r) => r.url === url)) { toast('该仓库已添加', 'err'); m.close(); return; }
+          repos2.push(repo);
+          await saveRepos(repos2);
+          m.close();
+          renderRepos();
+          toast(`仓库已添加（${data.entries.length} 个源）`, 'ok');
+          openRepo(repo);
+        } catch (e) {
+          toast('验证失败：' + e.message, 'err');
+          okBtn.disabled = false; okBtn.textContent = '验证并添加';
+        }
+      };
+    };
+  }
+
   await renderSources();
+  await renderRepos();
   on('sources:changed', renderSources);
 }

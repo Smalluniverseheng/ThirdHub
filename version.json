@@ -1,9 +1,9 @@
 {
-  "version": "2.7",
+  "version": "2.8",
   "type": "optional",
   "title": "ThirdHub v2.5",
   "content": "1. 修复历史会话右侧 1/5 区域无法滑动返回的问题\n2. 新增「AI 模型头像隐藏」设置（默认开启），AI 回复铺满整行\n3. 厂商商标按官方原图展示，不再额外衬底\n4. 会员中心改版：账号区居中、付费周期切换下移；免费版云存储修正为 10MB，套餐英文名更正",
   "downloadUrl": "https://github.com/Smalluniverseheng/ThirdHub-Android/releases/download/v2.2/ThirdHub-Android-v2.2.apk",
   "releaseDate": "2026-08-08",
-  "releaseNotes": "修复书源不可用（中转链路换为本站同源中转）；支持导入阅读APP/CSS书源；模块与样式按需加载，启动提速"
+  "releaseNotes": "修复阅读APP书源目录规则兼容；新增 Venera 漫画图源；搜索支持加载更多"
 }

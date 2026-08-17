@@ -88,15 +88,11 @@ export async function renderMediaBoard(page, type) {
   await renderHome();
   on('sources:changed', renderHome);
 
-  async function doSearch(kw) {
-    homeEl.classList.add('hidden');
-    resultsEl.classList.remove('hidden');
-    resultsEl.innerHTML = '<div class="loading-row"><div class="spinner"></div>正在并发搜索所有' + NAME + '连接器…</div>';
-    const results = await searchAll(kw, { types: [type] });
-    if (!results.length) {
-      resultsEl.innerHTML = `<div class="empty"><div class="empty-ico">${icon('search')}</div><div class="empty-title">没有找到「${esc(kw)}」</div><div class="muted">试试其他关键词，或先导入更多${NAME}连接器</div></div>`;
-      return;
-    }
+  /* v2.8：搜索分页 —— 书源首页通常只有一二十条，点「加载更多」取下一页 */
+  let searchState = { kw: '', page: 1, results: [], loading: false, done: false };
+
+  function renderResults() {
+    const { kw, results } = searchState;
     resultsEl.innerHTML = `<div class="muted" style="padding:4px 18px 10px">找到 ${results.length} 条结果</div>
       <div class="discover-section"><div class="result-grid">
         ${results.map((r, i) => `
@@ -105,13 +101,46 @@ export async function renderMediaBoard(page, type) {
             <div class="content-name ellipsis">${esc(r.name || '未命名')}</div>
             <div class="content-sub ellipsis">${esc(r.author || r.sourceName || '')}</div>
           </button>`).join('')}
-      </div></div>`;
+      </div></div>
+      ${searchState.done ? '' : '<div style="padding:6px 18px 26px"><button class="btn grow" data-a="more">加载更多</button></div>'}`;
     $$('.content-card', resultsEl).forEach((b) => {
       b.onclick = () => {
-        const r = results[+b.dataset.i];
+        const r = searchState.results[+b.dataset.i];
         openDetail({ sourceId: r.sourceId, bookUrl: r.bookUrl, seed: r });
       };
     });
+    const moreBtn = $('[data-a="more"]', resultsEl);
+    if (moreBtn) moreBtn.onclick = () => doSearch(searchState.kw, searchState.page + 1);
+  }
+
+  async function doSearch(kw, page = 1) {
+    if (searchState.loading) return;
+    searchState.loading = true;
+    homeEl.classList.add('hidden');
+    resultsEl.classList.remove('hidden');
+    if (page === 1) {
+      searchState = { kw, page: 1, results: [], loading: true, done: false };
+      resultsEl.innerHTML = '<div class="loading-row"><div class="spinner"></div>正在并发搜索所有' + NAME + '连接器…</div>';
+    } else {
+      const moreBtn = $('[data-a="more"]', resultsEl);
+      if (moreBtn) { moreBtn.disabled = true; moreBtn.textContent = '加载中…'; }
+    }
+    let batch = [];
+    try {
+      batch = await searchAll(kw, { types: [type], page });
+    } catch (e) { batch = []; }
+    /* 去重（同一书源同一本书分页重复返回时） */
+    const seen = new Set(searchState.results.map((r) => r.sourceId + '|' + r.bookUrl));
+    const fresh = batch.filter((r) => !seen.has(r.sourceId + '|' + r.bookUrl));
+    searchState.results = searchState.results.concat(fresh);
+    searchState.page = page;
+    searchState.loading = false;
+    searchState.done = fresh.length === 0;
+    if (!searchState.results.length) {
+      resultsEl.innerHTML = `<div class="empty"><div class="empty-ico">${icon('search')}</div><div class="empty-title">没有找到「${esc(kw)}」</div><div class="muted">试试其他关键词，或先导入更多${NAME}连接器</div></div>`;
+      return;
+    }
+    renderResults();
   }
 
   const kwInput = $('[data-role="kw"]', page);

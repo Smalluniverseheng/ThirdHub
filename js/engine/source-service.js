@@ -69,7 +69,7 @@ export async function updateSource(id, patch) {
 }
 
 /* ---------- 统一搜索（多源并发） ---------- */
-export async function searchAll(keyword, { types = null, onProgress = null } = {}) {
+export async function searchAll(keyword, { types = null, onProgress = null, page = 1 } = {}) {
   const { getEngine } = await import('./source-engine.js');
   let sources = await listSources();
   sources = sources.filter((s) => s.enabled && (!types || types.includes(s.type)));
@@ -77,7 +77,7 @@ export async function searchAll(keyword, { types = null, onProgress = null } = {
   await Promise.allSettled(sources.map(async (s) => {
     try {
       const engine = getEngine(s);
-      const list = await engine.search(keyword, 1);
+      const list = await engine.search(keyword, page);
       const arr = Array.isArray(list) ? list : (typeof list === 'string' ? JSON.parse(list) : []);
       arr.forEach((item) => results.push({ ...item, sourceId: s.id, sourceName: s.name, type: s.type }));
       onProgress && onProgress(s, arr.length, null);

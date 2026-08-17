@@ -3,6 +3,7 @@ import { $, $$, el, esc, icon, toast, modal, actionSheet, confirmDialog, formRow
 import { listSources, removeSource, toggleSource, importSource, SOURCE_TYPES, validateSource, parseSourceMeta } from '../engine/source-service.js';
 import { isTvboxConfig, loadTvboxSites, tvboxToJsSource } from '../engine/tvbox-adapter.js';
 import { isLegadoJson, legadoToJsSources, isBasicJson, basicToJsSources } from '../engine/legado-adapter.js';
+import { isVeneraJs, isVeneraIndex, veneraToJsSource } from '../engine/venera-adapter.js';
 import { getEngine, destroyEngines } from '../engine/source-engine.js';
 import { on } from '../store.js';
 
@@ -31,7 +32,7 @@ export async function renderCategory(page) {
     </button>`).join('');
 
   $('[data-role="manager"]', page).innerHTML = [
-    { a: 'import', ico: 'import', name: '导入连接器', desc: '支持阅读APP书源、基础CSS书源、TVbox 配置、JS 连接器' },
+    { a: 'import', ico: 'import', name: '导入连接器', desc: '支持阅读APP书源、Venera 漫画图源、CSS书源、TVbox 配置、JS 连接器' },
     { a: 'test', ico: 'test', name: '连接器测试工具', desc: '验证连接器的搜索/目录/内容函数' },
     { a: 'proxy', ico: 'globe', name: '代理设置', desc: '配置后端代理地址（Cloudflare Worker）' },
   ].map((m) => `
@@ -114,7 +115,7 @@ export async function renderCategory(page) {
       };
       input.click();
     } else if (v === 'paste') {
-      const body = el(`<div>${formRow('粘贴书源 / 连接器代码（阅读APP JSON、CSS书源、TVbox、JS）', '<textarea class="input" rows="10" data-f="code" placeholder="可粘贴阅读APP书源 JSON、基础CSS书源 JSON 或 JS 连接器代码"></textarea>')}</div>`);
+      const body = el(`<div>${formRow('粘贴书源 / 图源代码（阅读APP、Venera、CSS书源、TVbox、JS）', '<textarea class="input" rows="10" data-f="code" placeholder="可粘贴阅读APP书源 JSON、基础CSS书源 JSON 或 JS 连接器代码"></textarea>')}</div>`);
       const m = modal({
         title: '粘贴导入', body,
         footer: '<button class="btn grow" data-a="cancel">取消</button><button class="btn btn-primary grow" data-a="ok">验证并导入</button>',
@@ -164,8 +165,56 @@ export async function renderCategory(page) {
     toast(`已导入 ${n} 个${label}${dup ? `（跳过重复 ${dup} 个）` : ''}`, 'ok');
   }
 
+  /* v2.8：Venera 配置库（index.json）→ 勾选后批量下载导入 */
+  async function importVeneraIndex(text, from) {
+    const list = JSON.parse(text);
+    const base = /^https?:\/\//.test(from || '') ? from.slice(0, from.lastIndexOf('/') + 1) : '';
+    const body = el(`<div>
+      <div class="muted mb8" style="line-height:1.7">检测到 Venera 图源库（${list.length} 个漫画图源）。勾选后下载导入：</div>
+      <div style="max-height:46vh;overflow:auto;border:1px solid var(--border,rgba(128,128,128,.2));border-radius:12px;padding:6px 10px">
+        ${list.map((it, i) => `<label style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px dashed rgba(128,128,128,.15)">
+          <input type="checkbox" data-i="${i}">
+          <span style="font-size:14px;font-weight:600">${esc(it.name || it.key)}</span>
+          <span class="muted" style="font-size:12px">v${esc(it.version || '')}</span>
+        </label>`).join('')}
+      </div></div>`);
+    const m = modal({
+      title: 'Venera 图源库', body,
+      footer: '<button class="btn grow" data-a="cancel">取消</button><button class="btn btn-primary grow" data-a="ok">导入选中</button>',
+    });
+    $('[data-a="cancel"]', m.mask).onclick = m.close;
+    $('[data-a="ok"]', m.mask).onclick = async () => {
+      const picks = $$('input[type="checkbox"]', body).filter((c) => c.checked).map((c) => list[+c.dataset.i]);
+      m.close();
+      if (!picks.length) return;
+      if (!base) return toast('请改用「从 URL 导入」粘贴配置库地址，才能下载图源文件', 'err');
+      toast('下载导入中…');
+      const { httpGet } = await import('../engine/proxy.js');
+      const existing = new Set((await listSources()).map((x) => x.name));
+      let n = 0, dup = 0, fail = 0;
+      for (const it of picks.slice(0, 30)) {
+        const nm = it.name || it.key;
+        if (existing.has(nm)) { dup++; continue; }
+        try {
+          const code = await httpGet(base + it.fileName);
+          await importSource(veneraToJsSource(code, base + it.fileName));
+          existing.add(nm);
+          n++;
+        } catch (e) { fail++; }
+      }
+      renderSources();
+      if (n) toast(`已导入 ${n} 个 Venera 图源${dup ? `（跳过重复 ${dup}）` : ''}${fail ? `（失败 ${fail}）` : ''}`, 'ok');
+      else toast(dup ? '选中的图源已全部存在' : '导入失败，请检查网络', 'err');
+    };
+  }
+
   async function importText(text, from) {
     try {
+      if (isVeneraIndex(text)) return await importVeneraIndex(text, from);
+      if (isVeneraJs(text)) {
+        const s2 = await importSource(veneraToJsSource(text, /^https?:\/\//.test(from || '') ? from : ''));
+        return toast(`已导入 Venera 图源「${s2.name}」`, 'ok');
+      }
       if (isLegadoJson(text)) return await importBatch(legadoToJsSources(text), '阅读APP书源');
       if (isBasicJson(text)) return await importBatch(basicToJsSources(text), '书源');
       if (isTvboxConfig(text)) {

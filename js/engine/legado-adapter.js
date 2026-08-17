@@ -122,36 +122,69 @@ function reqHeaders() {
   }
   return h;
 }
-/* 规则求值：'css@attr'，多条备用 '||' 分隔；attr 支持 text/href/src/html/data-src，缺省 text */
-function pickOne(el, rule) {
+/* 规则引擎（v2.8 重写，兼容阅读APP语法）：
+   - 列表/链式规则用 @ 分段：'ul.1@a' = 第 2 个 ul 内的所有 a（.N 为 0 起索引，阅读APP扩展语法）
+   - 叶规则 'h3@text' / 'img@src'：尾段是属性关键字则提取属性，否则视为链式段
+   - 多条备用规则用 || 分隔 */
+const RULE_ATTRS = ['text', 'html', 'href', 'src', 'ownText', 'textNodes', 'alt', 'title', 'value', 'id', 'class', 'style'];
+function parseSeg(seg) {
+  const m = String(seg).match(/^(.*)\\.(\\d+)$/);
+  if (m && m[1]) return { sel: m[1], index: parseInt(m[2], 10) };
+  return { sel: String(seg), index: null };
+}
+function querySeg(roots, seg) {
+  const { sel, index } = parseSeg(seg);
+  if (!sel) return roots;
+  const out = [];
+  roots.forEach((r) => {
+    let els;
+    try { els = [...r.querySelectorAll(sel)]; } catch (e) { els = []; }
+    if (index != null) { if (els[index]) out.push(els[index]); }
+    else out.push(...els);
+  });
+  return out;
+}
+function selectChain(root, rule) {
+  let cur = [root];
+  const segs = String(rule || '').split('@').map((x) => x.trim()).filter(Boolean);
+  for (const seg of segs) {
+    cur = querySeg(cur, seg);
+    if (!cur.length) break;
+  }
+  return cur;
+}
+function extractAttr(t, attr) {
+  if (!t) return '';
+  if (attr === 'text') return (t.textContent || '').trim();
+  if (attr === 'html') return t.innerHTML || '';
+  if (attr === 'ownText') return [...t.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join('').trim();
+  return t.getAttribute(attr) || t.getAttribute('data-' + attr) || '';
+}
+function pickOne(el, rule, defaultAttr) {
   if (!rule) return '';
   const alts = String(rule).split('||');
   for (let alt of alts) {
     alt = alt.trim();
     if (!alt) continue;
     const ai = alt.lastIndexOf('@');
-    const sel = ai > 0 ? alt.slice(0, ai).trim() : (ai === 0 ? '' : alt.trim());
-    const attr = ai >= 0 ? alt.slice(ai + 1).trim() : 'text';
-    const t = sel ? el.querySelector(sel) : el;
-    if (!t) continue;
-    let v = '';
-    if (attr === 'text') v = (t.textContent || '').trim();
-    else if (attr === 'html') v = t.innerHTML || '';
-    else v = t.getAttribute(attr) || t.getAttribute('data-' + attr) || '';
+    const tail = ai >= 0 ? alt.slice(ai + 1).trim() : '';
+    let chain = alt, attr = defaultAttr || 'text';
+    if (ai > 0 && (RULE_ATTRS.includes(tail) || tail.startsWith('data-'))) { chain = alt.slice(0, ai); attr = tail; }
+    else if (ai === 0) { chain = ''; attr = tail || attr; }
+    const els = chain ? selectChain(el, chain) : [el];
+    if (!els.length) continue;
+    const v = extractAttr(els[0], attr);
     if (v) return String(v).trim();
   }
   return '';
 }
-function pickAll(el, rule) {
+function pickAll(el, rule, defaultAttr) {
   if (!rule) return [];
   const ai = String(rule).lastIndexOf('@');
-  const sel = ai > 0 ? String(rule).slice(0, ai).trim() : String(rule).trim();
-  const attr = ai >= 0 ? String(rule).slice(ai + 1).trim() : 'text';
-  return [...el.querySelectorAll(sel || 'a')].map((t) => {
-    if (attr === 'text') return (t.textContent || '').trim();
-    if (attr === 'html') return t.innerHTML || '';
-    return t.getAttribute(attr) || t.getAttribute('data-' + attr) || '';
-  }).filter(Boolean);
+  const tail = ai >= 0 ? String(rule).slice(ai + 1).trim() : '';
+  let chain = String(rule), attr = defaultAttr || 'text';
+  if (ai > 0 && (RULE_ATTRS.includes(tail) || tail.startsWith('data-'))) { chain = String(rule).slice(0, ai); attr = tail; }
+  return selectChain(el, chain).map((t) => extractAttr(t, attr)).filter(Boolean);
 }
 async function fetchDoc(url) {
   const html = await legado.http.get(url, reqHeaders());
@@ -166,7 +199,7 @@ async function search(keyword, page) {
     .replace('{{page}}', String(page || 1));
   const url = absUrl(su, SRC.url.replace(/\\/$/, '') + '/');
   const { doc } = await fetchDoc(url);
-  const rows = [...doc.querySelectorAll(SRC.search.list || 'div')].slice(0, 30);
+  const rows = selectChain(doc, SRC.search.list || 'div').slice(0, 50);
   const out = [];
   for (const row of rows) {
     const name = pickOne(row, SRC.search.name);
@@ -203,7 +236,7 @@ async function chapterList(bookUrl) {
   let url = bookUrl;
   for (let depth = 0; depth < 4 && url; depth++) {
     const { doc } = await fetchDoc(url);
-    const rows = [...doc.querySelectorAll(SRC.toc.list || 'a')];
+    const rows = selectChain(doc, SRC.toc.list || 'a');
     let next = '';
     if (SRC.toc.next) next = absUrl(pickOne(doc, SRC.toc.next), url);
     rows.forEach((row) => {
@@ -224,7 +257,7 @@ async function chapterContent(chapterUrl) {
     let url = chapterUrl;
     for (let depth = 0; depth < 5 && url; depth++) {
       const { doc } = await fetchDoc(url);
-      pickAll(doc, SRC.content.rule).forEach((u) => {
+      pickAll(doc, SRC.content.rule, 'src').forEach((u) => {
         const au = absUrl(u, url);
         if (/^https?:\\/\\//i.test(au)) images.push(au);
       });

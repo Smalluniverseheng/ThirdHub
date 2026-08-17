@@ -4,7 +4,7 @@
    iframe 拥有完整 DOM 能力，与社区书源引擎（Venera / 阅读）架构一致。
    每个 SourceEngine 实例对应一个隐藏 iframe，加载一份用户导入的 JS 连接器，
    仅暴露白名单 API（legado.*），网络请求走三级代理回退。 */
-import { kvGet } from '../store.js';
+import { kvGet, kvSet } from '../store.js';
 import { getBackendProxy } from './proxy.js';
 
 const DEFAULT_PUBLICS = [
@@ -91,6 +91,10 @@ export class SourceEngine {
       mode: await kvGet('proxy:mode', 'auto'),
     };
     const logs = this.logs;
+    /* v2.8：连接器持久化数据（Venera loadData/saveData）——预载到内存同步读，写入异步落 kv */
+    const dataKey = 'venera:data:' + this.source.id;
+    const dataStore = await kvGet(dataKey, {});
+    const persistData = () => { kvSet(dataKey, dataStore).catch(() => {}); };
 
     /* 网络：后端中转 → 直连 → 公共代理 */
     async function rawFetch(url, options = {}) {
@@ -101,7 +105,9 @@ export class SourceEngine {
         redirect: 'follow',
       });
       const text = await resp.text();
-      return { status: resp.status, body: text, url: resp.url };
+      const rh = {};
+      try { resp.headers.forEach((v, k) => { rh[k] = v; }); } catch (e) {}
+      return { status: resp.status, body: text, url: resp.url, headers: rh };
     }
     async function httpRequest(url, options = {}) {
       if (proxy.backend && proxy.mode !== 'direct') {
@@ -113,7 +119,7 @@ export class SourceEngine {
             headers: options.body ? { 'Content-Type': 'application/octet-stream' } : {},
             body: options.body ? JSON.stringify({ body: options.body, headers: options.headers }) : undefined,
           });
-          if (resp.ok) return { status: resp.status, body: await resp.text(), url };
+          if (resp.ok) return { status: resp.status, body: await resp.text(), url, headers: {} };
         } catch (e) {}
       }
       try { return await rawFetch(url, options); } catch (e) {}
@@ -159,6 +165,20 @@ export class SourceEngine {
       urlDecode: (s) => decodeURIComponent(String(s)),
       jsonPath,
       log: (msg) => { logs.push(String(msg)); if (logs.length > 100) logs.splice(0, logs.length - 100); },
+      /* v2.8：Venera 图源数据持久化（按图源 key 分命名空间） */
+      data: {
+        get: (sk, k) => ((dataStore[sk] || {})[k] !== undefined ? dataStore[sk][k] : null),
+        set: (sk, k, v) => { dataStore[sk] = dataStore[sk] || {}; dataStore[sk][k] = v; persistData(); },
+        del: (sk, k) => { if (dataStore[sk]) { delete dataStore[sk][k]; persistData(); } },
+        isLogged: (sk) => !!((dataStore[sk] || {}).__account),
+      },
+      /* v2.8：需要自定义请求头的图片走中转（漫画防盗链） */
+      proxyUrl: (url, headers) => {
+        if (!proxy.backend) return url;
+        let u = proxy.backend + (proxy.backend.includes('?') ? '&' : '?') + 'url=' + encodeURIComponent(url);
+        if (headers && Object.keys(headers).length) u += '&headers=' + encodeURIComponent(JSON.stringify(headers));
+        return u;
+      },
       config: {
         _mem: {},
         read(scope, key) { return (legado.config._mem[scope] || {})[key]; },

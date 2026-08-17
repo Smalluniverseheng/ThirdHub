@@ -87,3 +87,18 @@ export async function searchAll(keyword, { types = null, onProgress = null, page
   }));
   return results;
 }
+
+/* v2.9：把本地库中旧版适配器生成的连接器自动升级为新规则引擎（无需用户重新导入） */
+export async function upgradeLegacySources() {
+  let n = 0;
+  try {
+    const { regenLegacyCode } = await import('./legado-adapter.js');
+    const all = await db.all('sources');
+    for (const s of all || []) {
+      const code = regenLegacyCode(s && s.code);
+      if (code) { s.code = code; await db.put('sources', s); n++; }
+    }
+    if (n) emit('sources:changed');
+  } catch (e) { console.warn('连接器自动升级失败', e); }
+  return n;
+}

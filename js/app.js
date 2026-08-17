@@ -1,5 +1,5 @@
 /* ===== ThirdHub app.js — 应用入口 / 路由 / 初始化 ===== */
-export const APP_VERSION = '2.8';
+export const APP_VERSION = '2.9';
 window.__TH_CSS_V = APP_VERSION; /* v2.7：CSS 按需加载的版本戳 */
 
 import { $, $$, icon, toast, loadCss } from './ui.js';
@@ -205,6 +205,7 @@ async function boot() {
     try { const { initSettingsSync } = await timedImport('./modules/settings-sync.js'); await initSettingsSync(); } catch (e) { console.warn('设置同步失败', e); }
     try { const { registerDevice } = await timedImport('./modules/devices.js'); await registerDevice(); } catch (e) {}
     try { const { pullKeysFromCloud } = await timedImport('./modules/keyvault.js'); await pullKeysFromCloud(); } catch (e) {}
+    try { const { upgradeLegacySources } = await timedImport('./engine/source-service.js'); await upgradeLegacySources(); } catch (e) {}
     try { const { initSourceSync } = await timedImport('./engine/source-sync.js'); await initSourceSync(); } catch (e) {}
     try { const { syncCloudPrices } = await timedImport('./ai/ai-pricing.js'); await syncCloudPrices(); } catch (e) {}
     try { const { syncCloudRankings } = await timedImport('./ai/ai-rankings.js'); await syncCloudRankings(); } catch (e) {}

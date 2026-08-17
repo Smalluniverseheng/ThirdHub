@@ -4,7 +4,7 @@
    iframe 拥有完整 DOM 能力，与社区书源引擎（Venera / 阅读）架构一致。
    每个 SourceEngine 实例对应一个隐藏 iframe，加载一份用户导入的 JS 连接器，
    仅暴露白名单 API（legado.*），网络请求走三级代理回退。 */
-import { kvGet, kvSet } from '../store.js';
+import { db, kvGet, kvSet } from '../store.js';
 import { getBackendProxy } from './proxy.js';
 
 const DEFAULT_PUBLICS = [
@@ -75,6 +75,13 @@ export class SourceEngine {
 
   async init() {
     if (this.frame) return;
+
+    /* v2.9：旧版适配器生成的连接器代码带有规则引擎 bug，使用时自动升级为新引擎并写回本地库 */
+    try {
+      const { regenLegacyCode } = await import('./legado-adapter.js');
+      const regen = regenLegacyCode(this.source.code);
+      if (regen) { this.source.code = regen; db.put('sources', this.source).catch(() => {}); }
+    } catch (e) {}
 
     /* 隐藏 iframe 沙箱：拥有完整 DOM 能力（DOMParser），与页面同源的隔离全局环境 */
     const frame = document.createElement('iframe');

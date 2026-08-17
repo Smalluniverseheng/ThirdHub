@@ -307,3 +307,18 @@ export function basicToJsSources(text) {
     .filter((it) => it && it.name && it.url && it.searchUrl)
     .map((it) => rulesToCode(basicRules(it)));
 }
+
+/* v2.9：旧版适配器生成的连接器代码存在用户本地库中，规则引擎 bug 也一起被存了下来。
+   这里从旧代码里提取内嵌的 SRC 规则 JSON，用新版引擎重新生成代码（返回 null 表示无需升级）。 */
+const NEW_ENGINE_MARK = '规则引擎（v2.8 重写';
+export function regenLegacyCode(code) {
+  const text = String(code || '');
+  if (!text.includes('const SRC = ')) return null;      // 不是适配器生成的连接器
+  if (text.includes(NEW_ENGINE_MARK)) return null;      // 已是新版引擎
+  const m = text.match(/const SRC = (\{[\s\S]*?\});\n/);
+  if (!m) return null;
+  let R = null;
+  try { R = JSON.parse(m[1]); } catch (e) { return null; }
+  if (!R || !R.name || !R.url) return null;
+  return rulesToCode(R);
+}

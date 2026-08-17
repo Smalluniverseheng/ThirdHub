@@ -128,3 +128,20 @@ export function formRow(label, inputHtml) {
     ${inputHtml}
   </div>`;
 }
+
+/* v2.7：CSS 按需加载 —— 板块/阅读器样式在首次使用时才注入，避免首屏一次性拉全量 */
+const __cssLoaded = new Set();
+export function loadCss(href) {
+  const v = window.__TH_CSS_V || '';
+  const url = href + (v ? (href.includes('?') ? '&' : '?') + 'v=' + v : '');
+  if (__cssLoaded.has(url)) return Promise.resolve();
+  return new Promise((resolve) => {
+    const l = document.createElement('link');
+    l.rel = 'stylesheet';
+    l.href = url;
+    const done = () => { __cssLoaded.add(url); resolve(); };
+    l.onload = done;
+    l.onerror = done; /* 失败不阻塞渲染 */
+    document.head.appendChild(l);
+  });
+}

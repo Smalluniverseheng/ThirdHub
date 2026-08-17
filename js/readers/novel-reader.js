@@ -1,7 +1,7 @@
 /* ===== ThirdHub js/readers/novel-reader.js — 小说阅读器（v1.5 全量重写） =====
    滚动 / 分页（CSS 多栏）· 6 主题 · 字体字重边距段距 · 亮度 / 全屏 / 信息栏
    点按翻页 · 音量键翻页 · 自动滚动 · 插图小说 · 朗读 · AI 辅助阅读 */
-import { $, $$, el, esc, icon, toast, modal, actionSheet } from '../ui.js';
+import { $, $$, el, esc, icon, toast, modal, actionSheet, loadCss } from '../ui.js';
 import { getSetting, setSetting, kvGet, kvSet } from '../store.js';
 import { getChapterList, getChapterContent, saveProgress, getProgress } from '../engine/content-service.js';
 import { getEngine } from '../engine/source-engine.js';
@@ -31,6 +31,7 @@ const FLIP_MODES = [
 ];
 
 export async function openNovelReader({ source, item, startChapter = 0 }) {
+  await loadCss('css/novel-reader.css'); /* v2.7：样式按需加载 */
   const engine = getEngine(source);
   let chapters = [];
   let idx = startChapter;

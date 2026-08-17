@@ -19,7 +19,7 @@ ThirdHub 网站版有三层备份，任何一层都可以把站点恢复到历�
 | v2.3 | `b287926` | `v2.3`、`backup/v2.3-before-cloud-backend` | `f3078f84` | `1351f92` |
 | v2.4 | `f896f5d` | `v2.4`、`backup/v2.4-before-v2.5-polish` | `9da3de46`（含 _worker.js 云端后端） | 见发布记录 |
 | v2.5 | `92d5211` | `v2.5`、`backup/v2.5-before-drawer-header` | `61e114c5`（wrangler 部署，含云端后端） | `07eeb6f` |
-| v2.6 | `3cff4e1` | `v2.6` | `c972b9c4`（wrangler 部署，含云端后端） | 见发布记录 |
+| v2.6 | `3cff4e1` | `v2.6` | `252592a1`（wrangler 部署，含云端后端） | `0dcb5c2` |
 
 ## 回退方法
 

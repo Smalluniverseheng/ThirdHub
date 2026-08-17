@@ -1,7 +1,7 @@
 /* ===== ThirdHub js/readers/comic-reader.js — 漫画阅读器（v1.5 全量重写） =====
    布局：单页 / 双页 / 条漫（上下滚动）· 方向：左翻（国漫）/ 右翻（日漫）
    适配：宽度 / 高度 / 原始 · 留白 · 亮度 · 切白边 · 预加载 · 双击/双指缩放 · 滑动翻页 */
-import { $, $$, el, esc, icon, toast, modal } from '../ui.js';
+import { $, $$, el, esc, icon, toast, modal, loadCss } from '../ui.js';
 import { getSetting, setSetting } from '../store.js';
 import { getChapterList, getChapterContent, saveProgress, getProgress } from '../engine/content-service.js';
 
@@ -19,6 +19,7 @@ const FITS = [
 ];
 
 export async function openComicReader({ source, item, startChapter = 0 }) {
+  await loadCss('css/comic-reader.css'); /* v2.7：样式按需加载 */
   let chapters = [];
   let idx = startChapter;
   let images = [];

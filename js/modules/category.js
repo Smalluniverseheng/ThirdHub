@@ -2,6 +2,7 @@
 import { $, $$, el, esc, icon, toast, modal, actionSheet, confirmDialog, formRow, fmtDate } from '../ui.js';
 import { listSources, removeSource, toggleSource, importSource, SOURCE_TYPES, validateSource, parseSourceMeta } from '../engine/source-service.js';
 import { isTvboxConfig, loadTvboxSites, tvboxToJsSource } from '../engine/tvbox-adapter.js';
+import { isLegadoJson, legadoToJsSources, isBasicJson, basicToJsSources } from '../engine/legado-adapter.js';
 import { getEngine, destroyEngines } from '../engine/source-engine.js';
 import { on } from '../store.js';
 
@@ -30,7 +31,7 @@ export async function renderCategory(page) {
     </button>`).join('');
 
   $('[data-role="manager"]', page).innerHTML = [
-    { a: 'import', ico: 'import', name: '导入连接器', desc: '从文件 / 粘贴代码 / URL 导入 .js 或 TVbox JSON' },
+    { a: 'import', ico: 'import', name: '导入连接器', desc: '支持阅读APP书源、基础CSS书源、TVbox 配置、JS 连接器' },
     { a: 'test', ico: 'test', name: '连接器测试工具', desc: '验证连接器的搜索/目录/内容函数' },
     { a: 'proxy', ico: 'globe', name: '代理设置', desc: '配置后端代理地址（Cloudflare Worker）' },
   ].map((m) => `
@@ -113,7 +114,7 @@ export async function renderCategory(page) {
       };
       input.click();
     } else if (v === 'paste') {
-      const body = el(`<div>${formRow('粘贴连接器代码（JS 或 TVbox JSON）', '<textarea class="input" rows="10" data-f="code" placeholder="// @name 我的书源\n// @type novel\n..."></textarea>')}</div>`);
+      const body = el(`<div>${formRow('粘贴书源 / 连接器代码（阅读APP JSON、CSS书源、TVbox、JS）', '<textarea class="input" rows="10" data-f="code" placeholder="可粘贴阅读APP书源 JSON、基础CSS书源 JSON 或 JS 连接器代码"></textarea>')}</div>`);
       const m = modal({
         title: '粘贴导入', body,
         footer: '<button class="btn grow" data-a="cancel">取消</button><button class="btn btn-primary grow" data-a="ok">验证并导入</button>',
@@ -148,8 +149,25 @@ export async function renderCategory(page) {
     }
   }
 
+  /* v2.7：批量导入社区书源（阅读APP / 基础CSS选择器 JSON），按名称去重 */
+  async function importBatch(codes, label) {
+    if (!codes.length) throw new Error('未检测到有效书源');
+    const existing = new Set((await listSources()).map((x) => x.name));
+    let n = 0, dup = 0;
+    for (const code of codes.slice(0, 100)) {
+      const meta = parseSourceMeta(code);
+      if (existing.has(meta.name)) { dup++; continue; }
+      try { await importSource(code); existing.add(meta.name); n++; } catch (e) {}
+    }
+    if (!n && dup) throw new Error(label + '已全部存在，无需重复导入');
+    if (!n) throw new Error('未检测到有效书源');
+    toast(`已导入 ${n} 个${label}${dup ? `（跳过重复 ${dup} 个）` : ''}`, 'ok');
+  }
+
   async function importText(text, from) {
     try {
+      if (isLegadoJson(text)) return await importBatch(legadoToJsSources(text), '阅读APP书源');
+      if (isBasicJson(text)) return await importBatch(basicToJsSources(text), '书源');
       if (isTvboxConfig(text)) {
         const sites = await loadTvboxSites(text);
         if (!sites.length) throw new Error('TVbox 配置中没有可用站点');

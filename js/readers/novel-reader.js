@@ -254,21 +254,101 @@ export async function openNovelReader({ source, item, startChapter = 0 }) {
     autoTimer = setInterval(step, 50);
   }
 
-  /* ---------- 目录 ---------- */
+  /* ---------- 目录 / 书签 ---------- */
+  const bookId = item.id || (source.id + ':' + item.bookUrl);
+  const BM_KEY = 'bm:' + bookId;
+  const getBookmarks = async () => (await kvGet(BM_KEY, [])) || [];
+
+  async function addBookmark() {
+    const list = await getBookmarks();
+    const c = chapters[idx];
+    const page0 = body.classList.contains('nr-paged') ? curPage() : 0;
+    if (list.some((b) => b.chapterIndex === idx && b.page === page0)) { toast('此处已有书签'); return; }
+    list.push({ chapterIndex: idx, page: page0, name: (c && c.name) || ('第 ' + (idx + 1) + ' 章'), time: Date.now() });
+    await kvSet(BM_KEY, list);
+    toast('已添加书签：' + ((c && c.name) || ''));
+  }
+
   function showCatalog() {
     catalogEl.classList.toggle('hidden');
     if (!catalogEl.classList.contains('hidden')) {
       catalogEl.style.background = S.readerBgColor || (READER_THEMES[S.readerTheme] || READER_THEMES.night).bg;
       catalogEl.style.color = S.readerTextColor || (READER_THEMES[S.readerTheme] || READER_THEMES.night).text;
-      catalogEl.innerHTML = `<div class="nr-catalog-head">目录（${chapters.length} 章）</div>` +
-        chapters.map((c, i) => `<button class="nr-catalog-item ${i === idx ? 'on' : ''}" data-i="${i}">${esc(c.name || '第 ' + (i + 1) + ' 章')}</button>`).join('');
-      $$('.nr-catalog-item', catalogEl).forEach((b) => {
-        b.onclick = () => { catalogEl.classList.add('hidden'); loadChapter(+b.dataset.i); };
-      });
-      const cur = $('.nr-catalog-item.on', catalogEl);
-      cur && cur.scrollIntoView({ block: 'center' });
+      renderCatalogTab('toc');
     }
   }
+
+  async function renderCatalogTab(which) {
+    catalogEl.innerHTML = `<div class="nr-catalog-head">
+        <div class="nr-cat-tabs">
+          <button class="nr-cat-tab ${which === 'toc' ? 'on' : ''}" data-ct="toc">目录（${chapters.length}）</button>
+          <button class="nr-cat-tab ${which === 'bm' ? 'on' : ''}" data-ct="bm">书签</button>
+        </div>
+      </div>
+      <div data-role="cat-body"></div>`;
+    $$('.nr-cat-tab', catalogEl).forEach((b) => { b.onclick = () => renderCatalogTab(b.dataset.ct); });
+    const box = $('[data-role="cat-body"]', catalogEl);
+    if (which === 'toc') {
+      box.innerHTML = chapters.map((c, i) => `<button class="nr-catalog-item ${i === idx ? 'on' : ''}" data-i="${i}">${esc(c.name || '第 ' + (i + 1) + ' 章')}</button>`).join('');
+      $$('.nr-catalog-item', box).forEach((b) => {
+        b.onclick = () => { catalogEl.classList.add('hidden'); loadChapter(+b.dataset.i); };
+      });
+      const cur = $('.nr-catalog-item.on', box);
+      cur && cur.scrollIntoView({ block: 'center' });
+    } else {
+      const list = (await getBookmarks()).slice().reverse();
+      box.innerHTML = list.length ? list.map((b, i) => `
+        <div class="nr-catalog-item nr-bm-item" data-bi="${list.length - 1 - i}">
+          <button class="nr-bm-jump" data-bjump="${list.length - 1 - i}">
+            <span>${esc(b.name)}</span>
+            <span class="muted" style="font-size:11px">${new Date(b.time).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+          </button>
+          <button class="nr-bm-del" data-bdel="${list.length - 1 - i}" title="删除">×</button>
+        </div>`).join('') :
+        '<div class="muted" style="padding:24px;text-align:center;font-size:13px">还没有书签<br>在阅读页面向下拉即可添加书签</div>';
+      const raw = await getBookmarks();
+      $$('[data-bjump]', box).forEach((b) => {
+        b.onclick = async () => {
+          const bm2 = raw[+b.dataset.bjump];
+          if (!bm2) return;
+          catalogEl.classList.add('hidden');
+          await loadChapter(bm2.chapterIndex);
+          if (bm2.page) requestAnimationFrame(() => goPage(bm2.page, false));
+        };
+      });
+      $$('[data-bdel]', box).forEach((b) => {
+        b.onclick = async () => {
+          raw.splice(+b.dataset.bdel, 1);
+          await kvSet(BM_KEY, raw);
+          renderCatalogTab('bm');
+          toast('已删除书签');
+        };
+      });
+    }
+  }
+
+  /* v3.4：阅读页顶部下拉添加书签（番茄小说手势） */
+  const pullTip = document.createElement('div');
+  pullTip.className = 'nr-pulltip';
+  pullTip.textContent = '↓ 松手添加书签';
+  ov.appendChild(pullTip);
+  let pullStartY = null, pullReady = false;
+  body.addEventListener('touchstart', (e) => {
+    pullStartY = body.scrollTop <= 2 ? e.touches[0].clientY : null;
+    pullReady = false;
+  }, { passive: true });
+  body.addEventListener('touchmove', (e) => {
+    if (pullStartY == null) return;
+    const dy = e.touches[0].clientY - pullStartY;
+    if (dy > 70 && !pullReady) { pullReady = true; pullTip.classList.add('on'); }
+    if (dy <= 70 && pullReady) { pullReady = false; pullTip.classList.remove('on'); }
+  }, { passive: true });
+  body.addEventListener('touchend', async () => {
+    if (pullReady) await addBookmark();
+    pullReady = false;
+    pullTip.classList.remove('on');
+    pullStartY = null;
+  });
 
   /* ---------- 阅读设置 ---------- */
   function showSettings() {

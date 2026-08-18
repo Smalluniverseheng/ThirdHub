@@ -126,3 +126,18 @@ input[type="range"] { accent-color: var(--primary); }
   font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .15s, transform .15s; z-index: 40;
 }
 .nr-pulltip.on { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* v3.4：目录/书签页签 */
+.nr-cat-tabs { display: flex; gap: 8px; }
+.nr-cat-tab {
+  background: none; border: none; color: inherit; font-size: 14px; padding: 4px 10px;
+  opacity: .6; border-radius: 999px;
+}
+.nr-cat-tab.on { opacity: 1; font-weight: 700; background: rgba(127,127,127,.18); }
+.nr-bm-item { display: flex; align-items: center; padding: 0 !important; }
+.nr-bm-jump {
+  flex: 1; min-width: 0; background: none; border: none; color: inherit;
+  display: flex; justify-content: space-between; gap: 10px; padding: 10px 4px;
+  font-size: 13.5px; text-align: left;
+}
+.nr-bm-del { background: none; border: none; color: inherit; opacity: .5; font-size: 16px; padding: 8px 10px; }

@@ -1,9 +1,9 @@
 {
-  "version": "2.6",
-  "type": "optional",
-  "title": "ThirdHub v2.5",
-  "content": "1. 修复历史会话右侧 1/5 区域无法滑动返回的问题\n2. 新增「AI 模型头像隐藏」设置（默认开启），AI 回复铺满整行\n3. 厂商商标按官方原图展示，不再额外衬底\n4. 会员中心改版：账号区居中、付费周期切换下移；免费版云存储修正为 10MB，套餐英文名更正",
+  "version": "3.9",
+  "type": "recommended",
+  "title": "ThirdHub v3.9",
+  "content": "Venera 图源引擎对齐官方实现，一大批官方图源修复可用：搜索选项自动取官方默认值、支持 loadNext 游标分页、图源初始化完成后再搜索、图源内部函数与引擎隔离、加解密全部同步化（AES/MD5/SHA/HMAC 纯 JS 实现）、补齐 APP 全局对象与 GraphQL 请求头。禁漫天堂、漫画人、manga_dex、Hitomi 等已实测出结果。",
   "downloadUrl": "https://github.com/Smalluniverseheng/ThirdHub-Android/releases/download/v2.2/ThirdHub-Android-v2.2.apk",
-  "releaseDate": "2026-08-08",
-  "releaseNotes": "历史抽屉左上角改版：用户头像（云端同步）+ 昵称 + 会员等级牌，箭头改设置齿轮"
+  "releaseDate": "2026-08-18",
+  "releaseNotes": "Venera 图源引擎对齐官方实现，一大批官方图源修复可用：搜索选项自动取官方默认值、支持 loadNext 游标分页、图源初始化完成后再搜索、图源内部函数与引擎隔离、加解密全部同步化（AES/MD5/SHA/HMAC 纯 JS 实现）、补齐 APP 全局对象与 GraphQL 请求头。禁漫天堂、漫画人、manga_dex、Hitomi 等已实测出结果。"
 }

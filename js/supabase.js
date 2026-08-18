@@ -8,20 +8,18 @@ let _ready = false;
 export function hasCloud() { return _ready && !!_sb; }
 export function getSupabase() { return _sb; }
 
-/* 动态加载 supabase-js */
+/* 加载 supabase-js：优先本地内置文件（离线/弱网可用），失败再回退 CDN */
 async function loadLib() {
   if (window.supabase) return window.supabase;
-  await new Promise((resolve, reject) => {
+  const tryLoad = (src) => new Promise((resolve, reject) => {
     const s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-    s.type = 'module';
-    s.onerror = reject;
-    // +esm 不提供全局变量，改用 UMD 构建
-    s.type = 'text/javascript';
-    s.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js';
+    s.src = src;
     s.onload = resolve;
+    s.onerror = reject;
     document.head.appendChild(s);
   });
+  try { await tryLoad('js/vendor/supabase.min.js'); }
+  catch (e) { await tryLoad('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js'); }
   return window.supabase;
 }
 

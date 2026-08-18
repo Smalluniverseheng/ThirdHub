@@ -232,6 +232,26 @@ async function fetchDoc(url) {
   const html = await legado.http.get(url, reqHeaders());
   return { doc: legado.dom.parse(html), html };
 }
+/* v3.1：封面/插图统一走中转并带 referer，规避书源站防盗链 */
+function covUrl(u, ref) {
+  if (!u || u.indexOf('data:') === 0) return u || '';
+  return legado.proxyUrl(u, { referer: ref });
+}
+/* 正文 HTML 后处理：相对地址转绝对、插图统一中转（保留 <img>，支持有插图的小说） */
+function fixContentHtml(html, pageUrl) {
+  if (!html) return '';
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  tmp.querySelectorAll('img').forEach((im) => {
+    const raw = im.getAttribute('src') || im.getAttribute('data-src') || im.getAttribute('data-original') || '';
+    const au = absUrl(raw, pageUrl);
+    if (au) im.setAttribute('src', covUrl(au, pageUrl));
+    im.removeAttribute('data-src');
+    im.removeAttribute('data-original');
+    im.setAttribute('style', 'max-width:100%;height:auto');
+  });
+  return tmp.innerHTML;
+}
 
 async function search(keyword, page) {
   if (!SRC.searchUrl) return [];
@@ -250,7 +270,7 @@ async function search(keyword, page) {
     out.push({
       name,
       author: pickOne(row, SRC.search.author),
-      coverUrl: absUrl(pickOne(row, SRC.search.cover), url),
+      coverUrl: covUrl(absUrl(pickOne(row, SRC.search.cover), url), url),
       bookUrl,
       intro: pickOne(row, SRC.search.intro),
       kind: pickOne(row, SRC.search.kind),
@@ -266,7 +286,7 @@ async function bookInfo(bookUrl) {
   return {
     name: pickOne(doc, I.name) || '',
     author: pickOne(doc, I.author),
-    coverUrl: absUrl(pickOne(doc, I.cover), bookUrl),
+    coverUrl: covUrl(absUrl(pickOne(doc, I.cover), bookUrl), bookUrl),
     intro: pickOne(doc, I.intro),
     kind: pickOne(doc, I.kind),
     lastUpdate: pickOne(doc, I.lastUpdate),
@@ -315,7 +335,7 @@ async function chapterContent(chapterUrl) {
   let url = chapterUrl;
   for (let depth = 0; depth < 5 && url; depth++) {
     const { doc } = await fetchDoc(url);
-    parts.push(pickOne(doc, SRC.content.rule) || '');
+    parts.push(fixContentHtml(pickOne(doc, SRC.content.rule, 'html'), url));
     let next = '';
     if (SRC.content.next) next = absUrl(pickOne(doc, SRC.content.next), url);
     if (!next || next === url) break;

@@ -202,10 +202,14 @@ const __src = new __VEN_CLS();
 ComicSource.sources[__src.key || '__VEN_KEY'] = __src;
 if (typeof __src.init === 'function') { try { __src.init(); } catch (e) { legado.log('init: ' + (e.message || e)); } }
 
+function __cov(u) {
+  if (!u || String(u).indexOf('data:') === 0) return u || '';
+  return legado.proxyUrl(String(u), { referer: __src.url || '' });
+}
 function __mapComic(c) {
   return {
     name: c.title || '', author: c.subtitle || c.subTitle || '',
-    coverUrl: c.cover || '', bookUrl: String(c.id),
+    coverUrl: __cov(c.cover), bookUrl: String(c.id),
     intro: c.description || '',
     kind: Array.isArray(c.tags) ? c.tags.join(' ') : '',
     type: 'comic',
@@ -236,7 +240,7 @@ async function bookInfo(bookUrl) {
   const d = await __src.comic.loadInfo(bookUrl);
   return {
     name: d.title || '', author: d.subtitle || d.subTitle || '',
-    coverUrl: d.cover || '', intro: d.description || '',
+    coverUrl: __cov(d.cover), intro: d.description || '',
     lastUpdate: d.updateTime || '',
     kind: Array.isArray(d.tags) ? d.tags.join(' ') : '',
   };

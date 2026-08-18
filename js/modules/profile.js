@@ -71,11 +71,15 @@ export async function renderProfile(page) {
     $('[data-a="profile"]', box).onclick = () => u ? showProfileSubpage() : showAuthDialog();
   }
 
-  function showAuthDialog() {
+  async function showAuthDialog() {
+    /* v3.1：云端库可能因弱网尚未就绪，点击登录时先补一次初始化再判断 */
+    if (!hasCloud()) {
+      try { const { initCloud } = await import('../supabase.js'); await initCloud(); } catch (e) {}
+    }
     if (!hasCloud()) {
       modal({
-        title: '云端未配置', center: true,
-        body: '<p style="font-size:14px;line-height:1.8;color:var(--text-secondary)">当前为纯本地模式。配置 Supabase 云端后可使用登录、会员、卡密、多端同步功能。请在「数据管理 → 云端同步」中配置。</p>',
+        title: '云端连接失败', center: true,
+        body: '<p style="font-size:14px;line-height:1.8;color:var(--text-secondary)">云端服务暂时连不上，请检查网络后重试。仍失败可到「数据管理 → 云端同步」检查配置。</p>',
       });
       return;
     }

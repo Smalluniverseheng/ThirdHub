@@ -94,16 +94,20 @@ export async function renderMediaBoard(page, type) {
   function renderResults() {
     const { kw, results } = searchState;
     resultsEl.innerHTML = `<div class="muted" style="padding:4px 18px 10px">找到 ${results.length} 条结果</div>
-      <div class="discover-section"><div class="result-grid">
+      <div class="discover-section"><div class="result-list">
         ${results.map((r, i) => `
-          <button class="content-card card-press" data-i="${i}">
-            <div class="content-cover">${r.coverUrl ? `<img src="${esc(r.coverUrl)}" loading="lazy" onerror="this.remove()">` : icon(t.icon)}</div>
-            <div class="content-name ellipsis">${esc(r.name || '未命名')}</div>
-            <div class="content-sub ellipsis">${esc(r.author || r.sourceName || '')}</div>
+          <button class="result-item card-press" data-i="${i}">
+            <div class="result-cover">${r.coverUrl ? `<img src="${esc(r.coverUrl)}" loading="lazy" onerror="this.remove()">` : icon(t.icon)}</div>
+            <div class="result-info">
+              <div class="result-name ellipsis">${esc(r.name || '未命名')}</div>
+              <div class="result-sub ellipsis">${esc([r.author, r.kind].filter(Boolean).join(' · ') || r.sourceName || '')}</div>
+              ${r.intro ? `<div class="result-intro">${esc(r.intro)}</div>` : ''}
+              <div class="result-tags"><span class="result-src">${esc(r.sourceName || '')}</span>${r.type ? `<span class="result-type">${esc(r.type === 'novel' ? '小说' : r.type === 'comic' ? '漫画' : r.type)}</span>` : ''}</div>
+            </div>
           </button>`).join('')}
       </div></div>
       ${searchState.done ? '' : '<div style="padding:6px 18px 26px"><button class="btn grow" data-a="more">加载更多</button></div>'}`;
-    $$('.content-card', resultsEl).forEach((b) => {
+    $$('.result-item', resultsEl).forEach((b) => {
       b.onclick = () => {
         const r = searchState.results[+b.dataset.i];
         openDetail({ sourceId: r.sourceId, bookUrl: r.bookUrl, seed: r });

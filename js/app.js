@@ -1,5 +1,5 @@
 /* ===== ThirdHub app.js — 应用入口 / 路由 / 初始化 ===== */
-export const APP_VERSION = '3.0';
+export const APP_VERSION = '3.1';
 window.__TH_CSS_V = APP_VERSION; /* v2.7：CSS 按需加载的版本戳 */
 
 import { $, $$, icon, toast, loadCss } from './ui.js';
@@ -199,7 +199,7 @@ async function boot() {
   /* 首屏之后的后台任务（不阻塞交互；登录态本地有缓存，云端就绪后自动同步） */
   setTimeout(async () => {
     try { const { initPricing } = await timedImport('./ai/ai-pricing.js'); await initPricing(); } catch (e) {}
-    try { await initCloud(); } catch (e) { console.warn('cloud 初始化失败', e); }
+    try { const okc = await initCloud(); if (!okc) setTimeout(() => initCloud().catch(() => {}), 4000); } catch (e) { console.warn('cloud 初始化失败', e); setTimeout(() => initCloud().catch(() => {}), 4000); }
     try { await initAuth(); } catch (e) { console.warn('auth 初始化失败', e); }
     try { initSync(); } catch (e) { console.warn('sync 初始化失败', e); }
     try { const { initSettingsSync } = await timedImport('./modules/settings-sync.js'); await initSettingsSync(); } catch (e) { console.warn('设置同步失败', e); }

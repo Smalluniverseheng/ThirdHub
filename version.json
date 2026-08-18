@@ -1,9 +1,9 @@
 {
-  "version": "3.6",
+  "version": "3.7",
   "type": "optional",
-  "title": "ThirdHub v3.6",
-  "content": "修复 Venera 官方图源无法使用（包子漫画等已恢复）；漫画设置界面控件化；连接器管理支持类型筛选与一键全测；AI 厂商图标换新，模型库更新至 2026 年 8 月最新（Claude 5 / Gemini 3.x / DeepSeek V4 / Kimi K3 / GLM-5.2 / 豆包 Seed 2.0），历史模型置灰保留。",
+  "title": "ThirdHub v3.7",
+  "content": "修复漫画图片加载不出来（代理转发自定义请求头 + 图源签名同步化，拷贝漫画等已实测恢复）；小说/漫画/有声合并为「阅读」板块，同一书架、搜索按类型多选；设置图标换新。",
   "downloadUrl": "https://github.com/Smalluniverseheng/ThirdHub-Android/releases/download/v2.2/ThirdHub-Android-v2.2.apk",
   "releaseDate": "2026-08-08",
-  "releaseNotes": "修复 Venera 官方图源无法使用（包子漫画等已恢复）；漫画设置界面控件化；连接器管理支持类型筛选与一键全测；AI 厂商图标换新，模型库更新至 2026 年 8 月最新（Claude 5 / Gemini 3.x / DeepSeek V4 / Kimi K3 / GLM-5.2 / 豆包 Seed 2.0），历史模型置灰保留。"
+  "releaseNotes": "修复漫画图片加载不出来（代理转发自定义请求头 + 图源签名同步化，拷贝漫画等已实测恢复）；小说/漫画/有声合并为「阅读」板块，同一书架、搜索按类型多选；设置图标换新。"
 }

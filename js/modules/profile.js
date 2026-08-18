@@ -673,9 +673,9 @@ export async function renderProfile(page) {
     const body = el('<div></div>');
     function render() {
       body.innerHTML = `
-        <div class="muted" style="margin-bottom:10px;line-height:1.7">勾选要显示在底部导航栏的板块（${MIN_TABS}-${MAX_TABS} 个）。未勾选的板块不会加载，勾选后首次打开时才下载。「我的」固定显示。</div>
+        <div class="muted" style="margin-bottom:10px;line-height:1.7">勾选要显示在底部导航栏的板块（${MIN_TABS}-${MAX_TABS} 个）。小说 / 漫画 / 有声已合并为「阅读」。未勾选的板块不会加载，勾选后首次打开时才下载。「我的」固定显示。</div>
         <div class="col gap8">
-          ${BOARDS.map((b) => `
+          ${BOARDS.filter((b) => !['novel', 'comic', 'audio'].includes(b.id)).map((b) => `
             <button class="list-item" style="width:100%" data-b="${b.id}">
               <span class="list-ico">${icon(b.ico)}</span>
               <div class="grow" style="text-align:left;min-width:0">

@@ -1,19 +1,28 @@
 /* ===== ThirdHub js/modules/board-media.js — 娱乐板块通用页（小说/漫画/音乐/有声/视频） =====
-   每个板块独立渲染：搜索（限定本类型）+ 我的书架 + 本类连接器 */
+   每个板块独立渲染：搜索（限定本类型）+ 我的书架 + 本类连接器
+   v3.7：新增 read 综合板块——小说/漫画/有声合并：同一书架，搜索时类型多选筛选 */
 import { $, $$, esc, icon, toast, debounce } from '../ui.js';
-import { db, on } from '../store.js';
+import { db, on, kvGet, kvSet } from '../store.js';
 import { listSources, searchAll, sourceType } from '../engine/source-service.js';
 import { openDetail } from './detail.js';
 
+const TYPE_NAMES = { novel: '小说', comic: '漫画', music: '音乐', audio: '有声', video: '视频' };
+const READ_TYPES = ['novel', 'comic', 'audio'];
+
 export async function renderMediaBoard(page, type) {
   const t = sourceType(type) || { id: type, name: type, icon: 'folder' };
-  const NAME = { novel: '小说', comic: '漫画', music: '音乐', audio: '有声', video: '视频' }[type] || t.name;
+  const isRead = type === 'read';
+  /* v3.7：综合阅读板块覆盖的类型集合 */
+  const TYPES = isRead ? READ_TYPES : [type];
+  const NAME = isRead ? '阅读' : (TYPE_NAMES[type] || t.name);
+  const typeName = (tid) => TYPE_NAMES[tid] || tid;
+  const typeIcon = (tid) => (sourceType(tid) || {}).icon || 'folder';
 
   page.innerHTML = `
     <div class="page-head"><div class="page-title">${NAME}</div>
       <div class="spacer"></div>
       <button class="icon-btn" data-a="search-open" title="搜索">${icon('search')}</button>
-      ${type === 'novel' || type === 'comic' ? `<button class="icon-btn" data-a="modset" title="${type === 'novel' ? '阅读设置' : '漫画设置'}">${icon('settings')}</button>` : ''}
+      ${isRead || type === 'novel' || type === 'comic' ? `<button class="icon-btn" data-a="modset" title="设置">${icon('settings')}</button>` : ''}
     </div>
     <div class="discover-search" data-role="searchbar" hidden>
       <div class="search-box">
@@ -22,6 +31,7 @@ export async function renderMediaBoard(page, type) {
         <button class="btn btn-primary btn-sm" data-a="go">搜索</button>
         <button class="btn btn-sm" data-a="search-close">取消</button>
       </div>
+      ${isRead ? `<div class="nr-chip-row" style="padding:8px 14px 2px" data-role="typefilter"></div>` : ''}
     </div>
     <div data-role="srclist" hidden></div>
     <div data-role="results"></div>
@@ -45,20 +55,51 @@ export async function renderMediaBoard(page, type) {
     searchState = { kw: '', page: 1, results: [], loading: false, done: false };
   };
 
-  /* v1.7 设置分级：阅读设置归入小说模块，漫画设置归入漫画模块 */
+  /* v1.7 设置分级：阅读设置归入小说模块，漫画设置归入漫画模块；v3.7 综合板块二选一 */
   const modsetBtn = $('[data-a="modset"]', page);
   if (modsetBtn) modsetBtn.onclick = async () => {
     const ms = await import('./mod-settings.js');
-    if (type === 'novel') ms.showNovelSettings();
-    else ms.showComicSettings();
+    if (type === 'novel') return ms.showNovelSettings();
+    if (type === 'comic') return ms.showComicSettings();
+    const { actionSheet } = await import('../ui.js');
+    const v = await actionSheet('设置', [
+      { label: '小说阅读设置', value: 'novel', icon: 'book' },
+      { label: '漫画阅读设置', value: 'comic', icon: 'comic' },
+    ]);
+    if (v === 'novel') ms.showNovelSettings();
+    if (v === 'comic') ms.showComicSettings();
   };
+
+  /* v3.7：搜索类型多选筛选（仅综合板块），默认全选，选择结果记忆 */
+  let selTypes = new Set(TYPES);
+  if (isRead) {
+    try {
+      const saved = await kvGet('read:types', null);
+      if (Array.isArray(saved) && saved.length) selTypes = new Set(saved.filter((x) => READ_TYPES.includes(x)));
+    } catch (e) {}
+    const tf = $('[data-role="typefilter"]', page);
+    const renderTf = () => {
+      tf.innerHTML = READ_TYPES.map((tid) =>
+        `<button class="ai-chip ${selTypes.has(tid) ? 'on' : ''}" data-tf="${tid}">${typeName(tid)}</button>`).join('');
+      $$('[data-tf]', tf).forEach((b) => b.onclick = () => {
+        const tid = b.dataset.tf;
+        if (selTypes.has(tid)) { if (selTypes.size === 1) return toast('至少保留一个类型'); selTypes.delete(tid); }
+        else selTypes.add(tid);
+        kvSet('read:types', [...selTypes]);
+        renderTf();
+        const kw = $('[data-role="kw"]', page).value.trim();
+        if (kw) doSearch(kw);
+      });
+    };
+    renderTf();
+  }
 
   const homeEl = $('[data-role="home"]', page);
   const resultsEl = $('[data-role="results"]', page);
 
   async function renderHome() {
-    const sources = (await listSources(type)).filter((s) => s.enabled);
-    const shelf = (await db.all('shelf')).filter((x) => x.type === type)
+    const sources = (await listSources()).filter((s) => s.enabled && TYPES.includes(s.type));
+    const shelf = (await db.all('shelf')).filter((x) => TYPES.includes(x.type))
       .sort((a, b) => (b.top - a.top) || (b.addedAt - a.addedAt));
     let html = '';
 
@@ -67,9 +108,9 @@ export async function renderMediaBoard(page, type) {
       html += `<div class="discover-section">
         <div class="result-grid">${shelf.map((it) => `
           <button class="content-card card-press" data-shelf="${esc(it.id)}">
-            <div class="content-cover">${it.coverUrl ? `<img src="${esc(it.coverUrl)}" loading="lazy" onerror="this.remove()">` : icon(t.icon)}</div>
+            <div class="content-cover">${it.coverUrl ? `<img src="${esc(it.coverUrl)}" loading="lazy" onerror="this.remove()">` : icon(typeIcon(it.type))}</div>
             <div class="content-name ellipsis">${esc(it.title)}</div>
-            <div class="content-sub ellipsis">${esc(it.sourceName || '')}</div>
+            <div class="content-sub ellipsis">${isRead ? `<span class="result-type" style="margin-right:4px">${esc(typeName(it.type))}</span>` : ''}${esc(it.sourceName || '')}</div>
           </button>`).join('')}
         </div>
       </div>`;
@@ -91,9 +132,9 @@ export async function renderMediaBoard(page, type) {
         <div class="section-head">${icon('plug')}<span>${NAME}连接器</span><span class="muted">${sources.length} 个</span></div>
         <div class="source-cards">${sources.map((s) => `
           <button class="source-card card card-press" data-src="${esc(s.id)}">
-            <span class="list-ico">${icon(t.icon)}</span>
+            <span class="list-ico">${icon(typeIcon(s.type))}</span>
             <span class="ellipsis" style="font-size:13px;font-weight:600">${esc(s.name)}</span>
-            <span class="muted">v${esc(s.version || '1.0')}</span>
+            <span class="muted">${isRead ? esc(typeName(s.type)) + ' · ' : ''}v${esc(s.version || '1.0')}</span>
           </button>`).join('')}
         </div>
       </div>` : `<div class="muted" style="padding:10px 18px;font-size:12.5px">还没有${NAME}连接器，到「我的 → 连接器管理」导入后就能搜索了。</div>`;
@@ -120,12 +161,12 @@ export async function renderMediaBoard(page, type) {
       <div class="discover-section"><div class="result-list">
         ${results.map((r, i) => `
           <button class="result-item card-press" data-i="${i}">
-            <div class="result-cover">${r.coverUrl ? `<img src="${esc(r.coverUrl)}" loading="lazy" onerror="this.remove()">` : icon(t.icon)}</div>
+            <div class="result-cover">${r.coverUrl ? `<img src="${esc(r.coverUrl)}" loading="lazy" onerror="this.remove()">` : icon(typeIcon(r.type || TYPES[0]))}</div>
             <div class="result-info">
               <div class="result-name ellipsis">${esc(r.name || '未命名')}</div>
               <div class="result-sub ellipsis">${esc([r.author, r.kind].filter(Boolean).join(' · ') || r.sourceName || '')}</div>
               ${r.intro ? `<div class="result-intro">${esc(r.intro)}</div>` : ''}
-              <div class="result-tags"><span class="result-src">${esc(r.sourceName || '')}</span>${r.type ? `<span class="result-type">${esc(r.type === 'novel' ? '小说' : r.type === 'comic' ? '漫画' : r.type)}</span>` : ''}</div>
+              <div class="result-tags"><span class="result-src">${esc(r.sourceName || '')}</span>${r.type ? `<span class="result-type">${esc(typeName(r.type))}</span>` : ''}</div>
             </div>
           </button>`).join('')}
       </div></div>
@@ -155,7 +196,7 @@ export async function renderMediaBoard(page, type) {
     }
     let batch = [];
     try {
-      batch = await searchAll(kw, { types: [type], page });
+      batch = await searchAll(kw, { types: isRead ? [...selTypes] : TYPES, page });
     } catch (e) { batch = []; }
     /* 去重（同一书源同一本书分页重复返回时） */
     const seen = new Set(searchState.results.map((r) => r.sourceId + '|' + r.bookUrl));

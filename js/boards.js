@@ -6,6 +6,8 @@ export const BOARDS = [
   
 { id: 'ai',         name: 'AI',    ico: 'robot',     cat: 'ai',   desc: '多厂商 AI 对话 · 流式输出 · MCP · 联网搜索', css: ['css/ai-chat.css'], load: () => import('./modules/ai-chat.js'),          fn: 'renderAIChat' },
   
+{ id: 'read',       css: ['css/discover.css', 'css/bookshelf.css', 'css/category.css'], name: '阅读',   ico: 'books',     cat: 'fun',  desc: '小说 / 漫画 / 有声：同一书架，搜索可按类型多选', load: () => import('./modules/board-media.js'),       fn: 'renderMediaBoard', arg: 'read' },
+  
 { id: 'novel',      css: ['css/discover.css', 'css/bookshelf.css', 'css/category.css'], name: '小说',   ico: 'book',      cat: 'fun',  desc: '网络小说搜索、阅读与书架',                 load: () => import('./modules/board-media.js'),       fn: 'renderMediaBoard', arg: 'novel' },
   
 { id: 'comic',      css: ['css/discover.css', 'css/bookshelf.css', 'css/category.css'], name: '漫画',   ico: 'comic',     cat: 'fun',  desc: '漫画搜索与阅读',                           load: () => import('./modules/board-media.js'),       fn: 'renderMediaBoard', arg: 'comic' },

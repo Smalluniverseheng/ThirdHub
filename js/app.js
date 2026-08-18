@@ -1,5 +1,5 @@
 /* ===== ThirdHub app.js — 应用入口 / 路由 / 初始化 ===== */
-export const APP_VERSION = '3.6';
+export const APP_VERSION = '3.7';
 window.__TH_CSS_V = APP_VERSION; /* v2.7：CSS 按需加载的版本戳 */
 
 import { $, $$, icon, toast, loadCss } from './ui.js';
@@ -37,7 +37,16 @@ let currentTab = null;
 async function loadEnabledTabs() {
   let tabs = await kvGet('ui:tabs', null);
   if (!Array.isArray(tabs)) tabs = null;
-  tabs = (tabs || ['ai']).filter((id) => BOARDS.some((b) => b.id === id)).slice(0, MAX_TABS);
+  tabs = (tabs || ['ai']).filter((id) => BOARDS.some((b) => b.id === id));
+  /* v3.7：小说/漫画/有声合并为「阅读」板块——旧导航自动迁移（一次性） */
+  const READ_GROUP = ['novel', 'comic', 'audio'];
+  if (tabs.some((id) => READ_GROUP.includes(id))) {
+    const first = tabs.findIndex((id) => READ_GROUP.includes(id));
+    tabs = tabs.filter((id) => !READ_GROUP.includes(id));
+    if (!tabs.includes('read')) tabs.splice(Math.min(first, tabs.length), 0, 'read');
+    kvSet('ui:tabs', tabs).catch(() => {});
+  }
+  tabs = tabs.slice(0, MAX_TABS);
   if (!tabs.length) tabs = ['ai'];
   return tabs;
 }

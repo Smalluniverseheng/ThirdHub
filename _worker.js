@@ -258,7 +258,9 @@ async function handleCompletions(request) {
 const PROXY_MAX_BYTES = 8 * 1024 * 1024;
 const PROXY_TIMEOUT = 20000;
 const PROXY_DEFAULT_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36';
-const PROXY_PASS_HEADERS = ['user-agent', 'referer', 'accept', 'accept-language', 'content-type', 'cookie'];
+/* v3.7：改为黑名单制——连接器常需自定义头（如拷贝漫画的 platform/x-auth-signature/dt），
+   白名单会丢头导致大量图源搜索为空。仅剥离 hop-by-hop 与 CF 内部头，其余原样转发。 */
+const PROXY_BLOCK_HEADERS = ['host', 'connection', 'content-length', 'transfer-encoding', 'keep-alive', 'upgrade', 'te', 'trailer', 'expect', 'via'];
 
 function proxyBlockedHost(host) {
   const h = String(host || '').toLowerCase();
@@ -276,8 +278,15 @@ function proxyBlockedHost(host) {
 function sanitizeProxyHeaders(obj) {
   const out = {};
   if (!obj || typeof obj !== 'object') return out;
+  let n = 0;
   for (const k of Object.keys(obj)) {
-    if (PROXY_PASS_HEADERS.includes(k.toLowerCase())) out[k] = String(obj[k]).slice(0, 500);
+    const lk = k.toLowerCase();
+    if (PROXY_BLOCK_HEADERS.includes(lk)) continue;
+    if (lk.startsWith('cf-') || lk.startsWith('sec-fetch-') || lk.startsWith('proxy-') || lk.startsWith('x-forwarded-')) continue;
+    if (n++ >= 40) break;
+    const v = obj[k];
+    if (v == null || typeof v === 'object') continue;   /* 防 [object Promise] 之类脏值 */
+    out[k] = String(v).slice(0, 1000);
   }
   return out;
 }

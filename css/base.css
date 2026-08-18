@@ -377,3 +377,29 @@ svg.ico.fill { fill: currentColor; stroke: none; }
 /* 滚动显现 */
 .rv { opacity: 0; transform: translateY(22px); transition: opacity .55s ease, transform .55s cubic-bezier(.2,.8,.3,1); }
 .rv.in { opacity: 1; transform: none; }
+
+/* v3.6：设置项通用控件（原散落于 novel-reader.css / ai-chat.css，设置弹层在任何模块都需要） */
+.nr-chip-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.ai-chip {
+  padding: 7px 14px; border-radius: 999px; font-size: 13px; cursor: pointer;
+  background: var(--bg-input); color: var(--text-secondary);
+  border: 1px solid var(--border); transition: all .15s;
+}
+.ai-chip.on { background: var(--primary); border-color: var(--primary); color: #fff; }
+.nr-set-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 0; font-size: 14px; border-top: 1px solid var(--border);
+}
+.ai-toggle {
+  width: 46px; height: 27px; border-radius: 999px; flex-shrink: 0; cursor: pointer;
+  background: var(--bg-input); position: relative; transition: background .2s; border: none;
+}
+.ai-toggle::after {
+  content: ''; position: absolute; top: 3px; left: 3px;
+  width: 21px; height: 21px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.3);
+  transition: transform .2s;
+}
+.ai-toggle.on { background: var(--primary); }
+.ai-toggle.on::after { transform: translateX(19px); }
+.ai-toggle.disabled { opacity: .4; }

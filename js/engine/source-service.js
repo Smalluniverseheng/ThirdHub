@@ -93,9 +93,10 @@ export async function upgradeLegacySources() {
   let n = 0;
   try {
     const { regenLegacyCode } = await import('./legado-adapter.js');
+    const { regenVeneraCode } = await import('./venera-adapter.js');
     const all = await db.all('sources');
     for (const s of all || []) {
-      const code = regenLegacyCode(s && s.code);
+      const code = regenLegacyCode(s && s.code) || regenVeneraCode(s && s.code);
       if (code) { s.code = code; await db.put('sources', s); n++; }
     }
     if (n) emit('sources:changed');

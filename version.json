@@ -1,9 +1,9 @@
 {
-  "version": "3.5",
+  "version": "3.6",
   "type": "optional",
-  "title": "ThirdHub v3.5",
-  "content": "1. 修复书源有目录无正文（@css: 规则前缀兼容）\n2. 阅读器底部栏改版：章节滑杆 + 目录/夜间/听书/设置\n3. 板块默认纯书架，连接器在搜索时显示\n4. 下拉添加书签、听书语速与自动连读\n5. 搜索列表左封面右介绍，封面插图修复",
+  "title": "ThirdHub v3.6",
+  "content": "修复 Venera 官方图源无法使用（包子漫画等已恢复）；漫画设置界面控件化；连接器管理支持类型筛选与一键全测；AI 厂商图标换新，模型库更新至 2026 年 8 月最新（Claude 5 / Gemini 3.x / DeepSeek V4 / Kimi K3 / GLM-5.2 / 豆包 Seed 2.0），历史模型置灰保留。",
   "downloadUrl": "https://github.com/Smalluniverseheng/ThirdHub-Android/releases/download/v2.2/ThirdHub-Android-v2.2.apk",
   "releaseDate": "2026-08-08",
-  "releaseNotes": "修复书源有目录无正文；阅读器底栏改版；板块纯书架"
+  "releaseNotes": "修复 Venera 官方图源无法使用（包子漫画等已恢复）；漫画设置界面控件化；连接器管理支持类型筛选与一键全测；AI 厂商图标换新，模型库更新至 2026 年 8 月最新（Claude 5 / Gemini 3.x / DeepSeek V4 / Kimi K3 / GLM-5.2 / 豆包 Seed 2.0），历史模型置灰保留。"
 }

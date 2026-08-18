@@ -49,16 +49,22 @@ export async function renderCategory(page) {
       <span class="list-arrow">${icon('arrowR')}</span>
     </button>`).join('');
 
-  async function renderSources() {
-    const sources = await listSources();
-    $('[data-v="count"]', page).textContent = `（${sources.length}）`;
+  let curFilter = null;   /* v3.6：类型卡片筛选 */
+  let justImported = false;
+  const refreshSources = () => { const a = justImported; justImported = false; return renderSources(curFilter, a); };
+  async function renderSources(filterType, animNew) {
+    const all = await listSources();
+    $('[data-v="count"]', page).textContent = `（${all.length}）`;
     SOURCE_TYPES.forEach((t) => {
       const elc = $(`[data-count="${t.id}"]`, page);
-      const n = sources.filter((s) => s.type === t.id).length;
+      const n = all.filter((s) => s.type === t.id).length;
       if (elc) elc.textContent = n ? n + ' 个源' : '';
     });
+    /* v3.6：点击类型卡片筛选对应源，再点一次恢复全部 */
+    $$('.cat-type-card', page).forEach((c) => c.classList.toggle('on', !!filterType && c.dataset.t === filterType));
+    const sources = filterType ? all.filter((s) => s.type === filterType) : all;
     const box = $('[data-role="sources"]', page);
-    if (!sources.length) {
+    if (!all.length) {
       box.innerHTML = `<div class="empty">
         <div class="empty-ico">${icon('plug')}</div>
         <div class="empty-title">暂无连接器</div>
@@ -66,10 +72,15 @@ export async function renderCategory(page) {
       </div>`;
       return;
     }
-    box.innerHTML = '';
-    sources.sort((a, b) => b.importedAt - a.importedAt).forEach((s) => {
+    if (!sources.length) {
+      box.innerHTML = `<div class="empty"><div class="empty-title">该类型下暂无连接器</div><div class="muted">再点一次上方卡片显示全部</div></div>`;
+      return;
+    }
+    const head = filterType ? `<div class="muted" style="font-size:12px;padding:0 2px 8px">仅显示「${esc((SOURCE_TYPES.find((t) => t.id === filterType) || {}).name || filterType)}」连接器，再点一次卡片显示全部</div>` : '';
+    box.innerHTML = head;
+    sources.sort((a, b) => b.importedAt - a.importedAt).forEach((s, idx) => {
       const t = SOURCE_TYPES.find((x) => x.id === s.type);
-      const item = el(`<div class="list-item source-item" style="margin-bottom:8px">
+      const item = el(`<div class="list-item source-item${animNew ? ' cat-pop' : ''}" style="margin-bottom:8px${animNew ? `;animation-delay:${Math.min(idx, 12) * 40}ms` : ''}">
         <span class="list-ico">${icon(t ? t.icon : 'folder')}</span>
         <div class="grow" style="min-width:0">
           <div class="row gap4"><span style="font-size:14px;font-weight:600" class="ellipsis">${esc(s.name)}</span><span class="tag ${s.enabled ? 'tag-green' : 'tag-gray'}">${s.enabled ? '已启用' : '已停用'}</span></div>
@@ -84,13 +95,13 @@ export async function renderCategory(page) {
           { label: '查看代码', value: 'code', icon: 'edit' },
           { label: '删除', value: 'del', icon: 'trash', danger: true },
         ]);
-        if (v === 'toggle') { await toggleSource(s.id, !s.enabled); renderSources(); }
+        if (v === 'toggle') { await toggleSource(s.id, !s.enabled); refreshSources(); }
         if (v === 'test') testSource(s);
         if (v === 'code') modal({ title: s.name + ' 源码', body: `<pre style="font-size:11px;line-height:1.6;white-space:pre-wrap;word-break:break-all;color:var(--text-secondary)">${esc(s.code.slice(0, 20000))}</pre>` });
         if (v === 'del' && await confirmDialog('删除连接器', `确定删除「${s.name}」吗？相关书架条目将无法继续更新。`, '删除', true)) {
           await removeSource(s.id);
           destroyEngines();
-          renderSources();
+          refreshSources();
           toast('已删除');
         }
       };
@@ -115,7 +126,7 @@ export async function renderCategory(page) {
           const text = await f.text();
           await importText(text, f.name);
         }
-        renderSources();
+        refreshSources();
       };
       input.click();
     } else if (v === 'paste') {
@@ -130,7 +141,7 @@ export async function renderCategory(page) {
         if (!text) return;
         m.close();
         await importText(text, '粘贴导入');
-        renderSources();
+        refreshSources();
       };
     } else if (v === 'url') {
       const body = el(`<div>${formRow('连接器 URL', '<input class="input" data-f="url" placeholder="https://example.com/source.js">')}</div>`);
@@ -148,7 +159,7 @@ export async function renderCategory(page) {
           const { httpGet } = await import('../engine/proxy.js');
           const text = await httpGet(url);
           await importText(text, url);
-          renderSources();
+          refreshSources();
         } catch (e) { toast('下载失败：' + e.message, 'err'); }
       };
     }
@@ -166,6 +177,7 @@ export async function renderCategory(page) {
     }
     if (!n && dup) throw new Error(label + '已全部存在，无需重复导入');
     if (!n) throw new Error('未检测到有效书源');
+    justImported = true;
     toast(`已导入 ${n} 个${label}${dup ? `（跳过重复 ${dup} 个）` : ''}`, 'ok');
   }
 
@@ -206,8 +218,9 @@ export async function renderCategory(page) {
           n++;
         } catch (e) { fail++; }
       }
-      renderSources();
-      if (n) toast(`已导入 ${n} 个 Venera 图源${dup ? `（跳过重复 ${dup}）` : ''}${fail ? `（失败 ${fail}）` : ''}`, 'ok');
+      if (n) justImported = true;
+      refreshSources();
+      if (n) { toast(`已导入 ${n} 个 Venera 图源${dup ? `（跳过重复 ${dup}）` : ''}${fail ? `（失败 ${fail}）` : ''}`, 'ok'); }
       else toast(dup ? '选中的图源已全部存在' : '导入失败，请检查网络', 'err');
     };
   }
@@ -225,6 +238,7 @@ export async function renderCategory(page) {
       if (isVeneraIndex(text)) return await importVeneraIndex(text, from);
       if (isVeneraJs(text)) {
         const s2 = await importSource(veneraToJsSource(text, /^https?:\/\//.test(from || '') ? from : ''));
+        justImported = true;
         return toast(`已导入 Venera 图源「${s2.name}」`, 'ok');
       }
       if (isLegadoJson(text)) return await importBatch(legadoToJsSources(text), '阅读APP书源');
@@ -236,10 +250,12 @@ export async function renderCategory(page) {
         for (const site of sites.slice(0, 20)) {
           try { await importSource(tvboxToJsSource(site)); n++; } catch (e) {}
         }
+        justImported = true;
         toast(`已从 TVbox 配置导入 ${n} 个视频源`, 'ok');
         return;
       }
       const s = await importSource(text);
+      justImported = true;
       toast(`已导入「${s.name}」`, 'ok');
     } catch (e) {
       toast('导入失败：' + e.message, 'err');
@@ -301,10 +317,52 @@ export async function renderCategory(page) {
   async function testFlow() {
     const sources = await listSources();
     if (!sources.length) return toast('请先导入连接器');
-    const v = await actionSheet('选择要测试的连接器', sources.map((s) => ({ label: s.name, value: s.id, icon: 'plug' })));
+    const v = await actionSheet('选择要测试的连接器', [
+      { label: `⚡ 一键测试全部连接器（${sources.length} 个）`, value: '__all', icon: 'test' },
+      ...sources.map((s) => ({ label: s.name, value: s.id, icon: 'plug' })),
+    ]);
     if (!v) return;
+    if (v === '__all') return testAllSources(sources);
     const s = sources.find((x) => x.id === v);
     testSource(s);
+  }
+
+  /* v3.6：一键测试全部连接器——逐个跑 search，汇总通过/失败 */
+  async function testAllSources(sources) {
+    const body = el('<div></div>');
+    const m = modal({ title: '一键测试全部连接器', body, footer: '<button class="btn grow" data-a="close">关闭</button>' });
+    $('[data-a="close"]', m.mask).onclick = m.close;
+    let ok = 0, fail = 0;
+    const head = el(`<div class="muted" style="padding-bottom:8px" data-v="prog"></div>`);
+    body.appendChild(head);
+    for (const s of sources) {
+      $('[data-v="prog"]', body).textContent = `测试中 ${ok + fail + 1}/${sources.length}：${s.name}`;
+      const row = el(`<div class="list-item" style="margin-bottom:6px;padding:10px 12px">
+        <span class="list-ico">${icon('plug')}</span>
+        <div class="grow" style="min-width:0"><div style="font-size:13.5px;font-weight:600" class="ellipsis">${esc(s.name)}</div>
+        <div class="muted ellipsis" style="font-size:12px" data-v="st">排队中…</div></div>
+        <span data-v="tag"></span></div>`);
+      body.appendChild(row);
+      row.scrollIntoView({ block: 'nearest' });
+      const st = $('[data-v="st"]', row), tag = $('[data-v="tag"]', row);
+      st.textContent = '测试中…';
+      try {
+        const engine = getEngine(s);
+        await engine.init();
+        let r = await engine.search('测试', 1);
+        if (typeof r === 'string') r = JSON.parse(r);
+        if (!r || !r.length) throw new Error('搜索无结果');
+        ok++;
+        st.textContent = `搜索返回 ${r.length} 条`;
+        tag.innerHTML = '<span class="tag tag-green">通过</span>';
+      } catch (e) {
+        fail++;
+        st.textContent = String(e.message || e).slice(0, 60);
+        tag.innerHTML = '<span class="tag tag-red">失败</span>';
+      }
+    }
+    $('[data-v="prog"]', body).innerHTML = `测试完成：<b style="color:var(--green,#22c55e)">${ok} 通过</b> / <b style="color:#ef4444">${fail} 失败</b>（共 ${sources.length} 个）`;
+    toast(`测试完成：${ok} 通过，${fail} 失败`, fail ? 'err' : 'ok');
   }
 
   async function proxyFlow() {
@@ -325,6 +383,14 @@ export async function renderCategory(page) {
       toast('已保存', 'ok');
     };
   }
+
+  /* v3.6：类型卡片 = 筛选器。平时显示全部源；点卡片只看该类型，再点恢复 */
+  $$('.cat-type-card', page).forEach((c) => {
+    c.onclick = () => {
+      curFilter = (curFilter === c.dataset.t) ? null : c.dataset.t;
+      renderSources(curFilter, false);
+    };
+  });
 
   $('[data-a="import"]', page).onclick = importFlow;
   $$('.cat-manager [data-a]', page).forEach((b) => {
@@ -464,7 +530,7 @@ export async function renderCategory(page) {
     };
   }
 
-  await renderSources();
+  await renderSources(null, false);
   await renderRepos();
-  on('sources:changed', renderSources);
+  on('sources:changed', refreshSources);
 }

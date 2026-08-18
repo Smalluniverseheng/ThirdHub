@@ -35,7 +35,7 @@ export function veneraMeta(code) {
 
 /* ---------- Venera API 最小运行时（注入到连接器代码内） ---------- */
 const VENERA_RUNTIME = `
-/* ---- Venera 标准 API 最小实现（ThirdHub 沙箱） ---- */
+/* ---- Venera 标准 API 最小实现（ThirdHub 沙箱 · 运行时 v3.6） ---- */
 class Comic {
   constructor(o = {}) {
     this.id = o.id || ''; this.title = o.title || '';
@@ -191,6 +191,14 @@ class ComicSource {
   saveData(k, v) { legado.data.set(__VEN_KEY, k, v); }
   deleteData(k) { legado.data.del(__VEN_KEY, k); }
   get isLogged() { return legado.data.isLogged(__VEN_KEY); }
+  /* v3.6：图源设置项（settings 里声明的 select/switch 等），未设置时回退 default */
+  loadSetting(k) {
+    const v = legado.data.get(__VEN_KEY, 'setting:' + k);
+    if (v !== null && v !== undefined) return v;
+    const s = this.settings && this.settings[k];
+    return (s && s.default !== undefined) ? s.default : undefined;
+  }
+  saveSetting(k, v) { legado.data.set(__VEN_KEY, 'setting:' + k, v); }
 }
 ComicSource.sources = {};
 `;
@@ -297,4 +305,20 @@ ${code}
 /* ================= 适配层 ================= */
 ${VENERA_ADAPTER.replace(/__VEN_CLS/g, meta.cls)}
 `;
+}
+
+/* v3.6：旧版 Venera 运行时缺少 loadSetting 等 API，导致大量官方图源（包子漫画等）无法使用。
+   从旧连接器代码中提取用户图源原始代码，用新版运行时重新包装（返回 null 表示无需升级）。 */
+const VEN_RUNTIME_MARK = '运行时 v3.6';
+export function regenVeneraCode(code) {
+  const text = String(code || '');
+  if (!/extends\s+ComicSource/.test(text)) return null;      // 不是 Venera 图源
+  if (text.includes(VEN_RUNTIME_MARK)) return null;          // 已是新版运行时
+  const m = text.match(/\/\* =+ 用户图源代码 =+ \*\/\n([\s\S]*?)\n\/\* =+ 适配层 =+ \*\//);
+  if (!m) return null;
+  const userCode = m[1];
+  const urlM = text.match(/^\/\/ @url\s+(\S*)$/m);
+  try {
+    return veneraToJsSource(userCode, urlM ? urlM[1] : '');
+  } catch (e) { return null; }
 }

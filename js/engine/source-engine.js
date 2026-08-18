@@ -79,7 +79,11 @@ export class SourceEngine {
     /* v2.9：旧版适配器生成的连接器代码带有规则引擎 bug，使用时自动升级为新引擎并写回本地库 */
     try {
       const { regenLegacyCode } = await import('./legado-adapter.js');
-      const regen = regenLegacyCode(this.source.code);
+      let regen = regenLegacyCode(this.source.code);
+      if (!regen) {
+        const { regenVeneraCode } = await import('./venera-adapter.js');
+        regen = regenVeneraCode(this.source.code);
+      }
       if (regen) { this.source.code = regen; db.put('sources', this.source).catch(() => {}); }
     } catch (e) {}
 

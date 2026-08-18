@@ -340,4 +340,16 @@ export const CHANGELOG = [
       '视频解析增强：TVbox 仓库可直接作为源仓库添加；跳过无法适配的 csp 爬虫站点；搜索兼容 ac=videolist/list/detail 三种接口；选集兼容无「名称$地址」分隔的裸地址格式',
     ],
   },
+  {
+    version: '3.9',
+    date: '2026-08-18',
+    items: [
+      'Venera 图源引擎对齐官方实现：搜索选项按官方规范自动取默认值（禁漫、nhentai、E-Hentai、漫画人等一大批图源修复）',
+      '支持 search.loadNext 游标式分页的图源（E-Hentai 等）',
+      '图源 init() 异步初始化完成后再搜索（禁漫域名列表不再为空）',
+      '图源自带的顶层函数与引擎隔离，不再冲突（Hitomi 栈溢出修复）',
+      'Convert 加解密全部同步化：纯 JS 实现 AES-ECB/CBC 加解密、MD5 返回原始字节（禁漫域名解密修复）、SHA-256/HMAC 同步',
+      '补齐官方 APP 全局对象（manga_dex 等修复）；对象形式的 POST 请求自动补 JSON Content-Type（Komiic 等 GraphQL 源修复）',
+    ],
+  },
 ];

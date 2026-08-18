@@ -1,9 +1,9 @@
 {
-  "version": "3.8",
-  "type": "optional",
-  "title": "ThirdHub v3.8",
-  "content": "阅读板块类型筛选同步过滤连接器列表；点连接器卡片进入源内部单源搜索；导入书源自动识别类型（有声源不再错当小说）；连接器管理新增「推荐仓库」一键添加公开书源/图源仓库；视频解析增强（TVbox 仓库支持、多接口搜索兼容、裸地址选集兼容）。",
+  "version": "3.9",
+  "type": "recommended",
+  "title": "ThirdHub v3.9",
+  "content": "Venera 图源引擎对齐官方实现，一大批官方图源修复可用：搜索选项自动取官方默认值、支持 loadNext 游标分页、图源初始化完成后再搜索、图源内部函数与引擎隔离、加解密全部同步化（AES/MD5/SHA/HMAC 纯 JS 实现）、补齐 APP 全局对象与 GraphQL 请求头。禁漫天堂、漫画人、manga_dex、Hitomi 等已实测出结果。",
   "downloadUrl": "https://github.com/Smalluniverseheng/ThirdHub-Android/releases/download/v2.2/ThirdHub-Android-v2.2.apk",
   "releaseDate": "2026-08-18",
-  "releaseNotes": "阅读板块类型筛选同步过滤连接器列表；点连接器卡片进入源内部单源搜索；导入书源自动识别类型（有声源不再错当小说）；连接器管理新增「推荐仓库」一键添加公开书源/图源仓库；视频解析增强（TVbox 仓库支持、多接口搜索兼容、裸地址选集兼容）。"
+  "releaseNotes": "Venera 图源引擎对齐官方实现，一大批官方图源修复可用：搜索选项自动取官方默认值、支持 loadNext 游标分页、图源初始化完成后再搜索、图源内部函数与引擎隔离、加解密全部同步化（AES/MD5/SHA/HMAC 纯 JS 实现）、补齐 APP 全局对象与 GraphQL 请求头。禁漫天堂、漫画人、manga_dex、Hitomi 等已实测出结果。"
 }

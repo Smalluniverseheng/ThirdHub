@@ -416,12 +416,17 @@ export async function renderCategory(page) {
       const arr = JSON.parse(String(text).trim());
       return { fmt: 'venera', entries: arr.map((it) => ({ name: it.name || it.key, version: it.version || '', file: base + it.fileName })) };
     }
+    /* v3.8：TVbox 视频源配置也可以作为仓库添加 */
+    if (isTvboxConfig(text)) {
+      const sites = await loadTvboxSites(text);
+      return { fmt: 'tvbox', entries: sites.map((s) => ({ name: s.name, version: '', site: s })) };
+    }
     if (isLegadoJson(text)) {
       const arr = JSON.parse(String(text).trim());
       const list = Array.isArray(arr) ? arr : [arr];
       return { fmt: 'legado', entries: list.filter((it) => it && (it.bookSourceName || it.bookSourceUrl)).map((it) => ({ name: it.bookSourceName || it.bookSourceUrl, version: '', raw: it })) };
     }
-    throw new Error('无法识别的仓库索引格式（支持 Venera 图源仓库 / 阅读APP书源合集 JSON）');
+    throw new Error('无法识别的仓库格式（支持 Venera 图源仓库 / 阅读APP书源合集 / TVbox 配置）');
   }
 
   async function addRepoEntry(repo, entry, btn) {
@@ -433,6 +438,8 @@ export async function renderCategory(page) {
         const { httpGet } = await import('../engine/proxy.js');
         const code = await httpGet(entry.file);
         await importSource(veneraToJsSource(code, entry.file));
+      } else if (repo.fmt === 'tvbox') {
+        await importSource(tvboxToJsSource(entry.site));
       } else {
         await importSource(legadoToJsSources(JSON.stringify([entry.raw]))[0]);
       }
@@ -454,7 +461,7 @@ export async function renderCategory(page) {
     try {
       const data = await fetchRepo(repo);
       repo.fmt = data.fmt;
-      body.innerHTML = `<div class="muted" style="padding:2px 4px 10px;font-size:12px;word-break:break-all">${esc(repo.url)}<br>共 ${data.entries.length} 个源（${data.fmt === 'venera' ? 'Venera 图源' : '阅读APP书源'}）</div>` +
+      body.innerHTML = `<div class="muted" style="padding:2px 4px 10px;font-size:12px;word-break:break-all">${esc(repo.url)}<br>共 ${data.entries.length} 个源（${data.fmt === 'venera' ? 'Venera 图源' : data.fmt === 'tvbox' ? 'TVbox 视频源' : '阅读APP书源'}）</div>` +
         data.entries.map((e2, i) => `
           <div class="row gap8" style="padding:8px 4px;border-top:1px solid var(--line)">
             <div class="grow" style="min-width:0">
@@ -485,7 +492,57 @@ export async function renderCategory(page) {
         <button class="icon-btn" data-del="${i}" title="删除仓库">${icon('trash')}</button>
       </div>`).join('') + `
       <button class="btn grow" data-a="addrepo" style="margin-bottom:4px">＋ 添加源仓库地址</button>
-      <div class="muted" style="font-size:12px;padding:2px 2px 8px;line-height:1.7">填入你维护的 index.json 地址（GitHub / jsDelivr 均可），仓库里整理的书源、图源会列在这里，随取随用。</div>`;
+      <div class="muted" style="font-size:12px;padding:2px 2px 8px;line-height:1.7">填入你维护的 index.json 地址（GitHub / jsDelivr 均可），仓库里整理的书源、图源会列在这里，随取随用。</div>
+      <button class="list-item" style="margin:4px 0 8px" data-a="rec-toggle">
+        <span class="list-ico">${icon('star')}</span>
+        <div class="grow" style="text-align:left;min-width:0">
+          <div style="font-size:14px;font-weight:600">推荐仓库</div>
+          <div class="muted">社区公开的书源 / 图源仓库地址，点「添加」验证后即可挑选导入</div>
+        </div>
+        <span class="list-arrow" data-v="rec-arrow" style="transition:transform .2s">${icon('arrowR')}</span>
+      </button>
+      <div data-role="reclist" hidden></div>`;
+    /* v3.8：推荐仓库（只提供地址，源仍需用户手动挑选导入，不做任何内置） */
+    const REC_REPOS = [
+      { name: 'Venera 官方图源仓库', kind: '漫画', url: 'https://cdn.jsdelivr.net/gh/venera-app/venera-configs@main/index.json', desc: '拷贝漫画、包子漫画等官方维护图源' },
+      { name: 'XIU2 精品书源', kind: '小说', url: 'https://cdn.jsdelivr.net/gh/XIU2/Yuedu@master/shuyuan', desc: '阅读APP老牌自用书源，更新稳定' },
+      { name: '轻小说书源合集', kind: '小说', url: 'https://github.com/ZWolken/Light-Novel-Yuedu-Source/releases/latest/download/All_bookSource.json', desc: '日轻 / 国轻小说书源全集' },
+      { name: 'MyLegadoSource 精选', kind: '小说', url: 'https://raw.githubusercontent.com/entr0pia/MyLegadoSource/master/bookSource.json', desc: '克制数量的精选书源' },
+    ];
+    const recBox = $('[data-role="reclist"]', box);
+    recBox.innerHTML = REC_REPOS.map((r, i) => {
+      const added = repos.some((x) => x.url === r.url);
+      return `<div class="list-item" style="margin-bottom:8px">
+        <span class="list-ico">${icon('cloud')}</span>
+        <div class="grow" style="min-width:0">
+          <div style="font-size:13.5px;font-weight:600" class="ellipsis">${esc(r.name)} <span class="tag tag-gray" style="font-size:11px">${esc(r.kind)}</span></div>
+          <div class="muted ellipsis" style="font-size:12px">${esc(r.desc)}</div>
+        </div>
+        <button class="btn btn-sm ${added ? '' : 'btn-primary'}" data-rec="${i}" ${added ? 'disabled' : ''}>${added ? '已添加' : '添加'}</button>
+      </div>`;
+    }).join('');
+    $('[data-a="rec-toggle"]', box).onclick = () => {
+      recBox.hidden = !recBox.hidden;
+      const ar = $('[data-v="rec-arrow"]', box);
+      if (ar) ar.style.transform = recBox.hidden ? '' : 'rotate(90deg)';
+    };
+    $$('[data-rec]', box).forEach((b) => b.onclick = async () => {
+      const r = REC_REPOS[Number(b.dataset.rec)];
+      b.disabled = true; b.textContent = '验证中…';
+      try {
+        const repo = { url: r.url, name: r.name, addedAt: Date.now() };
+        const data = await fetchRepo(repo);
+        repo.fmt = data.fmt;
+        const repos2 = await getRepos();
+        if (!repos2.some((x) => x.url === r.url)) { repos2.push(repo); await saveRepos(repos2); }
+        toast(`仓库已添加（${data.entries.length} 个源）`, 'ok');
+        renderRepos();
+        openRepo(repo);
+      } catch (e) {
+        toast('验证失败：' + e.message, 'err');
+        b.disabled = false; b.textContent = '添加';
+      }
+    });
     $$('[data-open]', box).forEach((b) => { b.onclick = async () => openRepo((await getRepos())[Number(b.dataset.open)]); });
     $$('[data-del]', box).forEach((b) => {
       b.onclick = async () => {

@@ -30,7 +30,9 @@ function legadoRules(item) {
   const ri = item.ruleBookInfo || {};
   const rt = item.ruleToc || {};
   const rc = item.ruleContent || {};
-  const type = (item.bookSourceType === 2 || item.bookSourceType === '2') ? 'comic' : 'novel';
+  /* v3.8：自动识别类型——阅读规范 0=文本(小说) 1=音频(有声) 2=图片(漫画) */
+  const bst = String(item.bookSourceType ?? '0');
+  const type = bst === '2' ? 'comic' : (bst === '1' ? 'audio' : 'novel');
   return {
     name: item.bookSourceName || item.bookSourceUrl,
     url: item.bookSourceUrl,

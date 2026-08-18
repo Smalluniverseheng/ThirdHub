@@ -69,10 +69,11 @@ export async function updateSource(id, patch) {
 }
 
 /* ---------- 统一搜索（多源并发） ---------- */
-export async function searchAll(keyword, { types = null, onProgress = null, page = 1 } = {}) {
+export async function searchAll(keyword, { types = null, onProgress = null, page = 1, only = null } = {}) {
   const { getEngine } = await import('./source-engine.js');
   let sources = await listSources();
-  sources = sources.filter((s) => s.enabled && (!types || types.includes(s.type)));
+  /* v3.8：only 传入单个连接器 id 时，只搜该源（进入源内部搜索，此时忽略类型筛选） */
+  sources = sources.filter((s) => s.enabled && (only ? s.id === only : (!types || types.includes(s.type))));
   const results = [];
   await Promise.allSettled(sources.map(async (s) => {
     try {

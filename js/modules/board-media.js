@@ -32,6 +32,7 @@ export async function renderMediaBoard(page, type) {
         <button class="btn btn-sm" data-a="search-close">取消</button>
       </div>
       ${isRead ? `<div class="nr-chip-row" style="padding:8px 14px 2px" data-role="typefilter"></div>` : ''}
+      <div data-role="scope" hidden style="padding:8px 14px 0"></div>
     </div>
     <div data-role="srclist" hidden></div>
     <div data-role="results"></div>
@@ -47,6 +48,7 @@ export async function renderMediaBoard(page, type) {
     page.scrollTop = 0;
   };
   $('[data-a="search-close"]', page).onclick = () => {
+    searchScope = null; renderScope();
     searchbar.hidden = true;
     srclist.hidden = true;
     resultsEl.innerHTML = '';
@@ -87,6 +89,7 @@ export async function renderMediaBoard(page, type) {
         else selTypes.add(tid);
         kvSet('read:types', [...selTypes]);
         renderTf();
+        renderHome(); /* v3.8：类型筛选同时过滤下方连接器列表 */
         const kw = $('[data-role="kw"]', page).value.trim();
         if (kw) doSearch(kw);
       });
@@ -98,7 +101,9 @@ export async function renderMediaBoard(page, type) {
   const resultsEl = $('[data-role="results"]', page);
 
   async function renderHome() {
-    const sources = (await listSources()).filter((s) => s.enabled && TYPES.includes(s.type));
+    /* v3.8：综合板块里连接器列表跟随类型筛选（点「漫画」就只剩漫画源） */
+    const sources = (await listSources()).filter((s) =>
+      s.enabled && TYPES.includes(s.type) && (!isRead || selTypes.has(s.type)));
     const shelf = (await db.all('shelf')).filter((x) => TYPES.includes(x.type))
       .sort((a, b) => (b.top - a.top) || (b.addedAt - a.addedAt));
     let html = '';
@@ -139,8 +144,11 @@ export async function renderMediaBoard(page, type) {
         </div>
       </div>` : `<div class="muted" style="padding:10px 18px;font-size:12.5px">还没有${NAME}连接器，到「我的 → 连接器管理」导入后就能搜索了。</div>`;
       $$('[data-src]', srcBox).forEach((b) => b.onclick = () => {
+        /* v3.8：点连接器卡片 → 进入该源内部，搜索只走这一个源 */
+        const s = sources.find((x) => x.id === b.dataset.src);
+        if (!s) return;
+        setSearchScope(s);
         $('[data-role="kw"]', page).focus();
-        toast('输入关键词即可搜索该连接器');
       });
     }
 
@@ -151,6 +159,27 @@ export async function renderMediaBoard(page, type) {
   }
   await renderHome();
   on('sources:changed', renderHome);
+
+  /* v3.8：单源搜索模式——点连接器卡片后，搜索只走该源 */
+  let searchScope = null;
+  function renderScope() {
+    const box = $('[data-role="scope"]', page);
+    if (!box) return;
+    if (!searchScope) { box.hidden = true; box.innerHTML = ''; return; }
+    box.hidden = false;
+    box.innerHTML = `<span class="ai-chip on" style="display:inline-flex;align-items:center;gap:6px">
+      ${icon(typeIcon(searchScope.type))} 仅搜索「${esc(searchScope.name)}」
+      <span data-a="scope-clear" style="cursor:pointer;opacity:.7;padding-left:2px">✕</span>
+    </span>`;
+    $('[data-a="scope-clear"]', box).onclick = (e) => { e.stopPropagation(); setSearchScope(null); };
+  }
+  function setSearchScope(s) {
+    searchScope = s;
+    renderScope();
+    if (s) toast(`已进入「${s.name}」，搜索只走这个源`);
+    const kw = $('[data-role="kw"]', page).value.trim();
+    if (kw) doSearch(kw);
+  }
 
   /* v2.8：搜索分页 —— 书源首页通常只有一二十条，点「加载更多」取下一页 */
   let searchState = { kw: '', page: 1, results: [], loading: false, done: false };
@@ -189,14 +218,15 @@ export async function renderMediaBoard(page, type) {
     resultsEl.classList.remove('hidden');
     if (page === 1) {
       searchState = { kw, page: 1, results: [], loading: true, done: false };
-      resultsEl.innerHTML = '<div class="loading-row"><div class="spinner"></div>正在并发搜索所有' + NAME + '连接器…</div>';
+      resultsEl.innerHTML = '<div class="loading-row"><div class="spinner"></div>' +
+        (searchScope ? `正在搜索「${esc(searchScope.name)}」…` : `正在并发搜索所有${NAME}连接器…`) + '</div>';
     } else {
       const moreBtn = $('[data-a="more"]', resultsEl);
       if (moreBtn) { moreBtn.disabled = true; moreBtn.textContent = '加载中…'; }
     }
     let batch = [];
     try {
-      batch = await searchAll(kw, { types: isRead ? [...selTypes] : TYPES, page });
+      batch = await searchAll(kw, { types: isRead ? [...selTypes] : TYPES, page, only: searchScope ? searchScope.id : null });
     } catch (e) { batch = []; }
     /* 去重（同一书源同一本书分页重复返回时） */
     const seen = new Set(searchState.results.map((r) => r.sourceId + '|' + r.bookUrl));

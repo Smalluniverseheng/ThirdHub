@@ -90,14 +90,16 @@ async function speakCloud(clean, conf) {
   const blob = await resp.blob();
   curAudio = new Audio(URL.createObjectURL(blob));
   speaking = true;
-  curAudio.onended = () => { speaking = false; curAudio = null; };
+  curAudio.onended = () => { speaking = false; curAudio = null; onEndRef && onEndRef(); };
   curAudio.onerror = () => { speaking = false; curAudio = null; };
   await curAudio.play();
   return true;
 }
 
-export async function speak(text, { rate = 1, pitch = 1, lang = 'zh-CN' } = {}) {
+let onEndRef = null;
+export async function speak(text, { rate = 1, pitch = 1, lang = 'zh-CN', onEnd = null } = {}) {
   stopSpeak();
+  onEndRef = onEnd;
   const clean = String(text).replace(/[#*`>\-]|```[\s\S]*?```/g, ' ').slice(0, 2000);
   const engine = await getSetting('ttsEngine');
   const mode = await kvGet('ai:tts-mode', 'auto'); // system | cloud | auto
@@ -122,7 +124,7 @@ export async function speak(text, { rate = 1, pitch = 1, lang = 'zh-CN' } = {}) 
   if (voices[0]) u.voice = voices[0];
   speechSynthesis.speak(u);
   speaking = true;
-  u.onend = () => (speaking = false);
+  u.onend = () => { speaking = false; onEndRef && onEndRef(); };
   return true;
 }
 
@@ -132,3 +134,9 @@ export function stopSpeak() {
   speaking = false;
 }
 export function isSpeaking() { return speaking || !!curAudio; }
+export function pauseSpeak() {
+  try { if (curAudio) curAudio.pause(); else if (canTTS()) speechSynthesis.pause(); } catch (e) {}
+}
+export function resumeSpeak() {
+  try { if (curAudio) curAudio.play(); else if (canTTS()) speechSynthesis.resume(); } catch (e) {}
+}

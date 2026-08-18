@@ -5,7 +5,7 @@ import { $, $$, el, esc, icon, toast, modal, actionSheet, loadCss } from '../ui.
 import { getSetting, setSetting, kvGet, kvSet } from '../store.js';
 import { getChapterList, getChapterContent, saveProgress, getProgress } from '../engine/content-service.js';
 import { getEngine } from '../engine/source-engine.js';
-import { speak, stopSpeak } from '../voice.js';
+import { speak, stopSpeak, pauseSpeak, resumeSpeak } from '../voice.js';
 import { chat } from '../ai/ai-api.js';
 
 const READER_THEMES = {
@@ -75,6 +75,7 @@ export async function openNovelReader({ source, item, startChapter = 0 }) {
   const tapzones = $('.nr-tapzones', ov);
   const infoBar = $('.nr-info', ov);
   let currentText = '';
+  let currentPlain = '';
   let clockTimer = null;
   let autoTimer = null;
 
@@ -145,6 +146,7 @@ export async function openNovelReader({ source, item, startChapter = 0 }) {
         if (toEnd === 'end') body.scrollLeft = body.scrollWidth;
         else { body.scrollLeft = 0; body.scrollTop = 0; }
         updateInfo();
+        if (ttsOn) speakCurrent(); /* 听书模式：新章节加载完自动接着读 */
       });
     } catch (e) {
       body.innerHTML = `<div class="empty"><div class="empty-title">加载失败</div><div class="muted">${esc(e.message)}</div><button class="btn btn-primary mt16" data-a="retry">重试</button></div>`;
@@ -153,20 +155,34 @@ export async function openNovelReader({ source, item, startChapter = 0 }) {
   }
 
   function renderText(title) {
-    const paras = currentText.split(/\n+/).map((p) => p.trim()).filter(Boolean);
     const parts = [`<div class="nr-chapter-title">${esc(title)}</div>`];
-    for (const p of paras) {
-      // 插图小说：正文中独立的图片链接 / markdown 图片
-      const mdImg = p.match(/^!\[.*?\]\((https?:[^)]+)\)$/);
-      const rawImg = p.match(/^(https?:\/\/[^\s]+\.(?:jpg|jpeg|png|webp|gif))(\?[^\s]*)?$/i);
-      const url = mdImg ? mdImg[1] : rawImg ? rawImg[0] : null;
-      if (url && S.readerIllust) {
-        parts.push(`<img class="nr-illust" src="${esc(url)}" loading="lazy" onerror="this.remove()">`);
-      } else if (url) {
-        parts.push(`<p class="nr-p nr-illust-link muted">[插图已隐藏]</p>`);
-      } else {
-        parts.push(`<p class="nr-p">${esc(p)}</p>`);
+    /* v3.3：v3.1 起书源正文保留 HTML（插图小说），检测后消毒直出；纯文本走原逻辑 */
+    const isHtml = /<\s*(p|img|div|br|section|span)\b/i.test(currentText);
+    if (isHtml) {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = currentText;
+      tmp.querySelectorAll('script,style,iframe,object,embed,form,input,button,link,meta').forEach((n) => n.remove());
+      tmp.querySelectorAll('*').forEach((n) => { [...n.attributes].forEach((a) => { if (/^on/i.test(a.name)) n.removeAttribute(a.name); }); });
+      if (!S.readerIllust) tmp.querySelectorAll('img').forEach((n) => n.remove());
+      else tmp.querySelectorAll('img').forEach((im) => { im.classList.add('nr-illust'); im.setAttribute('loading', 'lazy'); im.onerror = () => im.remove(); });
+      parts.push('<div class="nr-rich">' + tmp.innerHTML + '</div>');
+      currentPlain = (tmp.textContent || '').trim();
+    } else {
+      const paras = currentText.split(/\n+/).map((p) => p.trim()).filter(Boolean);
+      for (const p of paras) {
+        // 插图小说：正文中独立的图片链接 / markdown 图片
+        const mdImg = p.match(/^!\[.*?\]\((https?:[^)]+)\)$/);
+        const rawImg = p.match(/^(https?:\/\/[^\s]+\.(?:jpg|jpeg|png|webp|gif))(\?[^\s]*)?$/i);
+        const url = mdImg ? mdImg[1] : rawImg ? rawImg[0] : null;
+        if (url && S.readerIllust) {
+          parts.push(`<img class="nr-illust" src="${esc(url)}" loading="lazy" onerror="this.remove()">`);
+        } else if (url) {
+          parts.push(`<p class="nr-p nr-illust-link muted">[插图已隐藏]</p>`);
+        } else {
+          parts.push(`<p class="nr-p">${esc(p)}</p>`);
+        }
       }
+      currentPlain = currentText;
     }
     body.innerHTML = parts.join('');
     $('.nr-progress', ov).textContent = `${idx + 1} / ${chapters.length}`;
@@ -329,6 +345,7 @@ export async function openNovelReader({ source, item, startChapter = 0 }) {
 
   /* ---------- 绑定 ---------- */
   $('[data-a="back"]', ov).onclick = () => {
+    ttsOn = false;
     stopSpeak();
     if (clockTimer) clearInterval(clockTimer);
     if (autoTimer) clearInterval(autoTimer);
@@ -340,10 +357,50 @@ export async function openNovelReader({ source, item, startChapter = 0 }) {
   $('[data-a="settings"]', ov).onclick = showSettings;
   $('[data-a="prev"]', ov).onclick = () => loadChapter(idx - 1);
   $('[data-a="next"]', ov).onclick = () => loadChapter(idx + 1);
+  /* ---------- v3.3/v3.4 听书：浮动控制条 + 语速 + 自动连读下一章 ---------- */
   let ttsOn = false;
+  let ttsRate = 1;
+  try { ttsRate = (await kvGet('tts:rate', 1)) || 1; } catch (e) {}
+  const ttsBar = document.createElement('div');
+  ttsBar.className = 'nr-ttsbar nr-ui nr-ui-hidden';
+  ttsBar.innerHTML = `
+    <button class="nr-tts-btn" data-t="pp">暂停</button>
+    <div class="nr-tts-rates">${[0.75, 1, 1.25, 1.5, 2].map((r) => `<button class="nr-tts-rate ${r === ttsRate ? 'on' : ''}" data-r="${r}">${r}x</button>`).join('')}</div>
+    <button class="nr-tts-btn" data-t="close">关闭</button>`;
+  ov.appendChild(ttsBar);
+  $$('.nr-tts-rate', ttsBar).forEach((b) => b.onclick = async () => {
+    ttsRate = +b.dataset.r;
+    await kvSet('tts:rate', ttsRate);
+    $$('.nr-tts-rate', ttsBar).forEach((x) => x.classList.toggle('on', x === b));
+    if (ttsOn) speakCurrent(); /* 立即以新语速重读本章 */
+  });
+  let ttsPaused = false;
+  $('[data-t="pp"]', ttsBar).onclick = () => {
+    ttsPaused = !ttsPaused;
+    if (ttsPaused) pauseSpeak(); else resumeSpeak();
+    $('[data-t="pp"]', ttsBar).textContent = ttsPaused ? '继续' : '暂停';
+  };
+  $('[data-t="close"]', ttsBar).onclick = () => stopTts();
+  function speakCurrent() {
+    if (!ttsOn) return;
+    ttsPaused = false;
+    $('[data-t="pp"]', ttsBar).textContent = '暂停';
+    speak(currentPlain || currentText, {
+      rate: ttsRate,
+      onEnd: () => { if (ttsOn && idx < chapters.length - 1) loadChapter(idx + 1); },
+    });
+  }
+  function stopTts() {
+    ttsOn = false;
+    stopSpeak();
+    ttsBar.classList.add('nr-ui-hidden');
+  }
   $('[data-a="tts"]', ov).onclick = () => {
-    ttsOn = !ttsOn;
-    if (ttsOn) { speak(currentText); toast('开始朗读'); } else stopSpeak();
+    if (ttsOn) { stopTts(); toast('已停止朗读'); return; }
+    ttsOn = true;
+    ttsBar.classList.remove('nr-ui-hidden');
+    speakCurrent();
+    toast('开始朗读');
   };
 
   /* ---------- 选中文字 AI 辅助 ---------- */

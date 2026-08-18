@@ -48,9 +48,6 @@ export async function openNovelReader({ source, item, startChapter = 0 }) {
     <div class="nr-top nr-ui">
       <button class="icon-btn" data-a="back">${icon('back')}</button>
       <div class="overlay-title ellipsis">${esc(item.title || item.name)}</div>
-      <button class="icon-btn" data-a="tts" title="朗读">${icon('mic')}</button>
-      <button class="icon-btn" data-a="catalog" title="目录">${icon('list')}</button>
-      <button class="icon-btn" data-a="settings" title="设置">${icon('settings')}</button>
     </div>
     <div class="nr-body"></div>
     <div class="nr-tapzones" hidden>
@@ -63,9 +60,17 @@ export async function openNovelReader({ source, item, startChapter = 0 }) {
       <span class="nr-info-right"><span class="nr-info-time"></span><span class="nr-info-prog"></span></span>
     </div>
     <div class="nr-bottom nr-ui">
-      <button class="nr-nav" data-a="prev">上一章</button>
-      <div class="nr-progress muted"></div>
-      <button class="nr-nav" data-a="next">下一章</button>
+      <div class="nr-navrow">
+        <button class="nr-nav" data-a="prev">上一章</button>
+        <input type="range" class="nr-slider" data-role="chslider" min="0" max="0" step="1" value="0">
+        <button class="nr-nav" data-a="next">下一章</button>
+      </div>
+      <div class="nr-iconrow">
+        <button class="nr-ic" data-a="catalog">${icon('list')}<span>目录</span></button>
+        <button class="nr-ic" data-a="night">${icon('moon')}<span>夜间</span></button>
+        <button class="nr-ic" data-a="tts">${icon('mic')}<span>听书</span></button>
+        <button class="nr-ic" data-a="settings">${icon('settings')}<span>设置</span></button>
+      </div>
     </div>
     <div class="nr-catalog hidden"></div>`;
   $('#overlay-root').appendChild(ov);
@@ -185,7 +190,8 @@ export async function openNovelReader({ source, item, startChapter = 0 }) {
       currentPlain = currentText;
     }
     body.innerHTML = parts.join('');
-    $('.nr-progress', ov).textContent = `${idx + 1} / ${chapters.length}`;
+    const slider = $('[data-role="chslider"]', ov);
+    if (slider) { slider.max = Math.max(0, chapters.length - 1); slider.value = idx; }
     layoutPages();
   }
 
@@ -435,6 +441,12 @@ export async function openNovelReader({ source, item, startChapter = 0 }) {
   };
   $('[data-a="catalog"]', ov).onclick = showCatalog;
   $('[data-a="settings"]', ov).onclick = showSettings;
+  $('[data-a="night"]', ov).onclick = async () => {
+    S.readerTheme = S.readerTheme === 'night' ? 'day' : 'night';
+    await setSetting('readerTheme', S.readerTheme);
+    applySettings();
+  };
+  $('[data-role="chslider"]', ov).onchange = (e) => { const v = +e.target.value; if (v !== idx) loadChapter(v); };
   $('[data-a="prev"]', ov).onclick = () => loadChapter(idx - 1);
   $('[data-a="next"]', ov).onclick = () => loadChapter(idx + 1);
   /* ---------- v3.3/v3.4 听书：浮动控制条 + 语速 + 自动连读下一章 ---------- */

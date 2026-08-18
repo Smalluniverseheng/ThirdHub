@@ -141,3 +141,14 @@ input[type="range"] { accent-color: var(--primary); }
   font-size: 13.5px; text-align: left;
 }
 .nr-bm-del { background: none; border: none; color: inherit; opacity: .5; font-size: 16px; padding: 8px 10px; }
+
+/* v3.5：底部栏改版（上一章/章节滑杆/下一章 + 目录/夜间/听书/设置 图标行） */
+.nr-bottom { display: flex; flex-direction: column; gap: 2px; padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
+.nr-navrow { display: flex; align-items: center; gap: 10px; padding: 4px 16px; }
+.nr-slider { flex: 1; min-width: 0; accent-color: var(--primary, #4a6cf7); }
+.nr-iconrow { display: flex; justify-content: space-around; padding: 6px 8px 0; }
+.nr-ic {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  background: none; border: none; color: inherit; font-size: 11px; opacity: .85;
+}
+.nr-ic svg { width: 20px; height: 20px; }

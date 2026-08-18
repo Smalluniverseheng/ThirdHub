@@ -55,11 +55,12 @@ function legadoRules(item) {
       name: rt.chapterName || '@text',
       url: rt.chapterUrl || 'a@href',
       next: rt.nextTocUrl || '',
+      tocUrl: ri.tocUrl || '',
     },
     content: {
       rule: rc.content || (type === 'comic' ? 'img@src' : '#content@html'),
       next: rc.nextContentUrl || '',
-      replace: rc.replaceRegex || '',
+      replace: Array.isArray(rc.replaceRegex) ? rc.replaceRegex : (rc.replaceRegex ? [rc.replaceRegex] : []),
     },
   };
 }
@@ -130,6 +131,10 @@ function reqHeaders() {
    - 叶规则 'h3@text' / 'img@src'：尾段是属性关键字则提取属性，否则视为链式段
    - 多条备用规则用 || 分隔 */
 const RULE_ATTRS = ['text', 'html', 'href', 'src', 'ownText', 'textNodes', 'alt', 'title', 'value', 'id', 'class', 'style'];
+/* v3.5：规则类型前缀归一化 —— '@css:'/'@CSS:' 直接剥掉（墨坛文学等大量书源在用） */
+function normRule(rule) {
+  return String(rule || '').trim().replace(/^@css:/i, '');
+}
 function parseSeg(seg) {
   seg = String(seg).trim();
   let exclude = null;
@@ -157,8 +162,14 @@ function querySeg(roots, seg) {
       const want = p.sel.slice(5).trim();
       try { els = [...r.querySelectorAll('*')].filter((el) => ownTextOf(el).indexOf(want) >= 0); } catch (e) { els = []; }
     } else {
-      const css = segToCss(p.sel);
+      let css = segToCss(p.sel);
+      /* v3.5：jQuery/阅读APP 方言兼容 —— :eq(N) 转为索引，:not(first-child) 补冒号 */
+      let eqIdx = null;
+      const eqm = css.match(/:eq\\((\\d+)\\)/);
+      if (eqm) { eqIdx = parseInt(eqm[1], 10); css = css.replace(/:eq\\(\\d+\\)/g, ''); }
+      css = css.replace(/:not\\((first|last)-child\\)/g, ':not(:$1-child)');
       try { els = [...r.querySelectorAll(css)]; } catch (e) { els = []; }
+      if (eqIdx != null && p.index == null) p.index = eqIdx;
     }
     if (p.exclude) {
       const parts = p.exclude.split(':').map(Number);
@@ -171,7 +182,7 @@ function querySeg(roots, seg) {
 }
 function selectChain(root, rule) {
   let cur = [root];
-  const segs = String(rule || '').split('@').map((x) => x.trim()).filter(Boolean);
+  const segs = normRule(rule).split('@').map((x) => x.trim()).filter(Boolean);
   for (const seg of segs) {
     cur = querySeg(cur, seg);
     if (!cur.length) break;
@@ -198,7 +209,7 @@ function applyPurify(v, segs) {
 }
 function pickOne(el, rule, defaultAttr) {
   if (!rule) return '';
-  const alts = String(rule).split('||');
+  const alts = normRule(rule).split('||');
   for (let alt of alts) {
     alt = alt.trim();
     if (!alt) continue;
@@ -219,7 +230,7 @@ function pickOne(el, rule, defaultAttr) {
 }
 function pickAll(el, rule, defaultAttr) {
   if (!rule) return [];
-  const hash = String(rule).split('##');
+  const hash = normRule(rule).split('##');
   const body = hash[0].trim();
   const psegs = hash.slice(1);
   const ai = body.lastIndexOf('@');
@@ -228,8 +239,18 @@ function pickAll(el, rule, defaultAttr) {
   if (ai > 0 && (RULE_ATTRS.includes(tail) || tail.startsWith('data-'))) { chain = body.slice(0, ai); attr = tail; }
   return selectChain(el, chain).map((t) => applyPurify(extractAttr(t, attr), psegs).trim()).filter(Boolean);
 }
-async function fetchDoc(url) {
-  const html = await legado.http.get(url, reqHeaders());
+async function fetchDoc(url, opts, fill) {
+  opts = opts || {};
+  const method = String(opts.method || 'GET').toUpperCase();
+  const body = opts.body ? (fill ? fill(opts.body) : opts.body) : null;
+  const headers = reqHeaders();
+  let html;
+  if (method === 'POST' || body || opts.charset) {
+    const r = await legado.http.request(url, { method: body ? 'POST' : method, body: body, headers: headers, charset: opts.charset || '' });
+    html = r.body;
+  } else {
+    html = await legado.http.get(url, headers);
+  }
   return { doc: legado.dom.parse(html), html };
 }
 /* v3.1：封面/插图统一走中转并带 referer，规避书源站防盗链 */
@@ -255,12 +276,15 @@ function fixContentHtml(html, pageUrl) {
 
 async function search(keyword, page) {
   if (!SRC.searchUrl) return [];
-  const su = SRC.searchUrl
-    .replace('{{key}}', legado.urlEncode(keyword))
-    .replace('{{keyword}}', legado.urlEncode(keyword))
-    .replace('{{page}}', String(page || 1));
-  const url = absUrl(su, SRC.url.replace(/\\/$/, '') + '/');
-  const { doc } = await fetchDoc(url);
+  const enc = legado.urlEncode(keyword);
+  /* v3.5：搜索地址可带 '##{json}' 后缀声明 POST/编码：search.php##{"method":"POST","body":"q={{key}}","charset":"gbk"} */
+  let su = SRC.searchUrl;
+  let opts = {};
+  const hm = su.match(/##(\{[\s\S]*\})$/);
+  if (hm) { su = su.slice(0, hm.index); try { opts = JSON.parse(hm[1]); } catch (e) {} }
+  const fill = (x) => String(x || '').replace('{{key}}', enc).replace('{{keyword}}', enc).replace('{{page}}', String(page || 1));
+  const url = absUrl(fill(su), SRC.url.replace(/\\/$/, '') + '/');
+  const { doc } = await fetchDoc(url, opts, fill);
   const rows = selectChain(doc, SRC.search.list || 'div').slice(0, 50);
   const out = [];
   for (const row of rows) {
@@ -296,6 +320,14 @@ async function bookInfo(bookUrl) {
 async function chapterList(bookUrl) {
   const list = [];
   let url = bookUrl;
+  /* v3.5：目录在独立页面时（ruleBookInfo.tocUrl）先解析目录页地址 */
+  if (SRC.toc.tocUrl) {
+    try {
+      const r0 = await fetchDoc(bookUrl);
+      const tu = absUrl(pickOne(r0.doc, SRC.toc.tocUrl), bookUrl);
+      if (tu) url = tu;
+    } catch (e) {}
+  }
   for (let depth = 0; depth < 4 && url; depth++) {
     const { doc } = await fetchDoc(url);
     const rows = selectChain(doc, SRC.toc.list || 'a');
@@ -345,9 +377,10 @@ async function chapterContent(chapterUrl) {
   (SRC.content.filter || []).forEach((bad) => {
     try { text = text.replace(new RegExp(bad, 'gi'), ''); } catch (e) {}
   });
-  if (SRC.content.replace) {
-    try { text = text.replace(new RegExp(SRC.content.replace, 'gi'), ''); } catch (e) {}
-  }
+  (SRC.content.replace || []).forEach((rr) => {
+    const ps = String(rr).split('##');
+    try { text = text.replace(new RegExp(ps[0], 'gi'), ps.length > 1 ? ps[1] : ''); } catch (e) {}
+  });
   return text || '<p>未找到正文内容</p>';
 }
 `;

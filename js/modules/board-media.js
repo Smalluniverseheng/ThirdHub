@@ -23,18 +23,22 @@ export async function renderMediaBoard(page, type) {
         <button class="btn btn-sm" data-a="search-close">取消</button>
       </div>
     </div>
+    <div data-role="srclist" hidden></div>
     <div data-role="results"></div>
     <div data-role="home"></div>`;
 
   /* v3.2：默认书架视图，搜索收起在右上角放大镜后面 */
   const searchbar = $('[data-role="searchbar"]', page);
+  const srclist = $('[data-role="srclist"]', page);
   $('[data-a="search-open"]', page).onclick = () => {
     searchbar.hidden = false;
+    srclist.hidden = false;
     $('[data-role="kw"]', page).focus();
     page.scrollTop = 0;
   };
   $('[data-a="search-close"]', page).onclick = () => {
     searchbar.hidden = true;
+    srclist.hidden = true;
     resultsEl.innerHTML = '';
     resultsEl.classList.add('hidden');
     homeEl.classList.remove('hidden');
@@ -58,9 +62,9 @@ export async function renderMediaBoard(page, type) {
       .sort((a, b) => (b.top - a.top) || (b.addedAt - a.addedAt));
     let html = '';
 
+    /* v3.5：平时只显示书架；连接器列表挪进搜索视图（点放大镜后显示在搜索框下方） */
     if (shelf.length) {
       html += `<div class="discover-section">
-        <div class="section-head">${icon('books')}<span>我的书架</span><span class="muted">${shelf.length}</span></div>
         <div class="result-grid">${shelf.map((it) => `
           <button class="content-card card-press" data-shelf="${esc(it.id)}">
             <div class="content-cover">${it.coverUrl ? `<img src="${esc(it.coverUrl)}" loading="lazy" onerror="this.remove()">` : icon(t.icon)}</div>
@@ -71,8 +75,19 @@ export async function renderMediaBoard(page, type) {
       </div>`;
     }
 
-    if (sources.length) {
-      html += `<div class="discover-section">
+    if (!html) {
+      html = `<div class="empty" style="margin-top:44px">
+        <div class="empty-ico">${icon(t.icon)}</div>
+        <div class="empty-title">书架还是空的</div>
+        <div class="muted" style="max-width:280px;line-height:1.8">点右上角放大镜搜索${NAME}，加入书架后就会出现在这里。<br>还没有连接器？到「我的 → 连接器管理」导入。</div>
+      </div>`;
+    }
+    homeEl.innerHTML = html;
+
+    /* 连接器列表渲染到搜索视图里 */
+    const srcBox = $('[data-role="srclist"]', page);
+    if (srcBox) {
+      srcBox.innerHTML = sources.length ? `<div class="discover-section">
         <div class="section-head">${icon('plug')}<span>${NAME}连接器</span><span class="muted">${sources.length} 个</span></div>
         <div class="source-cards">${sources.map((s) => `
           <button class="source-card card card-press" data-src="${esc(s.id)}">
@@ -81,25 +96,16 @@ export async function renderMediaBoard(page, type) {
             <span class="muted">v${esc(s.version || '1.0')}</span>
           </button>`).join('')}
         </div>
-      </div>`;
+      </div>` : `<div class="muted" style="padding:10px 18px;font-size:12.5px">还没有${NAME}连接器，到「我的 → 连接器管理」导入后就能搜索了。</div>`;
+      $$('[data-src]', srcBox).forEach((b) => b.onclick = () => {
+        $('[data-role="kw"]', page).focus();
+        toast('输入关键词即可搜索该连接器');
+      });
     }
-
-    if (!html) {
-      html = `<div class="empty" style="margin-top:44px">
-        <div class="empty-ico">${icon(t.icon)}</div>
-        <div class="empty-title">还没有${NAME}连接器</div>
-        <div class="muted" style="max-width:280px;line-height:1.8">ThirdHub 不预置任何内容源。<br>请到「我的 → 连接器管理」导入你自己的连接器，导入后即可在这里搜索和浏览${NAME}。</div>
-      </div>`;
-    }
-    homeEl.innerHTML = html;
 
     $$('[data-shelf]', homeEl).forEach((b) => b.onclick = async () => {
       const it = shelf.find((x) => x.id === b.dataset.shelf);
       if (it) openDetail({ sourceId: it.sourceId, bookUrl: it.bookUrl, seed: it });
-    });
-    $$('[data-src]', homeEl).forEach((b) => b.onclick = () => {
-      $('[data-role="kw"]', page).focus();
-      toast('输入关键词即可搜索该连接器');
     });
   }
   await renderHome();
@@ -137,6 +143,7 @@ export async function renderMediaBoard(page, type) {
   async function doSearch(kw, page = 1) {
     if (searchState.loading) return;
     searchState.loading = true;
+    srclist.hidden = true;
     homeEl.classList.add('hidden');
     resultsEl.classList.remove('hidden');
     if (page === 1) {

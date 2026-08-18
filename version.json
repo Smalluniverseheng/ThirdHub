@@ -1,9 +1,9 @@
 {
-  "version": "3.4",
+  "version": "3.5",
   "type": "optional",
-  "title": "ThirdHub v2.5",
-  "content": "1. 修复历史会话右侧 1/5 区域无法滑动返回的问题\n2. 新增「AI 模型头像隐藏」设置（默认开启），AI 回复铺满整行\n3. 厂商商标按官方原图展示，不再额外衬底\n4. 会员中心改版：账号区居中、付费周期切换下移；免费版云存储修正为 10MB，套餐英文名更正",
+  "title": "ThirdHub v3.5",
+  "content": "1. 修复书源有目录无正文（@css: 规则前缀兼容）\n2. 阅读器底部栏改版：章节滑杆 + 目录/夜间/听书/设置\n3. 板块默认纯书架，连接器在搜索时显示\n4. 下拉添加书签、听书语速与自动连读\n5. 搜索列表左封面右介绍，封面插图修复",
   "downloadUrl": "https://github.com/Smalluniverseheng/ThirdHub-Android/releases/download/v2.2/ThirdHub-Android-v2.2.apk",
   "releaseDate": "2026-08-08",
-  "releaseNotes": "下拉添加书签；目录面板新增书签页签"
+  "releaseNotes": "修复书源有目录无正文；阅读器底栏改版；板块纯书架"
 }

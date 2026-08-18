@@ -111,7 +111,9 @@ export class SourceEngine {
         body: options.body,
         redirect: 'follow',
       });
-      const text = await resp.text();
+      /* v3.5：按字节读取后用指定字符集解码（老站常见 GBK） */
+      const buf = await resp.arrayBuffer();
+      const text = new TextDecoder(options.charset || 'utf-8').decode(buf);
       const rh = {};
       try { resp.headers.forEach((v, k) => { rh[k] = v; }); } catch (e) {}
       return { status: resp.status, body: text, url: resp.url, headers: rh };
@@ -126,7 +128,11 @@ export class SourceEngine {
             headers: options.body ? { 'Content-Type': 'application/octet-stream' } : {},
             body: options.body ? JSON.stringify({ body: options.body, headers: options.headers }) : undefined,
           });
-          if (resp.ok) return { status: resp.status, body: await resp.text(), url, headers: {} };
+          if (resp.ok) {
+            /* v3.5：中转返回原始字节，这里按字符集解码 */
+            const buf = await resp.arrayBuffer();
+            return { status: resp.status, body: new TextDecoder(options.charset || 'utf-8').decode(buf), url, headers: {} };
+          }
         } catch (e) {}
       }
       try { return await rawFetch(url, options); } catch (e) {}

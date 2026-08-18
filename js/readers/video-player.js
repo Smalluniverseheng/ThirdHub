@@ -1,5 +1,5 @@
 /* ===== ThirdHub js/readers/video-player.js — 视频播放器（m3u8/mp4/选集/线路/倍速/画中画） ===== */
-import { $, $$, esc, icon, toast, actionSheet, fmtDuration } from '../ui.js';
+import { $, $$, esc, icon, toast, actionSheet, fmtDuration, loadCss } from '../ui.js';
 import { getChapterList, getChapterContent, saveProgress, getProgress } from '../engine/content-service.js';
 import { canPiP } from '../device.js';
 
@@ -19,6 +19,7 @@ async function loadHls() {
 }
 
 export async function openVideoPlayer({ source, item, startChapter = 0 }) {
+  await loadCss('css/player.css'); /* v2.7：样式按需加载 */
   let chapters = [];
   let idx = startChapter;
   let hls = null;

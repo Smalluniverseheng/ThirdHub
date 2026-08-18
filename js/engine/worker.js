@@ -70,7 +70,9 @@ async function rawFetch(url, options = {}) {
 async function httpRequest(url, options = {}) {
   if (PROXY.backend && PROXY.mode !== 'direct') {
     try {
-      const resp = await fetch(PROXY.backend + (PROXY.backend.includes('?') ? '&' : '?') + 'url=' + encodeURIComponent(url), {
+      const hdrQ = (options.headers && Object.keys(options.headers).length && !options.body)
+        ? '&headers=' + encodeURIComponent(JSON.stringify(options.headers)) : '';
+      const resp = await fetch(PROXY.backend + (PROXY.backend.includes('?') ? '&' : '?') + 'url=' + encodeURIComponent(url) + hdrQ, {
         method: options.method || 'GET',
         headers: options.body ? { 'Content-Type': 'application/octet-stream' } : {},
         body: options.body ? JSON.stringify({ body: options.body, headers: options.headers }) : undefined,

@@ -69,15 +69,16 @@ export async function updateSource(id, patch) {
 }
 
 /* ---------- 统一搜索（多源并发） ---------- */
-export async function searchAll(keyword, { types = null, onProgress = null } = {}) {
+export async function searchAll(keyword, { types = null, onProgress = null, page = 1, only = null } = {}) {
   const { getEngine } = await import('./source-engine.js');
   let sources = await listSources();
-  sources = sources.filter((s) => s.enabled && (!types || types.includes(s.type)));
+  /* v3.8：only 传入单个连接器 id 时，只搜该源（进入源内部搜索，此时忽略类型筛选） */
+  sources = sources.filter((s) => s.enabled && (only ? s.id === only : (!types || types.includes(s.type))));
   const results = [];
   await Promise.allSettled(sources.map(async (s) => {
     try {
       const engine = getEngine(s);
-      const list = await engine.search(keyword, 1);
+      const list = await engine.search(keyword, page);
       const arr = Array.isArray(list) ? list : (typeof list === 'string' ? JSON.parse(list) : []);
       arr.forEach((item) => results.push({ ...item, sourceId: s.id, sourceName: s.name, type: s.type }));
       onProgress && onProgress(s, arr.length, null);
@@ -86,4 +87,20 @@ export async function searchAll(keyword, { types = null, onProgress = null } = {
     }
   }));
   return results;
+}
+
+/* v2.9：把本地库中旧版适配器生成的连接器自动升级为新规则引擎（无需用户重新导入） */
+export async function upgradeLegacySources() {
+  let n = 0;
+  try {
+    const { regenLegacyCode } = await import('./legado-adapter.js');
+    const { regenVeneraCode } = await import('./venera-adapter.js');
+    const all = await db.all('sources');
+    for (const s of all || []) {
+      const code = regenLegacyCode(s && s.code) || regenVeneraCode(s && s.code);
+      if (code) { s.code = code; await db.put('sources', s); n++; }
+    }
+    if (n) emit('sources:changed');
+  } catch (e) { console.warn('连接器自动升级失败', e); }
+  return n;
 }

@@ -7,7 +7,18 @@ const PUBLIC_PROXIES = [
   (u) => 'https://corsproxy.io/?url=' + encodeURIComponent(u),
 ];
 
-export async function getBackendProxy() { return await kvGet('proxy:backend', 'https://thirdhub-proxy.1829487897.workers.dev/'); }
+/* v2.7：默认中转改为本站同源 /api/proxy（Pages Worker 纯转发中继，无跨域问题）；
+   旧版 workers.dev 独立中转已下线，存量配置自动迁移 */
+const DEFAULT_BACKEND = '/api/proxy';
+const LEGACY_BACKENDS = ['https://thirdhub-proxy.1829487897.workers.dev/', 'https://thirdhub-proxy.1829487897.workers.dev'];
+export async function getBackendProxy() {
+  let v = await kvGet('proxy:backend', DEFAULT_BACKEND);
+  if (!v || LEGACY_BACKENDS.includes(v)) {
+    v = DEFAULT_BACKEND;
+    await kvSet('proxy:backend', v);
+  }
+  return v;
+}
 export async function setBackendProxy(url) { await kvSet('proxy:backend', (url || '').trim()); }
 
 /* v1.9 模块代理链路：按通道尝试取回文本，成功返回，全部失败返回 null */

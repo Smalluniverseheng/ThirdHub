@@ -11,7 +11,8 @@ export function isTvboxConfig(text) {
 
 export async function loadTvboxSites(text) {
   const j = JSON.parse(text);
-  return (j.sites || []).filter((s) => s.api && s.name).map((s) => ({
+  /* v3.8：只收 http(s) 接口站点（csp_* 等依赖 App 内置爬虫的站点无法适配，直接跳过） */
+  return (j.sites || []).filter((s) => s.api && s.name && /^https?:\/\//i.test(String(s.api))).map((s) => ({
     key: s.key || s.name,
     name: s.name,
     api: s.api,
@@ -31,24 +32,38 @@ export function tvboxToJsSource(site) {
 
 const API = '${api}';
 
+function pickList(j) {
+  if (!j) return [];
+  if (Array.isArray(j.list)) return j.list;
+  if (j.data && Array.isArray(j.data.list)) return j.data.list;
+  return [];
+}
+
 async function search(keyword, page) {
-  const url = API + (API.includes('?') ? '&' : '?') + 'ac=videolist&wd=' + legado.urlEncode(keyword) + '&pg=' + page;
-  const text = await legado.http.get(url);
-  const j = JSON.parse(text);
-  return (j.list || []).map(v => ({
-    name: v.vod_name,
-    author: v.vod_actor || '',
-    coverUrl: v.vod_pic || '',
-    bookUrl: String(v.vod_id),
-    intro: (v.vod_content || '').replace(/<[^>]+>/g, ''),
-    type: 'video',
-  }));
+  /* v3.8：部分苹果CMS站点只在 ac=list / ac=detail 下支持搜索，逐个尝试 */
+  const acs = ['videolist', 'list', 'detail'];
+  for (const ac of acs) {
+    try {
+      const url = API + (API.includes('?') ? '&' : '?') + 'ac=' + ac + '&wd=' + legado.urlEncode(keyword) + '&pg=' + page;
+      const j = JSON.parse(await legado.http.get(url));
+      const list = pickList(j);
+      if (list.length) return list.map(v => ({
+        name: v.vod_name,
+        author: v.vod_actor || '',
+        coverUrl: v.vod_pic || '',
+        bookUrl: String(v.vod_id),
+        intro: (v.vod_content || '').replace(/<[^>]+>/g, ''),
+        type: 'video',
+      }));
+    } catch (e) {}
+  }
+  return [];
 }
 
 async function bookInfo(bookUrl) {
   const url = API + (API.includes('?') ? '&' : '?') + 'ac=detail&ids=' + bookUrl;
   const j = JSON.parse(await legado.http.get(url));
-  const v = (j.list || [])[0] || {};
+  const v = pickList(j)[0] || {};
   return {
     name: v.vod_name,
     author: v.vod_actor || '',
@@ -62,16 +77,26 @@ async function bookInfo(bookUrl) {
 async function chapterList(bookUrl) {
   const url = API + (API.includes('?') ? '&' : '?') + 'ac=detail&ids=' + bookUrl;
   const j = JSON.parse(await legado.http.get(url));
-  const v = (j.list || [])[0] || {};
+  const v = pickList(j)[0] || {};
   const from = (v.vod_play_from || '默认').split('$$$');
   const urls = (v.vod_play_url || '').split('$$$');
   const chapters = [];
   urls.forEach((line, li) => {
+    let epNo = 0;
     (line || '').split('#').forEach((ep) => {
+      ep = (ep || '').trim();
+      if (!ep) return;
+      epNo++;
+      /* v3.8：兼容没有「名称$地址」分隔、只有裸地址的站点 */
       const parts = ep.split('$');
-      if (parts.length >= 2) {
-        chapters.push({ name: (from[li] ? '[' + from[li] + '] ' : '') + parts[0], url: parts[1], vip: false });
-      }
+      let name, u;
+      if (parts.length >= 2 && /^https?:/i.test(parts[parts.length - 1])) {
+        u = parts[parts.length - 1];
+        name = parts.slice(0, -1).join('$') || ('第' + epNo + '集');
+      } else if (/^https?:/i.test(ep)) {
+        u = ep; name = '第' + epNo + '集';
+      } else return;
+      chapters.push({ name: (from[li] ? '[' + from[li] + '] ' : '') + name, url: u, vip: false });
     });
   });
   return chapters;

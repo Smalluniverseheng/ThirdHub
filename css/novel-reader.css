@@ -101,3 +101,54 @@ input[type="range"] { accent-color: var(--primary); }
   display: flex; align-items: center; justify-content: space-between;
   padding: 10px 0; font-size: 14px; border-top: 1px solid var(--border);
 }
+
+/* v3.3：富文本正文（插图小说） */
+.nr-rich p { margin: 0 0 var(--nr-gap, .8em) 0; }
+.nr-rich img.nr-illust { display: block; max-width: 100%; height: auto; margin: .6em auto; border-radius: 6px; }
+
+/* v3.3：听书浮动控制条 */
+.nr-ttsbar {
+  position: absolute; left: 50%; bottom: 76px; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+  background: var(--bg-card, #222); color: var(--text-primary, #eee);
+  border-radius: 999px; box-shadow: 0 6px 24px rgba(0,0,0,.35); z-index: 30;
+  font-size: 12px; white-space: nowrap;
+}
+.nr-tts-btn { background: none; border: none; color: inherit; font-size: 13px; font-weight: 600; padding: 4px 6px; }
+.nr-tts-rates { display: flex; gap: 2px; }
+.nr-tts-rate { background: none; border: none; color: inherit; opacity: .55; font-size: 12px; padding: 4px 6px; border-radius: 999px; }
+.nr-tts-rate.on { opacity: 1; background: rgba(127,127,127,.25); font-weight: 700; }
+
+/* v3.4：下拉添加书签提示 */
+.nr-pulltip {
+  position: absolute; top: 14px; left: 50%; transform: translateX(-50%) translateY(-8px);
+  padding: 8px 18px; border-radius: 999px; background: rgba(0,0,0,.72); color: #fff;
+  font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .15s, transform .15s; z-index: 40;
+}
+.nr-pulltip.on { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* v3.4：目录/书签页签 */
+.nr-cat-tabs { display: flex; gap: 8px; }
+.nr-cat-tab {
+  background: none; border: none; color: inherit; font-size: 14px; padding: 4px 10px;
+  opacity: .6; border-radius: 999px;
+}
+.nr-cat-tab.on { opacity: 1; font-weight: 700; background: rgba(127,127,127,.18); }
+.nr-bm-item { display: flex; align-items: center; padding: 0 !important; }
+.nr-bm-jump {
+  flex: 1; min-width: 0; background: none; border: none; color: inherit;
+  display: flex; justify-content: space-between; gap: 10px; padding: 10px 4px;
+  font-size: 13.5px; text-align: left;
+}
+.nr-bm-del { background: none; border: none; color: inherit; opacity: .5; font-size: 16px; padding: 8px 10px; }
+
+/* v3.5：底部栏改版（上一章/章节滑杆/下一章 + 目录/夜间/听书/设置 图标行） */
+.nr-bottom { display: flex; flex-direction: column; gap: 2px; padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
+.nr-navrow { display: flex; align-items: center; gap: 10px; padding: 4px 16px; }
+.nr-slider { flex: 1; min-width: 0; accent-color: var(--primary, #4a6cf7); }
+.nr-iconrow { display: flex; justify-content: space-around; padding: 6px 8px 0; }
+.nr-ic {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  background: none; border: none; color: inherit; font-size: 11px; opacity: .85;
+}
+.nr-ic svg { width: 20px; height: 20px; }

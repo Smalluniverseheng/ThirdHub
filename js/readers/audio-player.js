@@ -1,5 +1,5 @@
 /* ===== ThirdHub js/readers/audio-player.js — 音频播放器（听书/音乐，后台播放/播放列表/倍速/定时） ===== */
-import { $, $$, esc, icon, toast, actionSheet, fmtDuration } from '../ui.js';
+import { $, $$, esc, icon, toast, actionSheet, fmtDuration, loadCss } from '../ui.js';
 import { getChapterList, getChapterContent, saveProgress, getProgress, addHistory } from '../engine/content-service.js';
 
 /* 全局唯一播放器（支持后台继续播放） */
@@ -38,6 +38,7 @@ function updateMediaSession(meta) {
 }
 
 export async function openAudioPlayer({ source, item, startChapter = 0 }) {
+  await loadCss('css/player.css'); /* v2.7：样式按需加载 */
   const a = ensureAudio();
   currentCtx = { source, item };
   let chapters = [];

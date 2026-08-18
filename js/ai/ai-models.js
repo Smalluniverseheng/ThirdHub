@@ -8,22 +8,22 @@ import { setCustomVendorIcon, clearCustomVendorIcons } from './vendors.js';
 
 export const PROVIDERS = [
   { id: 'openai', name: 'OpenAI', base: 'https://api.openai.com/v1', type: 'openai', models: [
-    'gpt-5', 'gpt-5-mini', 'gpt-5-nano', 'gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'o3', 'o4-mini',
+    'gpt-5.2', 'gpt-5', 'gpt-5-mini', 'gpt-5-nano', 'gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'o3', 'o4-mini',
   ], image: ['gpt-image-1', 'dall-e-3'], video: ['sora-2', 'sora-2-pro'],
     deprecated: ['gpt-4-turbo', 'gpt-4', 'gpt-3.5-turbo', 'o1', 'o1-mini', 'o3-mini', 'gpt-4.5-preview', 'dall-e-2'] },
   { id: 'anthropic', name: 'Anthropic', base: 'https://api.anthropic.com/v1', type: 'anthropic', models: [
-    'claude-opus-4-1', 'claude-sonnet-4-5', 'claude-haiku-4-5', 'claude-sonnet-4', 'claude-opus-4',
-  ], deprecated: ['claude-3-7-sonnet-latest', 'claude-3-5-sonnet-latest', 'claude-3-5-haiku-latest', 'claude-3-opus-latest', 'claude-3-sonnet', 'claude-3-haiku', 'claude-2.1'] },
+    'claude-opus-5', 'claude-sonnet-5', 'claude-fable-5', 'claude-mythos-5', 'claude-haiku-4-5', 'claude-opus-4-8', 'claude-opus-4-7',
+  ], deprecated: ['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-opus-4-5', 'claude-sonnet-4-5', 'claude-opus-4-1', 'claude-sonnet-4', 'claude-opus-4', 'claude-3-7-sonnet-latest', 'claude-3-5-sonnet-latest', 'claude-3-5-haiku-latest', 'claude-3-opus-latest', 'claude-3-sonnet', 'claude-3-haiku', 'claude-2.1'] },
   { id: 'google', name: 'Google Gemini', base: 'https://generativelanguage.googleapis.com/v1beta/openai', type: 'openai', models: [
-    'gemini-3-pro-preview', 'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-2.0-flash-lite',
+    'gemini-3.1-pro', 'gemini-3.5-flash', 'gemini-3-flash', 'gemini-3.1-flash-lite', 'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite',
   ], image: ['imagen-3.0-generate-002'], video: ['veo-3.0-generate-preview', 'veo-2.0-generate-001'],
-    deprecated: ['gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-1.0-pro', 'gemini-pro-vision'] },
+    deprecated: ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-3-pro-preview', 'gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-1.0-pro', 'gemini-pro-vision'] },
   { id: 'xai', name: 'xAI', base: 'https://api.x.ai/v1', type: 'openai', models: [
     'grok-4-1-fast-reasoning', 'grok-4-1-fast-non-reasoning', 'grok-4', 'grok-4-fast', 'grok-3', 'grok-3-mini',
   ], image: ['grok-2-image'], deprecated: ['grok-2-vision-1212', 'grok-2', 'grok-beta'] },
   { id: 'deepseek', name: 'DeepSeek', base: 'https://api.deepseek.com/v1', type: 'openai', models: [
-    'deepseek-chat', 'deepseek-reasoner',
-  ], deprecated: ['deepseek-coder', 'deepseek-v2.5'] },
+    'deepseek-v4-pro', 'deepseek-v4-flash',
+  ], deprecated: ['deepseek-chat', 'deepseek-reasoner', 'deepseek-coder', 'deepseek-v2.5'] },
   { id: 'xiaomi', name: '小米 MiMo', base: 'https://api.xiaomimimo.com/v1', type: 'openai', models: [
     'mimo-v2.5-pro', 'mimo-v2.5', 'mimo-v2-flash', 'mimo-v2-pro', 'mimo-v2-omni', 'mimo-v2-tts',
   ], deprecated: ['mimo-v1', 'MiMo-7B-RL', 'MiMo-7B-SFT', 'MiMo-7B-Base', 'MiMo-VL-7B-RL'] },
@@ -38,16 +38,16 @@ export const PROVIDERS = [
     'ernie-4.5-turbo-128k', 'ernie-4.5-8k-preview', 'ernie-x1-turbo-32k', 'ernie-4.0-8k', 'ernie-3.5-8k',
   ], deprecated: ['ernie-speed-8k', 'ernie-lite-8k', 'ernie-tiny-8k', 'ernie-bot-4', 'ernie-bot'] },
   { id: 'bytedance', name: '字节跳动 · 豆包', base: 'https://ark.cn-beijing.volces.com/api/v3', type: 'openai', models: [
-    'doubao-seed-1-6', 'doubao-seed-1-6-flash', 'doubao-seed-1-6-thinking', 'doubao-1.5-pro-32k', 'doubao-1.5-pro-256k', 'doubao-1.5-lite-32k', 'doubao-vision-pro-32k', 'deepseek-r1-250528', 'deepseek-v3-250324',
+    'doubao-seed-2-0-pro-260215', 'doubao-seed-2-0-lite-260215', 'doubao-seed-2-0-mini-260215', 'doubao-seed-2-0-code-preview-260215', 'doubao-seed-1-8-251228',
   ], image: ['doubao-seedream-4-0', 'doubao-seedream-3-0-t2i'], video: ['doubao-seedance-1-0-pro', 'doubao-seedance-1-0-lite-t2v'],
-    deprecated: ['doubao-pro-32k', 'doubao-lite-32k', 'doubao-pro-128k', 'doubao-vision-lite-32k'] },
+    deprecated: ['doubao-seed-1-6', 'doubao-seed-1-6-flash', 'doubao-seed-1-6-thinking', 'doubao-1.5-pro-32k', 'doubao-1.5-pro-256k', 'doubao-1.5-lite-32k', 'doubao-vision-pro-32k', 'deepseek-r1-250528', 'deepseek-v3-250324', 'doubao-pro-32k', 'doubao-lite-32k', 'doubao-pro-128k', 'doubao-vision-lite-32k'] },
   { id: 'moonshot', name: '月之暗面 · Kimi', base: 'https://api.moonshot.cn/v1', type: 'openai', models: [
-    'kimi-k2-thinking', 'kimi-k2-thinking-turbo', 'kimi-k2-0905-preview', 'kimi-latest', 'moonshot-v1-auto', 'moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k',
-  ], deprecated: ['kimi-thinking-preview', 'moonshot-v1-8k-vision-preview', 'moonshot-v1-32k-vision-preview'] },
+    'kimi-k3', 'kimi-k2.7-code', 'kimi-k2.7-code-highspeed', 'kimi-k2.6',
+  ], deprecated: ['kimi-k2.5', 'kimi-k2-thinking', 'kimi-k2-thinking-turbo', 'kimi-k2-0905-preview', 'kimi-latest', 'moonshot-v1-auto', 'moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k', 'kimi-thinking-preview', 'moonshot-v1-8k-vision-preview', 'moonshot-v1-32k-vision-preview'] },
   { id: 'zhipu', name: '智谱 AI', base: 'https://open.bigmodel.cn/api/paas/v4', type: 'openai', models: [
-    'glm-4.6', 'glm-4.5', 'glm-4.5-air', 'glm-4-plus', 'glm-4-air', 'glm-4-flash', 'glm-4v-plus', 'glm-z1-air', 'glm-4-long',
+    'glm-5.2', 'glm-5', 'glm-4.6',
   ], image: ['cogview-3-plus', 'cogview-4'], video: ['cogvideox-2', 'cogvideox-flash'],
-    deprecated: ['glm-4-0520', 'glm-4-0111', 'glm-3-turbo', 'chatglm3-6b'] },
+    deprecated: ['glm-4.5', 'glm-4.5-air', 'glm-4-plus', 'glm-4-air', 'glm-4-flash', 'glm-4v-plus', 'glm-z1-air', 'glm-4-long', 'glm-4-0520', 'glm-4-0111', 'glm-3-turbo', 'chatglm3-6b'] },
   { id: 'yi', name: '零一万物', base: 'https://api.lingyiwanwu.com/v1', type: 'openai', models: [
     'yi-lightning', 'yi-large', 'yi-medium', 'yi-vision',
   ], deprecated: ['yi-spark', 'yi-34b-chat', 'yi-6b-chat'] },
@@ -99,8 +99,8 @@ export const PROVIDERS = [
   { id: 'stability', name: 'Stability AI', base: '', type: 'openai', models: [], image: ['stable-diffusion-3-5-large', 'stable-image-ultra'], deprecated: ['stable-diffusion-xl-1024-v1-0', 'stable-diffusion-v1-6'] },
   { id: 'midjourney', name: 'Midjourney（第三方接入）', base: '', type: 'openai', models: [], image: ['midjourney-v6.1'], video: ['mj-video-1'], deprecated: ['midjourney-v5', 'midjourney-v6'] },
   { id: 'openrouter', name: 'OpenRouter（聚合）', base: 'https://openrouter.ai/api/v1', type: 'openai', models: [
-    'openai/gpt-4o', 'anthropic/claude-sonnet-4', 'google/gemini-2.5-pro', 'deepseek/deepseek-chat', 'deepseek/deepseek-r1', 'meta-llama/llama-3.3-70b-instruct', 'qwen/qwen-2.5-72b-instruct', 'x-ai/grok-3',
-  ], deprecated: ['mistralai/mistral-large', 'openai/gpt-3.5-turbo'] },
+    'openai/gpt-5.2', 'anthropic/claude-opus-5', 'anthropic/claude-sonnet-5', 'google/gemini-3.1-pro', 'deepseek/deepseek-v4-pro', 'moonshotai/kimi-k3', 'x-ai/grok-4-1', 'qwen/qwen3-max',
+  ], deprecated: ['openai/gpt-4o', 'anthropic/claude-sonnet-4', 'deepseek/deepseek-chat', 'deepseek/deepseek-r1', 'x-ai/grok-3', 'mistralai/mistral-large', 'openai/gpt-3.5-turbo'] },
   { id: 'azure', name: 'Azure OpenAI', base: '', type: 'openai', models: [], deprecated: [] },
   { id: 'nvidia', name: 'NVIDIA NIM', base: 'https://integrate.api.nvidia.com/v1', type: 'openai', models: [
     'meta/llama-3.3-70b-instruct', 'deepseek-ai/deepseek-r1', 'qwen/qwen2.5-72b-instruct', 'mistralai/mistral-large-2-instruct',

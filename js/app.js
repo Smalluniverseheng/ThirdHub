@@ -1,7 +1,8 @@
 /* ===== ThirdHub app.js — 应用入口 / 路由 / 初始化 ===== */
-export const APP_VERSION = '2.6';
+export const APP_VERSION = '3.9';
+window.__TH_CSS_V = APP_VERSION; /* v2.7：CSS 按需加载的版本戳 */
 
-import { $, $$, icon, toast } from './ui.js';
+import { $, $$, icon, toast, loadCss } from './ui.js';
 import { getSetting, setSetting, on, emit, openDB, kvGet, kvSet } from './store.js';
 import { initCloud } from './supabase.js';
 import { initAuth } from './auth.js';
@@ -36,7 +37,16 @@ let currentTab = null;
 async function loadEnabledTabs() {
   let tabs = await kvGet('ui:tabs', null);
   if (!Array.isArray(tabs)) tabs = null;
-  tabs = (tabs || ['ai']).filter((id) => BOARDS.some((b) => b.id === id)).slice(0, MAX_TABS);
+  tabs = (tabs || ['ai']).filter((id) => BOARDS.some((b) => b.id === id));
+  /* v3.7：小说/漫画/有声合并为「阅读」板块——旧导航自动迁移（一次性） */
+  const READ_GROUP = ['novel', 'comic', 'audio'];
+  if (tabs.some((id) => READ_GROUP.includes(id))) {
+    const first = tabs.findIndex((id) => READ_GROUP.includes(id));
+    tabs = tabs.filter((id) => !READ_GROUP.includes(id));
+    if (!tabs.includes('read')) tabs.splice(Math.min(first, tabs.length), 0, 'read');
+    kvSet('ui:tabs', tabs).catch(() => {});
+  }
+  tabs = tabs.slice(0, MAX_TABS);
   if (!tabs.length) tabs = ['ai'];
   return tabs;
 }
@@ -92,6 +102,8 @@ export async function switchTab(tab, force = false) {
     page.innerHTML = '<div class="loading-row" style="margin-top:60px"><div class="spinner"></div></div>';
     const board = boardById(tab);
     try {
+      /* v2.7：板块样式按需加载（首次切换时才下载对应 CSS） */
+      if (board.css) await Promise.all(board.css.map(loadCss));
       const render = await getRenderer(board);
       page.innerHTML = '';
       await render(page);
@@ -178,30 +190,36 @@ async function boot() {
   /* v1.7：开屏动画（非首访且未关闭时展示，不阻塞启动） */
   try { const { maybeSplash } = await timedImport('./modules/splash.js'); maybeSplash(); } catch (e) {}
 
-  /* v1.9：先载入本地缓存的云端定价（离线也可用上次价格估算） */
-  try { const { initPricing } = await timedImport('./ai/ai-pricing.js'); await initPricing(); } catch (e) {}
+  /* v1.7：应用锁门禁（开启后需先解锁才能进入，本地判定、快速） */
+  try { const { gateIfLocked } = await timedImport('./modules/applock.js'); await gateIfLocked(); } catch (e) {}
 
-  /* 云端初始化不阻塞启动：慢网环境下最多等 6 秒，其余时间后台继续 */
-  const cloudReady = (async () => {
-    try { await initCloud(); } catch (e) { console.warn('cloud 初始化失败', e); }
+  /* 首次进入：介绍 → 登录（可跳过）→ 新用户使用目的 */
+  const { maybeOnboard } = await timedImport('./modules/onboarding.js');
+  await maybeOnboard();
+
+  /* v2.7：先渲染首屏板块，云端/定价/回收站等全部移到首屏之后的空闲任务，
+     做到「用到哪个模块才加载哪个模块」，不再启动时一口气全部加载 */
+  const tabs = await loadEnabledTabs();
+  buildChrome(tabs);
+  await applyNavPos();
+  const startTab = (location.hash || '').replace('#', '');
+  await switchTab(tabs.includes(startTab) || startTab === 'profile' ? startTab : tabs[0]);
+
+  /* 首屏之后的后台任务（不阻塞交互；登录态本地有缓存，云端就绪后自动同步） */
+  setTimeout(async () => {
+    try { const { initPricing } = await timedImport('./ai/ai-pricing.js'); await initPricing(); } catch (e) {}
+    try { const okc = await initCloud(); if (!okc) setTimeout(() => initCloud().catch(() => {}), 4000); } catch (e) { console.warn('cloud 初始化失败', e); setTimeout(() => initCloud().catch(() => {}), 4000); }
     try { await initAuth(); } catch (e) { console.warn('auth 初始化失败', e); }
     try { initSync(); } catch (e) { console.warn('sync 初始化失败', e); }
-    /* v1.7：进入浏览器即拉取最新设置（多设备一致）；登记本设备 */
     try { const { initSettingsSync } = await timedImport('./modules/settings-sync.js'); await initSettingsSync(); } catch (e) { console.warn('设置同步失败', e); }
     try { const { registerDevice } = await timedImport('./modules/devices.js'); await registerDevice(); } catch (e) {}
     try { const { pullKeysFromCloud } = await timedImport('./modules/keyvault.js'); await pullKeysFromCloud(); } catch (e) {}
+    try { const { upgradeLegacySources } = await timedImport('./engine/source-service.js'); await upgradeLegacySources(); } catch (e) {}
     try { const { initSourceSync } = await timedImport('./engine/source-sync.js'); await initSourceSync(); } catch (e) {}
-    /* v1.9：云端模型定价 / 排行榜（管理员后台可维护） */
     try { const { syncCloudPrices } = await timedImport('./ai/ai-pricing.js'); await syncCloudPrices(); } catch (e) {}
     try { const { syncCloudRankings } = await timedImport('./ai/ai-rankings.js'); await syncCloudRankings(); } catch (e) {}
-  })();
-  await Promise.race([cloudReady, new Promise((r) => setTimeout(r, 6000))]);
-
-  /* v1.7：回收站到期自动清理 */
-  try { const { purgeRecycle } = await timedImport('./modules/recycle-bin.js'); await purgeRecycle(); } catch (e) {}
-
-  /* v1.7：应用锁门禁（开启后需先解锁才能进入） */
-  try { const { gateIfLocked } = await timedImport('./modules/applock.js'); await gateIfLocked(); } catch (e) {}
+    try { const { purgeRecycle } = await timedImport('./modules/recycle-bin.js'); await purgeRecycle(); } catch (e) {}
+  }, 60);
 
   /* 自动检查更新（可在「我的 → 全局设置 → 自动检查更新」中关闭） */
   try {
@@ -209,17 +227,6 @@ async function boot() {
       setTimeout(() => checkUpdate(false), 3500);
     }
   } catch (e) {}
-
-  /* 首次进入：介绍 → 登录（可跳过）→ 新用户使用目的 */
-  const { maybeOnboard } = await timedImport('./modules/onboarding.js');
-  await maybeOnboard();
-
-  const tabs = await loadEnabledTabs();
-  buildChrome(tabs);
-  await applyNavPos();
-
-  const startTab = (location.hash || '').replace('#', '');
-  await switchTab(tabs.includes(startTab) || startTab === 'profile' ? startTab : tabs[0]);
 
   setTimeout(() => checkUpdate().catch(() => {}), 3000);
 

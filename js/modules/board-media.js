@@ -12,17 +12,34 @@ export async function renderMediaBoard(page, type) {
   page.innerHTML = `
     <div class="page-head"><div class="page-title">${NAME}</div>
       <div class="spacer"></div>
+      <button class="icon-btn" data-a="search-open" title="搜索">${icon('search')}</button>
       ${type === 'novel' || type === 'comic' ? `<button class="icon-btn" data-a="modset" title="${type === 'novel' ? '阅读设置' : '漫画设置'}">${icon('settings')}</button>` : ''}
     </div>
-    <div class="discover-search">
+    <div class="discover-search" data-role="searchbar" hidden>
       <div class="search-box">
         ${icon('search')}
         <input placeholder="搜索${NAME}…" data-role="kw">
         <button class="btn btn-primary btn-sm" data-a="go">搜索</button>
+        <button class="btn btn-sm" data-a="search-close">取消</button>
       </div>
     </div>
     <div data-role="results"></div>
     <div data-role="home"></div>`;
+
+  /* v3.2：默认书架视图，搜索收起在右上角放大镜后面 */
+  const searchbar = $('[data-role="searchbar"]', page);
+  $('[data-a="search-open"]', page).onclick = () => {
+    searchbar.hidden = false;
+    $('[data-role="kw"]', page).focus();
+    page.scrollTop = 0;
+  };
+  $('[data-a="search-close"]', page).onclick = () => {
+    searchbar.hidden = true;
+    resultsEl.innerHTML = '';
+    resultsEl.classList.add('hidden');
+    homeEl.classList.remove('hidden');
+    searchState = { kw: '', page: 1, results: [], loading: false, done: false };
+  };
 
   /* v1.7 设置分级：阅读设置归入小说模块，漫画设置归入漫画模块 */
   const modsetBtn = $('[data-a="modset"]', page);

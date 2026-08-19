@@ -2,8 +2,10 @@
 import { $, $$, el, esc, icon, toast, modal, actionSheet, confirmDialog, formRow, fmtDate } from '../ui.js';
 import { listSources, removeSource, toggleSource, importSource, SOURCE_TYPES, validateSource, parseSourceMeta } from '../engine/source-service.js';
 import { isTvboxConfig, loadTvboxSites, tvboxToJsSource } from '../engine/tvbox-adapter.js';
+import { isLegadoJson, legadoToJsSources, isBasicJson, basicToJsSources } from '../engine/legado-adapter.js';
+import { isVeneraJs, isVeneraIndex, veneraToJsSource } from '../engine/venera-adapter.js';
 import { getEngine, destroyEngines } from '../engine/source-engine.js';
-import { on } from '../store.js';
+import { on, kvGet, kvSet } from '../store.js';
 
 export async function renderCategory(page) {
   page.innerHTML = `
@@ -18,6 +20,10 @@ export async function renderCategory(page) {
       <div class="cat-manager" data-role="manager"></div>
     </div>
     <div class="cat-section">
+      <div class="section-head" style="padding:0 18px 10px">${icon('cloud')}<span>源仓库</span><span class="muted" data-v="repocount"></span></div>
+      <div data-role="repos" style="padding:0 16px"></div>
+    </div>
+    <div class="cat-section">
       <div class="section-head" style="padding:0 18px 10px">${icon('folder')}<span>我的连接器</span><span class="muted" data-v="count"></span></div>
       <div data-role="sources" style="padding:0 16px"></div>
     </div>`;
@@ -30,7 +36,7 @@ export async function renderCategory(page) {
     </button>`).join('');
 
   $('[data-role="manager"]', page).innerHTML = [
-    { a: 'import', ico: 'import', name: '导入连接器', desc: '从文件 / 粘贴代码 / URL 导入 .js 或 TVbox JSON' },
+    { a: 'import', ico: 'import', name: '导入连接器', desc: '支持阅读APP书源、Venera 漫画图源、CSS书源、TVbox 配置、JS 连接器' },
     { a: 'test', ico: 'test', name: '连接器测试工具', desc: '验证连接器的搜索/目录/内容函数' },
     { a: 'proxy', ico: 'globe', name: '代理设置', desc: '配置后端代理地址（Cloudflare Worker）' },
   ].map((m) => `
@@ -43,16 +49,22 @@ export async function renderCategory(page) {
       <span class="list-arrow">${icon('arrowR')}</span>
     </button>`).join('');
 
-  async function renderSources() {
-    const sources = await listSources();
-    $('[data-v="count"]', page).textContent = `（${sources.length}）`;
+  let curFilter = null;   /* v3.6：类型卡片筛选 */
+  let justImported = false;
+  const refreshSources = () => { const a = justImported; justImported = false; return renderSources(curFilter, a); };
+  async function renderSources(filterType, animNew) {
+    const all = await listSources();
+    $('[data-v="count"]', page).textContent = `（${all.length}）`;
     SOURCE_TYPES.forEach((t) => {
       const elc = $(`[data-count="${t.id}"]`, page);
-      const n = sources.filter((s) => s.type === t.id).length;
+      const n = all.filter((s) => s.type === t.id).length;
       if (elc) elc.textContent = n ? n + ' 个源' : '';
     });
+    /* v3.6：点击类型卡片筛选对应源，再点一次恢复全部 */
+    $$('.cat-type-card', page).forEach((c) => c.classList.toggle('on', !!filterType && c.dataset.t === filterType));
+    const sources = filterType ? all.filter((s) => s.type === filterType) : all;
     const box = $('[data-role="sources"]', page);
-    if (!sources.length) {
+    if (!all.length) {
       box.innerHTML = `<div class="empty">
         <div class="empty-ico">${icon('plug')}</div>
         <div class="empty-title">暂无连接器</div>
@@ -60,10 +72,15 @@ export async function renderCategory(page) {
       </div>`;
       return;
     }
-    box.innerHTML = '';
-    sources.sort((a, b) => b.importedAt - a.importedAt).forEach((s) => {
+    if (!sources.length) {
+      box.innerHTML = `<div class="empty"><div class="empty-title">该类型下暂无连接器</div><div class="muted">再点一次上方卡片显示全部</div></div>`;
+      return;
+    }
+    const head = filterType ? `<div class="muted" style="font-size:12px;padding:0 2px 8px">仅显示「${esc((SOURCE_TYPES.find((t) => t.id === filterType) || {}).name || filterType)}」连接器，再点一次卡片显示全部</div>` : '';
+    box.innerHTML = head;
+    sources.sort((a, b) => b.importedAt - a.importedAt).forEach((s, idx) => {
       const t = SOURCE_TYPES.find((x) => x.id === s.type);
-      const item = el(`<div class="list-item source-item" style="margin-bottom:8px">
+      const item = el(`<div class="list-item source-item${animNew ? ' cat-pop' : ''}" style="margin-bottom:8px${animNew ? `;animation-delay:${Math.min(idx, 12) * 40}ms` : ''}">
         <span class="list-ico">${icon(t ? t.icon : 'folder')}</span>
         <div class="grow" style="min-width:0">
           <div class="row gap4"><span style="font-size:14px;font-weight:600" class="ellipsis">${esc(s.name)}</span><span class="tag ${s.enabled ? 'tag-green' : 'tag-gray'}">${s.enabled ? '已启用' : '已停用'}</span></div>
@@ -78,13 +95,13 @@ export async function renderCategory(page) {
           { label: '查看代码', value: 'code', icon: 'edit' },
           { label: '删除', value: 'del', icon: 'trash', danger: true },
         ]);
-        if (v === 'toggle') { await toggleSource(s.id, !s.enabled); renderSources(); }
+        if (v === 'toggle') { await toggleSource(s.id, !s.enabled); refreshSources(); }
         if (v === 'test') testSource(s);
         if (v === 'code') modal({ title: s.name + ' 源码', body: `<pre style="font-size:11px;line-height:1.6;white-space:pre-wrap;word-break:break-all;color:var(--text-secondary)">${esc(s.code.slice(0, 20000))}</pre>` });
         if (v === 'del' && await confirmDialog('删除连接器', `确定删除「${s.name}」吗？相关书架条目将无法继续更新。`, '删除', true)) {
           await removeSource(s.id);
           destroyEngines();
-          renderSources();
+          refreshSources();
           toast('已删除');
         }
       };
@@ -109,11 +126,11 @@ export async function renderCategory(page) {
           const text = await f.text();
           await importText(text, f.name);
         }
-        renderSources();
+        refreshSources();
       };
       input.click();
     } else if (v === 'paste') {
-      const body = el(`<div>${formRow('粘贴连接器代码（JS 或 TVbox JSON）', '<textarea class="input" rows="10" data-f="code" placeholder="// @name 我的书源\n// @type novel\n..."></textarea>')}</div>`);
+      const body = el(`<div>${formRow('粘贴书源 / 图源代码（阅读APP、Venera、CSS书源、TVbox、JS）', '<textarea class="input" rows="10" data-f="code" placeholder="可粘贴阅读APP书源 JSON、基础CSS书源 JSON 或 JS 连接器代码"></textarea>')}</div>`);
       const m = modal({
         title: '粘贴导入', body,
         footer: '<button class="btn grow" data-a="cancel">取消</button><button class="btn btn-primary grow" data-a="ok">验证并导入</button>',
@@ -124,7 +141,7 @@ export async function renderCategory(page) {
         if (!text) return;
         m.close();
         await importText(text, '粘贴导入');
-        renderSources();
+        refreshSources();
       };
     } else if (v === 'url') {
       const body = el(`<div>${formRow('连接器 URL', '<input class="input" data-f="url" placeholder="https://example.com/source.js">')}</div>`);
@@ -142,14 +159,90 @@ export async function renderCategory(page) {
           const { httpGet } = await import('../engine/proxy.js');
           const text = await httpGet(url);
           await importText(text, url);
-          renderSources();
+          refreshSources();
         } catch (e) { toast('下载失败：' + e.message, 'err'); }
       };
     }
   }
 
+  /* v2.7：批量导入社区书源（阅读APP / 基础CSS选择器 JSON），按名称去重 */
+  async function importBatch(codes, label) {
+    if (!codes.length) throw new Error('未检测到有效书源');
+    const existing = new Set((await listSources()).map((x) => x.name));
+    let n = 0, dup = 0;
+    for (const code of codes.slice(0, 100)) {
+      const meta = parseSourceMeta(code);
+      if (existing.has(meta.name)) { dup++; continue; }
+      try { await importSource(code); existing.add(meta.name); n++; } catch (e) {}
+    }
+    if (!n && dup) throw new Error(label + '已全部存在，无需重复导入');
+    if (!n) throw new Error('未检测到有效书源');
+    justImported = true;
+    toast(`已导入 ${n} 个${label}${dup ? `（跳过重复 ${dup} 个）` : ''}`, 'ok');
+  }
+
+  /* v2.8：Venera 配置库（index.json）→ 勾选后批量下载导入 */
+  async function importVeneraIndex(text, from) {
+    const list = JSON.parse(text);
+    const base = /^https?:\/\//.test(from || '') ? from.slice(0, from.lastIndexOf('/') + 1) : '';
+    const body = el(`<div>
+      <div class="muted mb8" style="line-height:1.7">检测到 Venera 图源库（${list.length} 个漫画图源）。勾选后下载导入：</div>
+      <div style="max-height:46vh;overflow:auto;border:1px solid var(--border,rgba(128,128,128,.2));border-radius:12px;padding:6px 10px">
+        ${list.map((it, i) => `<label style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px dashed rgba(128,128,128,.15)">
+          <input type="checkbox" data-i="${i}">
+          <span style="font-size:14px;font-weight:600">${esc(it.name || it.key)}</span>
+          <span class="muted" style="font-size:12px">v${esc(it.version || '')}</span>
+        </label>`).join('')}
+      </div></div>`);
+    const m = modal({
+      title: 'Venera 图源库', body,
+      footer: '<button class="btn grow" data-a="cancel">取消</button><button class="btn btn-primary grow" data-a="ok">导入选中</button>',
+    });
+    $('[data-a="cancel"]', m.mask).onclick = m.close;
+    $('[data-a="ok"]', m.mask).onclick = async () => {
+      const picks = $$('input[type="checkbox"]', body).filter((c) => c.checked).map((c) => list[+c.dataset.i]);
+      m.close();
+      if (!picks.length) return;
+      if (!base) return toast('请改用「从 URL 导入」粘贴配置库地址，才能下载图源文件', 'err');
+      toast('下载导入中…');
+      const { httpGet } = await import('../engine/proxy.js');
+      const existing = new Set((await listSources()).map((x) => x.name));
+      let n = 0, dup = 0, fail = 0;
+      for (const it of picks.slice(0, 30)) {
+        const nm = it.name || it.key;
+        if (existing.has(nm)) { dup++; continue; }
+        try {
+          const code = await httpGet(base + it.fileName);
+          await importSource(veneraToJsSource(code, base + it.fileName));
+          existing.add(nm);
+          n++;
+        } catch (e) { fail++; }
+      }
+      if (n) justImported = true;
+      refreshSources();
+      if (n) { toast(`已导入 ${n} 个 Venera 图源${dup ? `（跳过重复 ${dup}）` : ''}${fail ? `（失败 ${fail}）` : ''}`, 'ok'); }
+      else toast(dup ? '选中的图源已全部存在' : '导入失败，请检查网络', 'err');
+    };
+  }
+
   async function importText(text, from) {
     try {
+      /* v3.0：粘贴的是裸 URL 时自动下载后导入 */
+      const bare = String(text || '').trim();
+      if (/^https?:\/\/\S+$/.test(bare) && bare !== from) {
+        toast('正在下载链接内容…');
+        const { httpGet } = await import('../engine/proxy.js');
+        const dl = await httpGet(bare);
+        return await importText(dl, bare);
+      }
+      if (isVeneraIndex(text)) return await importVeneraIndex(text, from);
+      if (isVeneraJs(text)) {
+        const s2 = await importSource(veneraToJsSource(text, /^https?:\/\//.test(from || '') ? from : ''));
+        justImported = true;
+        return toast(`已导入 Venera 图源「${s2.name}」`, 'ok');
+      }
+      if (isLegadoJson(text)) return await importBatch(legadoToJsSources(text), '阅读APP书源');
+      if (isBasicJson(text)) return await importBatch(basicToJsSources(text), '书源');
       if (isTvboxConfig(text)) {
         const sites = await loadTvboxSites(text);
         if (!sites.length) throw new Error('TVbox 配置中没有可用站点');
@@ -157,10 +250,12 @@ export async function renderCategory(page) {
         for (const site of sites.slice(0, 20)) {
           try { await importSource(tvboxToJsSource(site)); n++; } catch (e) {}
         }
+        justImported = true;
         toast(`已从 TVbox 配置导入 ${n} 个视频源`, 'ok');
         return;
       }
       const s = await importSource(text);
+      justImported = true;
       toast(`已导入「${s.name}」`, 'ok');
     } catch (e) {
       toast('导入失败：' + e.message, 'err');
@@ -222,10 +317,52 @@ export async function renderCategory(page) {
   async function testFlow() {
     const sources = await listSources();
     if (!sources.length) return toast('请先导入连接器');
-    const v = await actionSheet('选择要测试的连接器', sources.map((s) => ({ label: s.name, value: s.id, icon: 'plug' })));
+    const v = await actionSheet('选择要测试的连接器', [
+      { label: `⚡ 一键测试全部连接器（${sources.length} 个）`, value: '__all', icon: 'test' },
+      ...sources.map((s) => ({ label: s.name, value: s.id, icon: 'plug' })),
+    ]);
     if (!v) return;
+    if (v === '__all') return testAllSources(sources);
     const s = sources.find((x) => x.id === v);
     testSource(s);
+  }
+
+  /* v3.6：一键测试全部连接器——逐个跑 search，汇总通过/失败 */
+  async function testAllSources(sources) {
+    const body = el('<div></div>');
+    const m = modal({ title: '一键测试全部连接器', body, footer: '<button class="btn grow" data-a="close">关闭</button>' });
+    $('[data-a="close"]', m.mask).onclick = m.close;
+    let ok = 0, fail = 0;
+    const head = el(`<div class="muted" style="padding-bottom:8px" data-v="prog"></div>`);
+    body.appendChild(head);
+    for (const s of sources) {
+      $('[data-v="prog"]', body).textContent = `测试中 ${ok + fail + 1}/${sources.length}：${s.name}`;
+      const row = el(`<div class="list-item" style="margin-bottom:6px;padding:10px 12px">
+        <span class="list-ico">${icon('plug')}</span>
+        <div class="grow" style="min-width:0"><div style="font-size:13.5px;font-weight:600" class="ellipsis">${esc(s.name)}</div>
+        <div class="muted ellipsis" style="font-size:12px" data-v="st">排队中…</div></div>
+        <span data-v="tag"></span></div>`);
+      body.appendChild(row);
+      row.scrollIntoView({ block: 'nearest' });
+      const st = $('[data-v="st"]', row), tag = $('[data-v="tag"]', row);
+      st.textContent = '测试中…';
+      try {
+        const engine = getEngine(s);
+        await engine.init();
+        let r = await engine.search('测试', 1);
+        if (typeof r === 'string') r = JSON.parse(r);
+        if (!r || !r.length) throw new Error('搜索无结果');
+        ok++;
+        st.textContent = `搜索返回 ${r.length} 条`;
+        tag.innerHTML = '<span class="tag tag-green">通过</span>';
+      } catch (e) {
+        fail++;
+        st.textContent = String(e.message || e).slice(0, 60);
+        tag.innerHTML = '<span class="tag tag-red">失败</span>';
+      }
+    }
+    $('[data-v="prog"]', body).innerHTML = `测试完成：<b style="color:var(--green,#22c55e)">${ok} 通过</b> / <b style="color:#ef4444">${fail} 失败</b>（共 ${sources.length} 个）`;
+    toast(`测试完成：${ok} 通过，${fail} 失败`, fail ? 'err' : 'ok');
   }
 
   async function proxyFlow() {
@@ -247,6 +384,14 @@ export async function renderCategory(page) {
     };
   }
 
+  /* v3.6：类型卡片 = 筛选器。平时显示全部源；点卡片只看该类型，再点恢复 */
+  $$('.cat-type-card', page).forEach((c) => {
+    c.onclick = () => {
+      curFilter = (curFilter === c.dataset.t) ? null : c.dataset.t;
+      renderSources(curFilter, false);
+    };
+  });
+
   $('[data-a="import"]', page).onclick = importFlow;
   $$('.cat-manager [data-a]', page).forEach((b) => {
     const a = b.dataset.a;
@@ -255,6 +400,194 @@ export async function renderCategory(page) {
     if (a === 'proxy') b.onclick = proxyFlow;
   });
 
-  await renderSources();
-  on('sources:changed', renderSources);
+  /* ---------- v3.0 源仓库：添加你自己的仓库地址（index.json），只从你的仓库选源导入 ---------- */
+  const REPOS_KEY = 'source:repos';
+  const getRepos = async () => (await kvGet(REPOS_KEY, [])) || [];
+  const saveRepos = (list) => kvSet(REPOS_KEY, list);
+
+  /* 拉取仓库索引，识别两种格式：
+     - Venera 图源仓库：[{ name, fileName, key, version }]（图源文件与 index.json 同目录）
+     - 阅读APP书源合集：[{ bookSourceName, bookSourceUrl, ... }]（每条即完整书源） */
+  async function fetchRepo(repo) {
+    const { httpGet } = await import('../engine/proxy.js');
+    const text = await httpGet(repo.url);
+    const base = repo.url.slice(0, repo.url.lastIndexOf('/') + 1);
+    if (isVeneraIndex(text)) {
+      const arr = JSON.parse(String(text).trim());
+      return { fmt: 'venera', entries: arr.map((it) => ({ name: it.name || it.key, version: it.version || '', file: base + it.fileName })) };
+    }
+    /* v3.8：TVbox 视频源配置也可以作为仓库添加 */
+    if (isTvboxConfig(text)) {
+      const sites = await loadTvboxSites(text);
+      return { fmt: 'tvbox', entries: sites.map((s) => ({ name: s.name, version: '', site: s })) };
+    }
+    if (isLegadoJson(text)) {
+      const arr = JSON.parse(String(text).trim());
+      const list = Array.isArray(arr) ? arr : [arr];
+      return { fmt: 'legado', entries: list.filter((it) => it && (it.bookSourceName || it.bookSourceUrl)).map((it) => ({ name: it.bookSourceName || it.bookSourceUrl, version: '', raw: it })) };
+    }
+    throw new Error('无法识别的仓库格式（支持 Venera 图源仓库 / 阅读APP书源合集 / TVbox 配置）');
+  }
+
+  async function addRepoEntry(repo, entry, btn) {
+    if (btn) { btn.disabled = true; btn.textContent = '导入中…'; }
+    try {
+      const existing = await listSources();
+      if (existing.some((s) => s.name === entry.name)) { toast(`「${entry.name}」已存在`, 'err'); return; }
+      if (repo.fmt === 'venera') {
+        const { httpGet } = await import('../engine/proxy.js');
+        const code = await httpGet(entry.file);
+        await importSource(veneraToJsSource(code, entry.file));
+      } else if (repo.fmt === 'tvbox') {
+        await importSource(tvboxToJsSource(entry.site));
+      } else {
+        await importSource(legadoToJsSources(JSON.stringify([entry.raw]))[0]);
+      }
+      toast(`已添加「${entry.name}」`, 'ok');
+      if (btn) btn.textContent = '已添加';
+    } catch (e) {
+      toast('添加失败：' + e.message, 'err');
+      if (btn) { btn.disabled = false; btn.textContent = '添加'; }
+    }
+  }
+
+  async function openRepo(repo) {
+    const body = el('<div class="muted" style="padding:12px 4px">正在读取仓库…</div>');
+    const m = modal({
+      title: '源仓库', body,
+      footer: '<button class="btn grow" data-a="close">关闭</button>',
+    });
+    $('[data-a="close"]', m.mask).onclick = m.close;
+    try {
+      const data = await fetchRepo(repo);
+      repo.fmt = data.fmt;
+      body.innerHTML = `<div class="muted" style="padding:2px 4px 10px;font-size:12px;word-break:break-all">${esc(repo.url)}<br>共 ${data.entries.length} 个源（${data.fmt === 'venera' ? 'Venera 图源' : data.fmt === 'tvbox' ? 'TVbox 视频源' : '阅读APP书源'}）</div>` +
+        data.entries.map((e2, i) => `
+          <div class="row gap8" style="padding:8px 4px;border-top:1px solid var(--line)">
+            <div class="grow" style="min-width:0">
+              <div style="font-size:14px;font-weight:600" class="ellipsis">${esc(e2.name)}</div>
+              ${e2.version ? `<div class="muted" style="font-size:12px">v${esc(e2.version)}</div>` : ''}
+            </div>
+            <button class="btn btn-primary" style="flex:none;padding:6px 14px" data-add="${i}">添加</button>
+          </div>`).join('');
+      $$('[data-add]', body).forEach((b) => {
+        b.onclick = () => addRepoEntry(repo, data.entries[Number(b.dataset.add)], b);
+      });
+    } catch (e) {
+      body.innerHTML = `<div class="muted" style="padding:12px 4px">读取失败：${esc(e.message)}</div>`;
+    }
+  }
+
+  async function renderRepos() {
+    const repos = await getRepos();
+    $('[data-v="repocount"]', page).textContent = repos.length ? `（${repos.length}）` : '';
+    const box = $('[data-role="repos"]', page);
+    box.innerHTML = repos.map((r, i) => `
+      <div class="list-item" style="margin-bottom:8px">
+        <span class="list-ico">${icon('cloud')}</span>
+        <button class="grow card-press" style="text-align:left;min-width:0;background:none;border:none;padding:0" data-open="${i}">
+          <div style="font-size:14px;font-weight:600" class="ellipsis">${esc(r.name || r.url)}</div>
+          <div class="muted ellipsis" style="font-size:12px">${esc(r.url)}</div>
+        </button>
+        <button class="icon-btn" data-del="${i}" title="删除仓库">${icon('trash')}</button>
+      </div>`).join('') + `
+      <button class="btn grow" data-a="addrepo" style="margin-bottom:4px">＋ 添加源仓库地址</button>
+      <div class="muted" style="font-size:12px;padding:2px 2px 8px;line-height:1.7">填入你维护的 index.json 地址（GitHub / jsDelivr 均可），仓库里整理的书源、图源会列在这里，随取随用。</div>
+      <button class="list-item" style="margin:4px 0 8px" data-a="rec-toggle">
+        <span class="list-ico">${icon('star')}</span>
+        <div class="grow" style="text-align:left;min-width:0">
+          <div style="font-size:14px;font-weight:600">推荐仓库</div>
+          <div class="muted">社区公开的书源 / 图源仓库地址，点「添加」验证后即可挑选导入</div>
+        </div>
+        <span class="list-arrow" data-v="rec-arrow" style="transition:transform .2s">${icon('arrowR')}</span>
+      </button>
+      <div data-role="reclist" hidden></div>`;
+    /* v3.8：推荐仓库（只提供地址，源仍需用户手动挑选导入，不做任何内置） */
+    const REC_REPOS = [
+      { name: 'Venera 官方图源仓库', kind: '漫画', url: 'https://cdn.jsdelivr.net/gh/venera-app/venera-configs@main/index.json', desc: '拷贝漫画、包子漫画等官方维护图源' },
+      { name: 'XIU2 精品书源', kind: '小说', url: 'https://cdn.jsdelivr.net/gh/XIU2/Yuedu@master/shuyuan', desc: '阅读APP老牌自用书源，更新稳定' },
+      { name: '轻小说书源合集', kind: '小说', url: 'https://github.com/ZWolken/Light-Novel-Yuedu-Source/releases/latest/download/All_bookSource.json', desc: '日轻 / 国轻小说书源全集' },
+      { name: 'MyLegadoSource 精选', kind: '小说', url: 'https://raw.githubusercontent.com/entr0pia/MyLegadoSource/master/bookSource.json', desc: '克制数量的精选书源' },
+    ];
+    const recBox = $('[data-role="reclist"]', box);
+    recBox.innerHTML = REC_REPOS.map((r, i) => {
+      const added = repos.some((x) => x.url === r.url);
+      return `<div class="list-item" style="margin-bottom:8px">
+        <span class="list-ico">${icon('cloud')}</span>
+        <div class="grow" style="min-width:0">
+          <div style="font-size:13.5px;font-weight:600" class="ellipsis">${esc(r.name)} <span class="tag tag-gray" style="font-size:11px">${esc(r.kind)}</span></div>
+          <div class="muted ellipsis" style="font-size:12px">${esc(r.desc)}</div>
+        </div>
+        <button class="btn btn-sm ${added ? '' : 'btn-primary'}" data-rec="${i}" ${added ? 'disabled' : ''}>${added ? '已添加' : '添加'}</button>
+      </div>`;
+    }).join('');
+    $('[data-a="rec-toggle"]', box).onclick = () => {
+      recBox.hidden = !recBox.hidden;
+      const ar = $('[data-v="rec-arrow"]', box);
+      if (ar) ar.style.transform = recBox.hidden ? '' : 'rotate(90deg)';
+    };
+    $$('[data-rec]', box).forEach((b) => b.onclick = async () => {
+      const r = REC_REPOS[Number(b.dataset.rec)];
+      b.disabled = true; b.textContent = '验证中…';
+      try {
+        const repo = { url: r.url, name: r.name, addedAt: Date.now() };
+        const data = await fetchRepo(repo);
+        repo.fmt = data.fmt;
+        const repos2 = await getRepos();
+        if (!repos2.some((x) => x.url === r.url)) { repos2.push(repo); await saveRepos(repos2); }
+        toast(`仓库已添加（${data.entries.length} 个源）`, 'ok');
+        renderRepos();
+        openRepo(repo);
+      } catch (e) {
+        toast('验证失败：' + e.message, 'err');
+        b.disabled = false; b.textContent = '添加';
+      }
+    });
+    $$('[data-open]', box).forEach((b) => { b.onclick = async () => openRepo((await getRepos())[Number(b.dataset.open)]); });
+    $$('[data-del]', box).forEach((b) => {
+      b.onclick = async () => {
+        const repos2 = await getRepos();
+        const r = repos2[Number(b.dataset.del)];
+        if (!(await confirmDialog('删除仓库', `仅删除仓库地址「${r.name || r.url}」，已导入的连接器不受影响。`))) return;
+        repos2.splice(Number(b.dataset.del), 1);
+        await saveRepos(repos2);
+        renderRepos();
+      };
+    });
+    $('[data-a="addrepo"]', box).onclick = () => {
+      const body = el(`<div>${formRow('仓库地址', '<input class="input" data-f="repo" placeholder="https://…/index.json">')}<div class="muted" style="font-size:12px;padding-top:8px">该地址应指向一个 index.json：可以是 Venera 图源仓库索引，也可以是阅读APP书源合集 JSON。</div></div>`);
+      const m = modal({
+        title: '添加源仓库', body,
+        footer: '<button class="btn grow" data-a="cancel">取消</button><button class="btn btn-primary grow" data-a="ok">验证并添加</button>',
+      });
+      $('[data-a="cancel"]', m.mask).onclick = m.close;
+      $('[data-a="ok"]', m.mask).onclick = async () => {
+        const url = $('[data-f="repo"]', body).value.trim();
+        if (!/^https?:\/\/\S+$/.test(url)) return toast('请输入有效的 http(s) 地址', 'err');
+        const okBtn = $('[data-a="ok"]', m.mask);
+        okBtn.disabled = true; okBtn.textContent = '验证中…';
+        try {
+          const repo = { url, addedAt: Date.now() };
+          const data = await fetchRepo(repo);
+          repo.fmt = data.fmt;
+          repo.name = url.replace(/^https?:\/\//, '').slice(0, 40);
+          const repos2 = await getRepos();
+          if (repos2.some((r) => r.url === url)) { toast('该仓库已添加', 'err'); m.close(); return; }
+          repos2.push(repo);
+          await saveRepos(repos2);
+          m.close();
+          renderRepos();
+          toast(`仓库已添加（${data.entries.length} 个源）`, 'ok');
+          openRepo(repo);
+        } catch (e) {
+          toast('验证失败：' + e.message, 'err');
+          okBtn.disabled = false; okBtn.textContent = '验证并添加';
+        }
+      };
+    };
+  }
+
+  await renderSources(null, false);
+  await renderRepos();
+  on('sources:changed', refreshSources);
 }

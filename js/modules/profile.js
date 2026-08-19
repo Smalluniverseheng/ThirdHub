@@ -71,11 +71,15 @@ export async function renderProfile(page) {
     $('[data-a="profile"]', box).onclick = () => u ? showProfileSubpage() : showAuthDialog();
   }
 
-  function showAuthDialog() {
+  async function showAuthDialog() {
+    /* v3.1：云端库可能因弱网尚未就绪，点击登录时先补一次初始化再判断 */
+    if (!hasCloud()) {
+      try { const { initCloud } = await import('../supabase.js'); await initCloud(); } catch (e) {}
+    }
     if (!hasCloud()) {
       modal({
-        title: '云端未配置', center: true,
-        body: '<p style="font-size:14px;line-height:1.8;color:var(--text-secondary)">当前为纯本地模式。配置 Supabase 云端后可使用登录、会员、卡密、多端同步功能。请在「数据管理 → 云端同步」中配置。</p>',
+        title: '云端连接失败', center: true,
+        body: '<p style="font-size:14px;line-height:1.8;color:var(--text-secondary)">云端服务暂时连不上，请检查网络后重试。仍失败可到「数据管理 → 云端同步」检查配置。</p>',
       });
       return;
     }
@@ -669,9 +673,9 @@ export async function renderProfile(page) {
     const body = el('<div></div>');
     function render() {
       body.innerHTML = `
-        <div class="muted" style="margin-bottom:10px;line-height:1.7">勾选要显示在底部导航栏的板块（${MIN_TABS}-${MAX_TABS} 个）。未勾选的板块不会加载，勾选后首次打开时才下载。「我的」固定显示。</div>
+        <div class="muted" style="margin-bottom:10px;line-height:1.7">勾选要显示在底部导航栏的板块（${MIN_TABS}-${MAX_TABS} 个）。小说 / 漫画 / 有声已合并为「阅读」。未勾选的板块不会加载，勾选后首次打开时才下载。「我的」固定显示。</div>
         <div class="col gap8">
-          ${BOARDS.map((b) => `
+          ${BOARDS.filter((b) => !['novel', 'comic', 'audio'].includes(b.id)).map((b) => `
             <button class="list-item" style="width:100%" data-b="${b.id}">
               <span class="list-ico">${icon(b.ico)}</span>
               <div class="grow" style="text-align:left;min-width:0">

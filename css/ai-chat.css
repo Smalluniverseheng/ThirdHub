@@ -1123,3 +1123,6 @@ button.rank-row-item:active { background: var(--bg-input); }
   color: var(--text-secondary); font-size: 13.5px;
   padding: 0 12px;
 }
+
+/* v3.6：历史模型置灰禁用 */
+.model-row.dep { opacity: .55; cursor: not-allowed; }

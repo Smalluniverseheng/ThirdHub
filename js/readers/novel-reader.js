@@ -1,11 +1,11 @@
 /* ===== ThirdHub js/readers/novel-reader.js — 小说阅读器（v1.5 全量重写） =====
    滚动 / 分页（CSS 多栏）· 6 主题 · 字体字重边距段距 · 亮度 / 全屏 / 信息栏
    点按翻页 · 音量键翻页 · 自动滚动 · 插图小说 · 朗读 · AI 辅助阅读 */
-import { $, $$, el, esc, icon, toast, modal, actionSheet } from '../ui.js';
+import { $, $$, el, esc, icon, toast, modal, actionSheet, loadCss } from '../ui.js';
 import { getSetting, setSetting, kvGet, kvSet } from '../store.js';
 import { getChapterList, getChapterContent, saveProgress, getProgress } from '../engine/content-service.js';
 import { getEngine } from '../engine/source-engine.js';
-import { speak, stopSpeak } from '../voice.js';
+import { speak, stopSpeak, pauseSpeak, resumeSpeak } from '../voice.js';
 import { chat } from '../ai/ai-api.js';
 
 const READER_THEMES = {
@@ -31,6 +31,7 @@ const FLIP_MODES = [
 ];
 
 export async function openNovelReader({ source, item, startChapter = 0 }) {
+  await loadCss('css/novel-reader.css'); /* v2.7：样式按需加载 */
   const engine = getEngine(source);
   let chapters = [];
   let idx = startChapter;
@@ -47,9 +48,6 @@ export async function openNovelReader({ source, item, startChapter = 0 }) {
     <div class="nr-top nr-ui">
       <button class="icon-btn" data-a="back">${icon('back')}</button>
       <div class="overlay-title ellipsis">${esc(item.title || item.name)}</div>
-      <button class="icon-btn" data-a="tts" title="朗读">${icon('mic')}</button>
-      <button class="icon-btn" data-a="catalog" title="目录">${icon('list')}</button>
-      <button class="icon-btn" data-a="settings" title="设置">${icon('settings')}</button>
     </div>
     <div class="nr-body"></div>
     <div class="nr-tapzones" hidden>
@@ -62,9 +60,17 @@ export async function openNovelReader({ source, item, startChapter = 0 }) {
       <span class="nr-info-right"><span class="nr-info-time"></span><span class="nr-info-prog"></span></span>
     </div>
     <div class="nr-bottom nr-ui">
-      <button class="nr-nav" data-a="prev">上一章</button>
-      <div class="nr-progress muted"></div>
-      <button class="nr-nav" data-a="next">下一章</button>
+      <div class="nr-navrow">
+        <button class="nr-nav" data-a="prev">上一章</button>
+        <input type="range" class="nr-slider" data-role="chslider" min="0" max="0" step="1" value="0">
+        <button class="nr-nav" data-a="next">下一章</button>
+      </div>
+      <div class="nr-iconrow">
+        <button class="nr-ic" data-a="catalog">${icon('list')}<span>目录</span></button>
+        <button class="nr-ic" data-a="night">${icon('moon')}<span>夜间</span></button>
+        <button class="nr-ic" data-a="tts">${icon('mic')}<span>听书</span></button>
+        <button class="nr-ic" data-a="settings">${icon('settings')}<span>设置</span></button>
+      </div>
     </div>
     <div class="nr-catalog hidden"></div>`;
   $('#overlay-root').appendChild(ov);
@@ -74,6 +80,7 @@ export async function openNovelReader({ source, item, startChapter = 0 }) {
   const tapzones = $('.nr-tapzones', ov);
   const infoBar = $('.nr-info', ov);
   let currentText = '';
+  let currentPlain = '';
   let clockTimer = null;
   let autoTimer = null;
 
@@ -144,6 +151,7 @@ export async function openNovelReader({ source, item, startChapter = 0 }) {
         if (toEnd === 'end') body.scrollLeft = body.scrollWidth;
         else { body.scrollLeft = 0; body.scrollTop = 0; }
         updateInfo();
+        if (ttsOn) speakCurrent(); /* 听书模式：新章节加载完自动接着读 */
       });
     } catch (e) {
       body.innerHTML = `<div class="empty"><div class="empty-title">加载失败</div><div class="muted">${esc(e.message)}</div><button class="btn btn-primary mt16" data-a="retry">重试</button></div>`;
@@ -152,23 +160,38 @@ export async function openNovelReader({ source, item, startChapter = 0 }) {
   }
 
   function renderText(title) {
-    const paras = currentText.split(/\n+/).map((p) => p.trim()).filter(Boolean);
     const parts = [`<div class="nr-chapter-title">${esc(title)}</div>`];
-    for (const p of paras) {
-      // 插图小说：正文中独立的图片链接 / markdown 图片
-      const mdImg = p.match(/^!\[.*?\]\((https?:[^)]+)\)$/);
-      const rawImg = p.match(/^(https?:\/\/[^\s]+\.(?:jpg|jpeg|png|webp|gif))(\?[^\s]*)?$/i);
-      const url = mdImg ? mdImg[1] : rawImg ? rawImg[0] : null;
-      if (url && S.readerIllust) {
-        parts.push(`<img class="nr-illust" src="${esc(url)}" loading="lazy" onerror="this.remove()">`);
-      } else if (url) {
-        parts.push(`<p class="nr-p nr-illust-link muted">[插图已隐藏]</p>`);
-      } else {
-        parts.push(`<p class="nr-p">${esc(p)}</p>`);
+    /* v3.3：v3.1 起书源正文保留 HTML（插图小说），检测后消毒直出；纯文本走原逻辑 */
+    const isHtml = /<\s*(p|img|div|br|section|span)\b/i.test(currentText);
+    if (isHtml) {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = currentText;
+      tmp.querySelectorAll('script,style,iframe,object,embed,form,input,button,link,meta').forEach((n) => n.remove());
+      tmp.querySelectorAll('*').forEach((n) => { [...n.attributes].forEach((a) => { if (/^on/i.test(a.name)) n.removeAttribute(a.name); }); });
+      if (!S.readerIllust) tmp.querySelectorAll('img').forEach((n) => n.remove());
+      else tmp.querySelectorAll('img').forEach((im) => { im.classList.add('nr-illust'); im.setAttribute('loading', 'lazy'); im.onerror = () => im.remove(); });
+      parts.push('<div class="nr-rich">' + tmp.innerHTML + '</div>');
+      currentPlain = (tmp.textContent || '').trim();
+    } else {
+      const paras = currentText.split(/\n+/).map((p) => p.trim()).filter(Boolean);
+      for (const p of paras) {
+        // 插图小说：正文中独立的图片链接 / markdown 图片
+        const mdImg = p.match(/^!\[.*?\]\((https?:[^)]+)\)$/);
+        const rawImg = p.match(/^(https?:\/\/[^\s]+\.(?:jpg|jpeg|png|webp|gif))(\?[^\s]*)?$/i);
+        const url = mdImg ? mdImg[1] : rawImg ? rawImg[0] : null;
+        if (url && S.readerIllust) {
+          parts.push(`<img class="nr-illust" src="${esc(url)}" loading="lazy" onerror="this.remove()">`);
+        } else if (url) {
+          parts.push(`<p class="nr-p nr-illust-link muted">[插图已隐藏]</p>`);
+        } else {
+          parts.push(`<p class="nr-p">${esc(p)}</p>`);
+        }
       }
+      currentPlain = currentText;
     }
     body.innerHTML = parts.join('');
-    $('.nr-progress', ov).textContent = `${idx + 1} / ${chapters.length}`;
+    const slider = $('[data-role="chslider"]', ov);
+    if (slider) { slider.max = Math.max(0, chapters.length - 1); slider.value = idx; }
     layoutPages();
   }
 
@@ -237,21 +260,101 @@ export async function openNovelReader({ source, item, startChapter = 0 }) {
     autoTimer = setInterval(step, 50);
   }
 
-  /* ---------- 目录 ---------- */
+  /* ---------- 目录 / 书签 ---------- */
+  const bookId = item.id || (source.id + ':' + item.bookUrl);
+  const BM_KEY = 'bm:' + bookId;
+  const getBookmarks = async () => (await kvGet(BM_KEY, [])) || [];
+
+  async function addBookmark() {
+    const list = await getBookmarks();
+    const c = chapters[idx];
+    const page0 = body.classList.contains('nr-paged') ? curPage() : 0;
+    if (list.some((b) => b.chapterIndex === idx && b.page === page0)) { toast('此处已有书签'); return; }
+    list.push({ chapterIndex: idx, page: page0, name: (c && c.name) || ('第 ' + (idx + 1) + ' 章'), time: Date.now() });
+    await kvSet(BM_KEY, list);
+    toast('已添加书签：' + ((c && c.name) || ''));
+  }
+
   function showCatalog() {
     catalogEl.classList.toggle('hidden');
     if (!catalogEl.classList.contains('hidden')) {
       catalogEl.style.background = S.readerBgColor || (READER_THEMES[S.readerTheme] || READER_THEMES.night).bg;
       catalogEl.style.color = S.readerTextColor || (READER_THEMES[S.readerTheme] || READER_THEMES.night).text;
-      catalogEl.innerHTML = `<div class="nr-catalog-head">目录（${chapters.length} 章）</div>` +
-        chapters.map((c, i) => `<button class="nr-catalog-item ${i === idx ? 'on' : ''}" data-i="${i}">${esc(c.name || '第 ' + (i + 1) + ' 章')}</button>`).join('');
-      $$('.nr-catalog-item', catalogEl).forEach((b) => {
-        b.onclick = () => { catalogEl.classList.add('hidden'); loadChapter(+b.dataset.i); };
-      });
-      const cur = $('.nr-catalog-item.on', catalogEl);
-      cur && cur.scrollIntoView({ block: 'center' });
+      renderCatalogTab('toc');
     }
   }
+
+  async function renderCatalogTab(which) {
+    catalogEl.innerHTML = `<div class="nr-catalog-head">
+        <div class="nr-cat-tabs">
+          <button class="nr-cat-tab ${which === 'toc' ? 'on' : ''}" data-ct="toc">目录（${chapters.length}）</button>
+          <button class="nr-cat-tab ${which === 'bm' ? 'on' : ''}" data-ct="bm">书签</button>
+        </div>
+      </div>
+      <div data-role="cat-body"></div>`;
+    $$('.nr-cat-tab', catalogEl).forEach((b) => { b.onclick = () => renderCatalogTab(b.dataset.ct); });
+    const box = $('[data-role="cat-body"]', catalogEl);
+    if (which === 'toc') {
+      box.innerHTML = chapters.map((c, i) => `<button class="nr-catalog-item ${i === idx ? 'on' : ''}" data-i="${i}">${esc(c.name || '第 ' + (i + 1) + ' 章')}</button>`).join('');
+      $$('.nr-catalog-item', box).forEach((b) => {
+        b.onclick = () => { catalogEl.classList.add('hidden'); loadChapter(+b.dataset.i); };
+      });
+      const cur = $('.nr-catalog-item.on', box);
+      cur && cur.scrollIntoView({ block: 'center' });
+    } else {
+      const list = (await getBookmarks()).slice().reverse();
+      box.innerHTML = list.length ? list.map((b, i) => `
+        <div class="nr-catalog-item nr-bm-item" data-bi="${list.length - 1 - i}">
+          <button class="nr-bm-jump" data-bjump="${list.length - 1 - i}">
+            <span>${esc(b.name)}</span>
+            <span class="muted" style="font-size:11px">${new Date(b.time).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+          </button>
+          <button class="nr-bm-del" data-bdel="${list.length - 1 - i}" title="删除">×</button>
+        </div>`).join('') :
+        '<div class="muted" style="padding:24px;text-align:center;font-size:13px">还没有书签<br>在阅读页面向下拉即可添加书签</div>';
+      const raw = await getBookmarks();
+      $$('[data-bjump]', box).forEach((b) => {
+        b.onclick = async () => {
+          const bm2 = raw[+b.dataset.bjump];
+          if (!bm2) return;
+          catalogEl.classList.add('hidden');
+          await loadChapter(bm2.chapterIndex);
+          if (bm2.page) requestAnimationFrame(() => goPage(bm2.page, false));
+        };
+      });
+      $$('[data-bdel]', box).forEach((b) => {
+        b.onclick = async () => {
+          raw.splice(+b.dataset.bdel, 1);
+          await kvSet(BM_KEY, raw);
+          renderCatalogTab('bm');
+          toast('已删除书签');
+        };
+      });
+    }
+  }
+
+  /* v3.4：阅读页顶部下拉添加书签（番茄小说手势） */
+  const pullTip = document.createElement('div');
+  pullTip.className = 'nr-pulltip';
+  pullTip.textContent = '↓ 松手添加书签';
+  ov.appendChild(pullTip);
+  let pullStartY = null, pullReady = false;
+  body.addEventListener('touchstart', (e) => {
+    pullStartY = body.scrollTop <= 2 ? e.touches[0].clientY : null;
+    pullReady = false;
+  }, { passive: true });
+  body.addEventListener('touchmove', (e) => {
+    if (pullStartY == null) return;
+    const dy = e.touches[0].clientY - pullStartY;
+    if (dy > 70 && !pullReady) { pullReady = true; pullTip.classList.add('on'); }
+    if (dy <= 70 && pullReady) { pullReady = false; pullTip.classList.remove('on'); }
+  }, { passive: true });
+  body.addEventListener('touchend', async () => {
+    if (pullReady) await addBookmark();
+    pullReady = false;
+    pullTip.classList.remove('on');
+    pullStartY = null;
+  });
 
   /* ---------- 阅读设置 ---------- */
   function showSettings() {
@@ -328,6 +431,7 @@ export async function openNovelReader({ source, item, startChapter = 0 }) {
 
   /* ---------- 绑定 ---------- */
   $('[data-a="back"]', ov).onclick = () => {
+    ttsOn = false;
     stopSpeak();
     if (clockTimer) clearInterval(clockTimer);
     if (autoTimer) clearInterval(autoTimer);
@@ -337,12 +441,58 @@ export async function openNovelReader({ source, item, startChapter = 0 }) {
   };
   $('[data-a="catalog"]', ov).onclick = showCatalog;
   $('[data-a="settings"]', ov).onclick = showSettings;
+  $('[data-a="night"]', ov).onclick = async () => {
+    S.readerTheme = S.readerTheme === 'night' ? 'day' : 'night';
+    await setSetting('readerTheme', S.readerTheme);
+    applySettings();
+  };
+  $('[data-role="chslider"]', ov).onchange = (e) => { const v = +e.target.value; if (v !== idx) loadChapter(v); };
   $('[data-a="prev"]', ov).onclick = () => loadChapter(idx - 1);
   $('[data-a="next"]', ov).onclick = () => loadChapter(idx + 1);
+  /* ---------- v3.3/v3.4 听书：浮动控制条 + 语速 + 自动连读下一章 ---------- */
   let ttsOn = false;
+  let ttsRate = 1;
+  try { ttsRate = (await kvGet('tts:rate', 1)) || 1; } catch (e) {}
+  const ttsBar = document.createElement('div');
+  ttsBar.className = 'nr-ttsbar nr-ui nr-ui-hidden';
+  ttsBar.innerHTML = `
+    <button class="nr-tts-btn" data-t="pp">暂停</button>
+    <div class="nr-tts-rates">${[0.75, 1, 1.25, 1.5, 2].map((r) => `<button class="nr-tts-rate ${r === ttsRate ? 'on' : ''}" data-r="${r}">${r}x</button>`).join('')}</div>
+    <button class="nr-tts-btn" data-t="close">关闭</button>`;
+  ov.appendChild(ttsBar);
+  $$('.nr-tts-rate', ttsBar).forEach((b) => b.onclick = async () => {
+    ttsRate = +b.dataset.r;
+    await kvSet('tts:rate', ttsRate);
+    $$('.nr-tts-rate', ttsBar).forEach((x) => x.classList.toggle('on', x === b));
+    if (ttsOn) speakCurrent(); /* 立即以新语速重读本章 */
+  });
+  let ttsPaused = false;
+  $('[data-t="pp"]', ttsBar).onclick = () => {
+    ttsPaused = !ttsPaused;
+    if (ttsPaused) pauseSpeak(); else resumeSpeak();
+    $('[data-t="pp"]', ttsBar).textContent = ttsPaused ? '继续' : '暂停';
+  };
+  $('[data-t="close"]', ttsBar).onclick = () => stopTts();
+  function speakCurrent() {
+    if (!ttsOn) return;
+    ttsPaused = false;
+    $('[data-t="pp"]', ttsBar).textContent = '暂停';
+    speak(currentPlain || currentText, {
+      rate: ttsRate,
+      onEnd: () => { if (ttsOn && idx < chapters.length - 1) loadChapter(idx + 1); },
+    });
+  }
+  function stopTts() {
+    ttsOn = false;
+    stopSpeak();
+    ttsBar.classList.add('nr-ui-hidden');
+  }
   $('[data-a="tts"]', ov).onclick = () => {
-    ttsOn = !ttsOn;
-    if (ttsOn) { speak(currentText); toast('开始朗读'); } else stopSpeak();
+    if (ttsOn) { stopTts(); toast('已停止朗读'); return; }
+    ttsOn = true;
+    ttsBar.classList.remove('nr-ui-hidden');
+    speakCurrent();
+    toast('开始朗读');
   };
 
   /* ---------- 选中文字 AI 辅助 ---------- */

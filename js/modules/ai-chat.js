@@ -1774,7 +1774,10 @@ export async function showModelsPage(page = null, focus = null) {
           const bodyEl = $('.provider-body', card);
 
           const row = (m, extraCls = '', tag = '') => {
-            const r = el(`<div class="model-row ${extraCls}"><span class="ellipsis">${esc(m)}</span>${tag}</div>`);
+            const isDep = extraCls.includes('dep');
+            /* v3.6：历史模型置灰且不可选择（厂商已下线/停用） */
+            const r = el(`<div class="model-row ${extraCls}"><span class="ellipsis">${esc(m)}</span>${isDep ? '<span class="tag tag-gray">已停用</span>' : tag}</div>`);
+            if (isDep) { r.onclick = () => toast('该模型已被厂商停用，请选择上方在营模型', 'err'); return r; }
             r.onclick = async () => {
               if (!(await getApiKey(p.id))) { ref.close(); showAISettings(p.id); return; }
               currentModel = { providerId: p.id, model: m };

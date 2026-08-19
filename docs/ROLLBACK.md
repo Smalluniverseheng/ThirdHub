@@ -34,6 +34,8 @@ ThirdHub 网站版有三层备份，任何一层都可以把站点恢复到历�
 | v3.8 | 已随 v3.9 全量同步（见 v3.9 行） | 待补 | `8e605848`（类型筛选联动连接器列表、源内单源搜索、有声类型自动识别、推荐仓库、TVbox 仓库/视频解析增强） | `dd9da0f` |
 | v3.9 | `af6178c`（tag `v3.9`，含 v2.7–v3.9 全量累积） | `v3.9` | `88a00a34`（Venera 引擎对齐官方：搜索选项默认值、loadNext、异步 init、IIFE 隔离、同步 AES/MD5/SHA/HMAC、APP 全局、JSON Content-Type） | `e22e130` |
 
+| v4.0 | `c3e96f5`（tag `v4.0`） | `v4.0` | `d2e33468`（Venera 图源图片修复：封面/正文反混淆 modifyImage、onThumbnailLoad/onImageLoad 头注入、评论/标签/推荐、源驱动发现页+查看更多、详情页安全富文本） | `9181e53` |
+
 ## 回退方法
 
 **方法一：Cloudflare 控制台回滚（最快，1 分钟）**

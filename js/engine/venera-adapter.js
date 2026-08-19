@@ -35,7 +35,7 @@ export function veneraMeta(code) {
 
 /* ---------- Venera API 最小运行时（注入到连接器代码内） ---------- */
 const VENERA_RUNTIME = `
-/* ---- Venera 标准 API 最小实现（ThirdHub 沙箱 · 运行时 v3.9） ---- */
+/* ---- Venera 标准 API 最小实现（ThirdHub 沙箱 · 运行时 v4.0） ---- */
 /* ---- 纯 JS 同步 AES-128/192/256（ECB/CBC，PKCS#7），S 盒为标准表 ---- */
 const __aes = (() => {
   const sbox = Uint8Array.from('637c777bf26b6fc53001672bfed7ab76ca82c97dfa5947f0add4a2af9ca472c0b7fd9326363ff7cc34a5e5f171d8311504c723c31896059a071280e2eb27b27509832c1a1b6e5aa0523bd6b329e32f8453d100ed20fcb15b6acbbe394a4c58cfd0efaafb434d338545f9027f503c9fa851a3408f929d38f5bcb6da2110fff3d2cd0c13ec5f974417c4a77e3d645d197360814fdc222a908846eeb814de5e0bdbe0323a0a4906245cc2d3ac629195e479e7c8376d8dd54ea96c56f4ea657aae08ba78252e1ca6b4c6e8dd741f4bbd8b8a703eb5664803f60e613557b986c11d9ee1f8981169d98e949b1e87e9ce5528df8ca1890dbfe6426841992d0fb054bb16'.match(/../g), (x) => parseInt(x, 16));
@@ -395,16 +395,34 @@ const __initP = (typeof __src.init === 'function')
   ? Promise.resolve().then(() => __src.init()).catch((e) => legado.log('init: ' + (e.message || e)))
   : Promise.resolve();
 
-function __cov(u) {
-  if (!u || String(u).indexOf('data:') === 0) return u || '';
-  return legado.proxyUrl(String(u), { referer: __src.url || '' });
+function __tagsText(t) {
+  if (!t) return '';
+  if (Array.isArray(t)) return t.join(' ');
+  if (t instanceof Map) { const a = []; t.forEach((v) => { if (Array.isArray(v)) a.push(...v); }); return a.join(' '); }
+  if (typeof t === 'object') { const a = []; Object.values(t).forEach((v) => { if (Array.isArray(v)) a.push(...v); }); return a.join(' '); }
+  return String(t);
 }
-function __mapComic(c) {
+/* v4.0：封面/缩略图应用 onThumbnailLoad 的请求头（JM 等 CDN 校验 Referer/UA，缺头直接 403）。
+   官方缩略图不支持 modifyImage，只需头。 */
+async function __cov(u) {
+  if (!u || String(u).indexOf('data:') === 0) return u || '';
+  u = String(u);
+  let h = null;
+  try {
+    const f = __src.comic && __src.comic.onThumbnailLoad;
+    if (typeof f === 'function') {
+      const cfg = await f(u);
+      if (cfg) { u = cfg.url || u; h = cfg.headers || null; }
+    }
+  } catch (e) {}
+  return legado.proxyUrl(u, h || { referer: __src.url || '' });
+}
+async function __mapComic(c) {
   return {
     name: c.title || '', author: c.subtitle || c.subTitle || '',
-    coverUrl: __cov(c.cover), bookUrl: String(c.id),
+    coverUrl: await __cov(c.cover), bookUrl: String(c.id),
     intro: c.description || '',
-    kind: Array.isArray(c.tags) ? c.tags.join(' ') : '',
+    kind: __tagsText(c.tags),
     type: 'comic',
   };
 }
@@ -442,7 +460,7 @@ async function search(keyword, page) {
     throw new Error('该图源不支持搜索');
   }
   const arr = Array.isArray(r) ? r : (r.comics || []);
-  return arr.map(__mapComic);
+  return Promise.all(arr.map(__mapComic));
 }
 
 function __flattenChapters(ch, comicId) {
@@ -462,12 +480,35 @@ function __flattenChapters(ch, comicId) {
 async function bookInfo(bookUrl) {
   await __initP;
   const d = await __src.comic.loadInfo(bookUrl);
-  return {
+  const info = {
     name: d.title || '', author: d.subtitle || d.subTitle || '',
-    coverUrl: __cov(d.cover), intro: d.description || '',
-    lastUpdate: d.updateTime || '',
-    kind: Array.isArray(d.tags) ? d.tags.join(' ') : '',
+    coverUrl: await __cov(d.cover), intro: d.description || '',
+    lastUpdate: d.updateTime || d.uploadTime || '',
+    kind: __tagsText(d.tags),
   };
+  /* v4.0：分组标签 / 评分 / 点赞 / 评论数 / 上传者 / 推荐漫画（详情页展示用） */
+  try {
+    let tagsMap = null;
+    if (d.tags && !Array.isArray(d.tags)) {
+      tagsMap = {};
+      if (d.tags instanceof Map) d.tags.forEach((v, k) => { tagsMap[String(k)] = Array.isArray(v) ? v.map(String) : [String(v)]; });
+      else if (typeof d.tags === 'object') Object.keys(d.tags).forEach((k) => { const v = d.tags[k]; tagsMap[k] = Array.isArray(v) ? v.map(String) : [String(v)]; });
+    }
+    const extra = {
+      tagsMap,
+      stars: d.stars || 0,
+      likes: d.likesCount || 0,
+      comments: d.commentCount || 0,
+      uploader: d.uploader || '',
+      uploadTime: d.uploadTime || '',
+      subId: d.subId != null ? String(d.subId) : null,
+    };
+    if (Array.isArray(d.recommend) && d.recommend.length) {
+      extra.recommend = await Promise.all(d.recommend.slice(0, 20).map(__mapComic));
+    }
+    info.extra = JSON.stringify(extra);
+  } catch (e) {}
+  return info;
 }
 
 async function chapterList(bookUrl) {
@@ -487,19 +528,104 @@ async function chapterContent(chapterUrl) {
   for (const im of imgs) {
     let u = typeof im === 'string' ? im : (im.url || '');
     let h = (typeof im === 'object' && im) ? im.headers : null;
+    let mod = null;
     if (typeof __src.comic.onImageLoad === 'function') {
       try {
-        const cfg = await __src.comic.onImageLoad(u);
-        if (cfg) { u = cfg.url || u; h = cfg.headers || h; }
+        /* v4.0：传齐 (url, comicId, epId) —— JM 等源要用 epId+图片名 计算混淆切分数，
+           之前只传 url 导致切分数恒为 0，图片永远是混淆原图 */
+        const cfg = await __src.comic.onImageLoad(u, comicId, epId);
+        if (cfg) { u = cfg.url || u; h = cfg.headers || h; mod = cfg.modifyImage || null; }
       } catch (e) {}
     }
     if (!u) continue;
     if (!/^https?:\\/\\//i.test(u)) continue;
-    /* 需要自定义请求头的图片（防盗链）走中转 */
-    if (h && Object.keys(h).length) u = legado.proxyUrl(u, h);
-    out.push(u);
+    /* 需要自定义请求头或需要图像处理（反混淆）的图片一律走中转 */
+    if (mod || (h && Object.keys(h).length)) u = legado.proxyUrl(u, h || {});
+    /* v4.0：带 modifyImage 脚本时输出对象，阅读器端用 Canvas 执行图像还原 */
+    out.push(mod ? { u, m: String(mod) } : u);
   }
   return JSON.stringify({ images: out });
+}
+
+/* ---------- v4.0：发现页（图源自带 explore 定义，App 不预置任何内容） ---------- */
+async function sourceExplore() {
+  await __initP;
+  const list = Array.isArray(__src.explore) ? __src.explore : [];
+  return JSON.stringify(list.map((e) => ({ title: String(e.title || ''), type: String(e.type || 'multiPartPage') })));
+}
+
+async function exploreLoad(idx, page) {
+  await __initP;
+  const e = (__src.explore || [])[idx];
+  if (!e || typeof e.load !== 'function') throw new Error('该图源没有发现页');
+  const r = await e.load(page);
+  /* multiPartPage：返回 [{title, comics, viewMore}] */
+  if (Array.isArray(r)) {
+    return JSON.stringify({
+      parts: await Promise.all(r.map(async (p) => ({
+        title: String(p.title || ''), viewMore: String(p.viewMore || ''),
+        comics: await Promise.all((p.comics || []).map(__mapComic)),
+      }))),
+    });
+  }
+  /* mixed：{data: [Comic[] | {title, comics, viewMore}], maxPage} */
+  if (r && Array.isArray(r.data)) {
+    const parts = [];
+    for (const item of r.data) {
+      if (Array.isArray(item)) parts.push({ title: '', viewMore: '', comics: await Promise.all(item.map(__mapComic)) });
+      else if (item) parts.push({ title: String(item.title || ''), viewMore: String(item.viewMore || ''), comics: await Promise.all((item.comics || []).map(__mapComic)) });
+    }
+    return JSON.stringify({ parts, maxPage: r.maxPage || 0 });
+  }
+  /* multiPageComicList：{comics, maxPage} */
+  const comics = (r && r.comics) || [];
+  return JSON.stringify({ comics: await Promise.all(comics.map(__mapComic)), maxPage: (r && r.maxPage) || 0 });
+}
+
+/* v4.0：viewMore 跳转 —— 官方格式 'search:关键词' / 'category:名称[@参数]' */
+async function viewMoreLoad(spec, page) {
+  await __initP;
+  spec = String(spec || '');
+  if (spec.indexOf('search:') === 0) {
+    return JSON.stringify({ comics: await search(spec.slice(7), page || 1), maxPage: 0 });
+  }
+  if (spec.indexOf('category:') === 0) {
+    let body = spec.slice(9), param = null;
+    const at = body.lastIndexOf('@');
+    if (at >= 0) { param = body.slice(at + 1); body = body.slice(0, at); }
+    const cc = __src.categoryComics;
+    if (!cc || typeof cc.load !== 'function') throw new Error('该图源不支持分类浏览');
+    /* 分类加载选项默认值（规则与搜索选项一致） */
+    const opts = (cc.optionList || []).map((o) => {
+      if (o.default !== undefined && o.default !== null) return JSON.stringify(o.default);
+      const os = (o.options || []).map(String);
+      if (!os.length) return '';
+      const f = os[0], ci = f.indexOf('-');
+      return ci >= 0 ? f.slice(0, ci) : f;
+    });
+    const r = await cc.load(body, param, opts, page || 1);
+    return JSON.stringify({ comics: await Promise.all(((r && r.comics) || []).map(__mapComic)), maxPage: (r && r.maxPage) || 0 });
+  }
+  throw new Error('未知的跳转目标：' + spec);
+}
+
+/* ---------- v4.0：评论 ---------- */
+async function loadComments(bookUrl, page) {
+  await __initP;
+  const f = __src.comic && __src.comic.loadComments;
+  if (typeof f !== 'function') throw new Error('该图源不支持评论');
+  let subId = null;
+  try { const d = await __src.comic.loadInfo(bookUrl); subId = d.subId != null ? String(d.subId) : null; } catch (e) {}
+  const r = await f(bookUrl, subId, page || 1, null);
+  const list = await Promise.all(((r && r.comments) || []).map(async (c) => ({
+    userName: String(c.userName || ''),
+    avatar: await __cov(c.avatar || ''),
+    content: String(c.content || ''),
+    time: String(c.time || ''),
+    replyCount: c.replyCount || 0,
+    score: c.score || 0,
+  })));
+  return JSON.stringify({ comments: list, maxPage: (r && r.maxPage) || 0 });
 }
 `;
 
@@ -531,7 +657,7 @@ ${VENERA_ADAPTER}
 
 /* v3.6：旧版 Venera 运行时缺少 loadSetting 等 API，导致大量官方图源（包子漫画等）无法使用。
    从旧连接器代码中提取用户图源原始代码，用新版运行时重新包装（返回 null 表示无需升级）。 */
-const VEN_RUNTIME_MARK = '运行时 v3.9';
+const VEN_RUNTIME_MARK = '运行时 v4.0';
 export function regenVeneraCode(code) {
   const text = String(code || '');
   if (!/extends\s+ComicSource/.test(text)) return null;      // 不是 Venera 图源

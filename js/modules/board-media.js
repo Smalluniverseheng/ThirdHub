@@ -143,10 +143,30 @@ export async function renderMediaBoard(page, type) {
           </button>`).join('')}
         </div>
       </div>` : `<div class="muted" style="padding:10px 18px;font-size:12.5px">还没有${NAME}连接器，到「我的 → 连接器管理」导入后就能搜索了。</div>`;
-      $$('[data-src]', srcBox).forEach((b) => b.onclick = () => {
+      $$('[data-src]', srcBox).forEach((b) => b.onclick = async () => {
         /* v3.8：点连接器卡片 → 进入该源内部，搜索只走这一个源 */
         const s = sources.find((x) => x.id === b.dataset.src);
         if (!s) return;
+        /* v4.0：图源自带发现页时，让用户选择进发现页还是源内搜索 */
+        if (s.type === 'comic') {
+          try {
+            const { getExplore } = await import('../engine/content-service.js');
+            const pages = await getExplore(s);
+            if (pages.length) {
+              const { actionSheet } = await import('../ui.js');
+              const v = await actionSheet(s.name, [
+                { label: '发现页（浏览图源推荐内容）', value: 'explore', icon: 'compass' },
+                { label: '源内搜索', value: 'search', icon: 'search' },
+              ]);
+              if (v === 'explore') {
+                const { openExplore } = await import('./explore.js');
+                openExplore(s);
+                return;
+              }
+              if (v !== 'search') return;
+            }
+          } catch (e) {}
+        }
         setSearchScope(s);
         $('[data-role="kw"]', page).focus();
       });

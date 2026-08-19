@@ -60,6 +60,34 @@
   text-align: left; padding: 12px 6px; font-size: 14px;
   color: var(--text-secondary); border-bottom: 1px solid var(--border);
 }
+
+/* v4.0：详情页分组标签 / 推荐 / 评论 / 图源发现页 */
+.detail-tags { margin: 0 18px 12px; }
+.detail-recs { display: flex; gap: 10px; overflow-x: auto; padding: 0 18px 16px; scrollbar-width: none; }
+.detail-rec { flex-shrink: 0; width: 88px; display: flex; flex-direction: column; gap: 4px; text-align: left; }
+.detail-rec-cover {
+  width: 88px; height: 118px; border-radius: 8px; overflow: hidden;
+  background: var(--bg-input); display: grid; place-items: center;
+}
+.detail-rec-cover img { width: 100%; height: 100%; object-fit: cover; }
+.cmt { padding: 10px 18px; border-bottom: 1px solid var(--border); }
+.cmt-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.cmt-avatar { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; background: var(--bg-input); }
+.cmt-body { font-size: 13.5px; line-height: 1.7; color: var(--text-secondary); word-break: break-word; }
+.cmt-body img { max-width: 100%; border-radius: 8px; margin-top: 6px; }
+
+.xpl-tabs { display: flex; gap: 8px; overflow-x: auto; padding: 4px 18px 10px; scrollbar-width: none; }
+.xpl-part { padding: 4px 0 10px; }
+.xpl-part-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 18px 8px; }
+.xpl-part-title { font-size: 16px; font-weight: 800; }
+.xpl-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 0 18px; }
+.xpl-cell { display: flex; flex-direction: column; gap: 4px; text-align: left; }
+.xpl-cover {
+  width: 100%; aspect-ratio: 3/4; border-radius: 10px; overflow: hidden;
+  background: var(--bg-input); display: grid; place-items: center; color: var(--text-tertiary);
+}
+.xpl-cover img { width: 100%; height: 100%; object-fit: cover; }
+.xpl-name { font-size: 12px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .detail-ch:active { color: var(--primary); }
 
 /* v3.1：搜索结果列表 —— 左封面右介绍（番茄小说风格） */

@@ -43,6 +43,31 @@ export async function getChapterContent(source, chapterUrl) {
   return content;
 }
 
+/* ---------- v4.0：发现页 / 查看更多 / 评论（Venera 图源扩展能力） ---------- */
+export async function getExplore(source) {
+  if (source.id === 'local') return [];
+  const engine = getEngine(source);
+  if (!(await engine.has('sourceExplore'))) return [];
+  try { return JSON.parse(await engine.sourceExplore() || '[]'); } catch (e) { return []; }
+}
+export async function getExplorePage(source, idx, page) {
+  const engine = getEngine(source);
+  return JSON.parse(await engine.exploreLoad(idx, page || 1));
+}
+export async function getViewMore(source, spec, page) {
+  const engine = getEngine(source);
+  return JSON.parse(await engine.viewMoreLoad(spec, page || 1));
+}
+export async function canComment(source) {
+  if (source.id === 'local') return false;
+  const engine = getEngine(source);
+  return engine.has('loadComments');
+}
+export async function getComments(source, bookUrl, page) {
+  const engine = getEngine(source);
+  return JSON.parse(await engine.loadComments(bookUrl, page || 1));
+}
+
 /* ---------- 阅读进度 ---------- */
 export async function saveProgress(itemId, progress) {
   // progress: {chapterIndex, offset?, position?, ts}

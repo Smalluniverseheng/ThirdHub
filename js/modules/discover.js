@@ -1,7 +1,9 @@
 /* ===== ThirdHub js/modules/discover.js — 发现页 ===== */
 import { $, $$, esc, icon, toast, debounce } from '../ui.js';
 import { listSources, searchAll, SOURCE_TYPES } from '../engine/source-service.js';
+import { getExplore } from '../engine/content-service.js';
 import { openDetail } from './detail.js';
+import { openExplore } from './explore.js';
 import { on } from '../store.js';
 
 export async function renderDiscover(page) {
@@ -54,10 +56,23 @@ export async function renderDiscover(page) {
           </div>
         </div>`;
     }).join('');
-    $$('.source-card', homeEl).forEach((b) => b.onclick = () => {
-      // 点击连接器卡片 → 聚焦搜索
+    $$('.source-card', homeEl).forEach((b) => b.onclick = async () => {
+      const s = sources.find((x) => x.id === b.dataset.src);
+      /* v4.0：图源自带发现页时直接进入（内容由图源驱动）；否则聚焦搜索 */
+      if (s && s.type === 'comic') {
+        toast('正在读取「' + s.name + '」的发现页…');
+        try {
+          const pages = await getExplore(s);
+          if (pages.length) { openExplore(s); return; }
+          toast('该图源没有提供发现页，输入关键词搜索吧');
+        } catch (e) {
+          toast('发现页加载失败：' + e.message, 'err');
+          return;
+        }
+      } else {
+        toast('输入关键词即可搜索「' + (s ? s.name : '') + '」');
+      }
       $('[data-role="kw"]', page).focus();
-      toast('输入关键词即可搜索「' + b.textContent.trim().split('\n')[0] + '」');
     });
   }
   await renderHome();

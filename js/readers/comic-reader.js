@@ -4,6 +4,7 @@
 import { $, $$, el, esc, icon, toast, modal, loadCss } from '../ui.js';
 import { getSetting, setSetting } from '../store.js';
 import { getChapterList, getChapterContent, saveProgress, getProgress } from '../engine/content-service.js';
+import { runModifyImage, warmModifyImage } from '../engine/image-modify.js';
 
 const LAYOUTS = [
   { id: 'paged', name: '单页 · 左翻（国漫）', dir: 'ltr' },
@@ -53,14 +54,34 @@ export async function openComicReader({ source, item, startChapter = 0 }) {
   const body = $('.cr-body', ov);
   let currentPage = 0;
 
+  /* v4.0：图片项归一化为 {u, m}——m 为 Venera modifyImage 反混淆脚本（JM 等源），
+     渲染前经 Canvas 还原成本地 blob 地址 */
+  function normItem(it) {
+    if (typeof it === 'string') return { u: it, m: '' };
+    if (it && typeof it === 'object') return { u: it.u || it.url || '', m: it.m || '' };
+    return { u: '', m: '' };
+  }
   function parseImages(content) {
-    if (Array.isArray(content)) return content;
-    try {
-      const j = JSON.parse(content);
-      if (Array.isArray(j)) return j;
-      if (j.images) return j.images;
-    } catch (e) {}
-    return String(content).split('\n').map((s) => s.trim()).filter((s) => /^https?:/.test(s));
+    let arr = null;
+    if (Array.isArray(content)) arr = content;
+    else {
+      try {
+        const j = JSON.parse(content);
+        if (Array.isArray(j)) arr = j;
+        else if (j.images) arr = j.images;
+      } catch (e) {}
+    }
+    if (!arr) arr = String(content).split('\n').map((s) => s.trim()).filter((s) => /^https?:/.test(s));
+    return arr.map(normItem).filter((it) => it.u);
+  }
+  /* 解析图片最终地址（需要反混淆的走 Canvas 还原） */
+  async function resolveUrl(it) {
+    if (!it.m) return it.u;
+    try { return await runModifyImage(it.u, it.m); } catch (e) { return it.u; }
+  }
+  function setImgSrc(img, it) {
+    if (!it.m) { img.src = it.u; return; }
+    resolveUrl(it).then((u) => { img.src = u; });
   }
 
   async function persistLayout() {
@@ -105,13 +126,13 @@ export async function openComicReader({ source, item, startChapter = 0 }) {
   function renderScroll() {
     body.className = 'cr-body cr-scroll' + (gap ? '' : ' cr-nogap');
     applyBodyStyle();
-    body.innerHTML = images.map((src, i) =>
-      `<img class="cr-img" data-i="${i}" ${i < preloadN ? `src="${esc(src)}"` : `data-src="${esc(src)}"`} loading="lazy">`).join('');
+    body.innerHTML = images.map((it, i) =>
+      `<img class="cr-img" data-i="${i}" ${i < preloadN && !it.m ? `src="${esc(it.u)}"` : `data-src="${i}"`} loading="lazy">`).join('');
     const io = new IntersectionObserver((entries) => {
       entries.forEach((en) => {
         if (en.isIntersecting) {
           const img = en.target;
-          if (img.dataset.src) { img.src = img.dataset.src; delete img.dataset.src; }
+          if (img.dataset.src != null) { setImgSrc(img, images[+img.dataset.src]); delete img.dataset.src; }
           currentPage = +img.dataset.i;
           updateHint();
           io.unobserve(img);
@@ -133,7 +154,7 @@ export async function openComicReader({ source, item, startChapter = 0 }) {
     if (sz === 2 && dir === 'rtl') pair = pair.reverse();
     body.innerHTML = `
       <div class="cr-page-wrap">
-        ${pair.map((src) => `<img class="cr-page-img" src="${esc(src)}">`).join('')}
+        ${pair.map(() => `<img class="cr-page-img">`).join('')}
         <div class="cr-tap left"></div>
         <div class="cr-tap center"></div>
         <div class="cr-tap right"></div>
@@ -142,6 +163,7 @@ export async function openComicReader({ source, item, startChapter = 0 }) {
     preloadAround(currentPage);
     const wrap = $('.cr-page-wrap', body);
     const imgs = $$('.cr-page-img', wrap);
+    imgs.forEach((img, i2) => setImgSrc(img, pair[i2]));
 
     /* 双击缩放 */
     let scale = 1;
@@ -207,8 +229,8 @@ export async function openComicReader({ source, item, startChapter = 0 }) {
   }
 
   function preloadAround(p) {
-    for (let i = p + 1; i <= Math.min(images.length - 1, p + preloadN); i++) { const im = new Image(); im.src = images[i]; }
-    for (let i = p - 1; i >= Math.max(0, p - preloadN); i--) { const im = new Image(); im.src = images[i]; }
+    for (let i = p + 1; i <= Math.min(images.length - 1, p + preloadN); i++) { const it = images[i]; if (it.m) warmModifyImage(it.u, it.m); else { const im = new Image(); im.src = it.u; } }
+    for (let i = p - 1; i >= Math.max(0, p - preloadN); i--) { const it = images[i]; if (it.m) warmModifyImage(it.u, it.m); else { const im = new Image(); im.src = it.u; } }
   }
 
   /* ---------- 设置 ---------- */

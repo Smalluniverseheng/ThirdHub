@@ -12,7 +12,9 @@ const DEFAULT_PUBLICS = [
   'https://corsproxy.io/?url=',
 ];
 
-const FN_NAMES = ['search', 'bookInfo', 'chapterList', 'chapterContent'];
+const FN_NAMES = ['search', 'bookInfo', 'chapterList', 'chapterContent',
+  /* v4.0：Venera 扩展能力（发现页 / 查看更多 / 评论），连接器没有这些函数时自动跳过 */
+  'sourceExplore', 'exploreLoad', 'viewMoreLoad', 'loadComments'];
 
 /* ---------- 哈希工具（供连接器使用） ---------- */
 async function shaImpl(algo, s) {
@@ -242,6 +244,16 @@ export class SourceEngine {
   async bookInfo(bookUrl) { return this.call('bookInfo', [bookUrl]); }
   async chapterList(bookUrl) { return this.call('chapterList', [bookUrl]); }
   async chapterContent(chapterUrl) { return this.call('chapterContent', [chapterUrl], 45000); }
+
+  /* v4.0：可选能力探测与扩展接口 */
+  async has(name) {
+    try { await this.init(); } catch (e) { return false; }
+    return typeof this.fns[name] === 'function';
+  }
+  async sourceExplore() { return this.call('sourceExplore', []); }
+  async exploreLoad(idx, page) { return this.call('exploreLoad', [idx, page], 45000); }
+  async viewMoreLoad(spec, page) { return this.call('viewMoreLoad', [spec, page], 45000); }
+  async loadComments(bookUrl, page) { return this.call('loadComments', [bookUrl, page], 45000); }
 
   destroy() {
     if (this.frame) { try { document.body.removeChild(this.frame); } catch (e) {} }

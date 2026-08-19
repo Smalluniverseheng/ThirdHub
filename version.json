@@ -1,9 +1,9 @@
 {
-  "version": "3.9",
+  "version": "4.0",
   "type": "recommended",
-  "title": "ThirdHub v3.9",
-  "content": "Venera 图源引擎对齐官方实现，一大批官方图源修复可用：搜索选项自动取官方默认值、支持 loadNext 游标分页、图源初始化完成后再搜索、图源内部函数与引擎隔离、加解密全部同步化（AES/MD5/SHA/HMAC 纯 JS 实现）、补齐 APP 全局对象与 GraphQL 请求头。禁漫天堂、漫画人、manga_dex、Hitomi 等已实测出结果。",
+  "title": "ThirdHub v4.0",
+  "content": "漫画图片反混淆：禁漫等被切块混淆的图片用 Canvas 本地还原（对齐官方 modifyImage 机制）；修复 onImageLoad 少传章节参数导致图片永远混淆的根因；封面应用图源头像请求头修复 CDN 403；详情页升级分组标签/评分/点赞/评论数/相关推荐；新增评论区（分页加载）；新增图源发现页：内容完全由图源定义驱动，支持多分区/分页/混合三种类型与「查看更多」跳转。",
   "downloadUrl": "https://github.com/Smalluniverseheng/ThirdHub-Android/releases/download/v2.2/ThirdHub-Android-v2.2.apk",
-  "releaseDate": "2026-08-18",
-  "releaseNotes": "Venera 图源引擎对齐官方实现，一大批官方图源修复可用：搜索选项自动取官方默认值、支持 loadNext 游标分页、图源初始化完成后再搜索、图源内部函数与引擎隔离、加解密全部同步化（AES/MD5/SHA/HMAC 纯 JS 实现）、补齐 APP 全局对象与 GraphQL 请求头。禁漫天堂、漫画人、manga_dex、Hitomi 等已实测出结果。"
+  "releaseDate": "2026-08-19",
+  "releaseNotes": "漫画图片反混淆：禁漫等被切块混淆的图片用 Canvas 本地还原（对齐官方 modifyImage 机制）；修复 onImageLoad 少传章节参数导致图片永远混淆的根因；封面应用图源头像请求头修复 CDN 403；详情页升级分组标签/评分/点赞/评论数/相关推荐；新增评论区（分页加载）；新增图源发现页：内容完全由图源定义驱动，支持多分区/分页/混合三种类型与「查看更多」跳转。"
 }

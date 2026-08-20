@@ -15,6 +15,9 @@ export async function renderMediaBoard(page, type) {
   /* v3.7：综合阅读板块覆盖的类型集合 */
   const TYPES = isRead ? READ_TYPES : [type];
   const NAME = isRead ? '阅读' : (TYPE_NAMES[type] || t.name);
+  /* v4.6：第二页签按内容类型命名——阅读类叫书架，视频叫片单，音乐叫歌单 */
+  const SHELF_NAMES = { read: '书架', novel: '书架', comic: '书架', audio: '书架', video: '片单', music: '歌单' };
+  const SHELF_NAME = SHELF_NAMES[type] || '书架';
   const typeName = (tid) => TYPE_NAMES[tid] || tid;
   const typeIcon = (tid) => (sourceType(tid) || {}).icon || 'folder';
 
@@ -39,7 +42,7 @@ export async function renderMediaBoard(page, type) {
     <div data-role="home">
       <div class="bm-subtabs" data-role="subtabs">
         <button class="bm-subtab" data-st="discover">发现</button>
-        <button class="bm-subtab on" data-st="shelf">书架</button>
+        <button class="bm-subtab on" data-st="shelf">${SHELF_NAME}</button>
         <button class="bm-subtab" data-st="history">历史</button>
         <button class="bm-subtab" data-st="fav">收藏</button>
       </div>
@@ -276,8 +279,8 @@ export async function renderMediaBoard(page, type) {
     } else {
       subBody.innerHTML = `<div class="empty" style="margin-top:44px">
         <div class="empty-ico">${icon(t.icon)}</div>
-        <div class="empty-title">书架还是空的</div>
-        <div class="muted" style="max-width:280px;line-height:1.8">点右上角放大镜搜索${NAME}，加入书架后就会出现在这里。<br>还没有连接器？到「发现」页或「分类 → 源管理」导入。</div>
+        <div class="empty-title">${SHELF_NAME}还是空的</div>
+        <div class="muted" style="max-width:280px;line-height:1.8">点右上角放大镜搜索${NAME}，加入${SHELF_NAME}后就会出现在这里。<br>还没有连接器？到「发现」页或「分类 → 源管理」导入。</div>
       </div>`;
     }
   }

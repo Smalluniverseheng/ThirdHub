@@ -27,7 +27,7 @@ export async function renderStorageBoard(page) {
       </div>
       <div class="row" style="justify-content:space-between"><span class="muted">已用 ${fmtBytes(used)}</span><span class="muted">${lv.storage === Infinity ? '无限' : fmtBytes(lv.storage)}</span></div>
       <div class="storage-bar" style="margin-top:6px"><div class="storage-fill" style="width:${pct}%"></div></div>
-      <div class="muted mt8" style="font-size:11.5px">云存储用于书架 / 历史 / 收藏 / 进度的多设备同步备份。会员只扩容存储，AI 对话使用你自己的 API Key。</div>
+      <div class="muted mt8" style="font-size:11.5px">云存储统计你的全部云端数据：头像、昵称等个人资料、设置，以及书架 / 历史 / 收藏 / 阅读进度的多设备同步。会员只扩容存储，AI 对话使用你自己的 API Key。</div>
     </div>
 
     <button class="list-item" style="width:100%;margin-bottom:8px" data-a="backup">

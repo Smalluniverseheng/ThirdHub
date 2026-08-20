@@ -241,6 +241,13 @@ export async function renderCategory(page) {
         justImported = true;
         return toast(`已导入 Venera 图源「${s2.name}」`, 'ok');
       }
+      /* v4.1：落雪音乐（LX Music）自定义源脚本 */
+      const { isLxSource, lxToJsSource } = await import('../engine/lx-adapter.js');
+      if (isLxSource(text)) {
+        const s3 = await importSource(lxToJsSource(text));
+        justImported = true;
+        return toast(`已导入 LX 音乐源「${s3.name}」`, 'ok');
+      }
       if (isLegadoJson(text)) return await importBatch(legadoToJsSources(text), '阅读APP书源');
       if (isBasicJson(text)) return await importBatch(basicToJsSources(text), '书源');
       if (isTvboxConfig(text)) {

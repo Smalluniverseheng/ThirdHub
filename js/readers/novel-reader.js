@@ -136,14 +136,19 @@ export async function openNovelReader({ source, item, startChapter = 0 }) {
     updateInfo();
   }
 
-  /* ---------- 章节加载 ---------- */
+  /* ---------- 章节加载 ----------
+     v4.1：开始阅读即默认下载本章（正文写入本地缓存，断网也能看）；
+     换章/退出时作废旧请求——结果回来也不再上屏、不再占用渲染 */
+  let loadToken = 0;
   async function loadChapter(i, toEnd = false) {
     if (i < 0 || i >= chapters.length) { if (i >= chapters.length && chapters.length) toast('已经是最后一章了'); return; }
     idx = i;
+    const tk = ++loadToken;
     body.innerHTML = '<div class="loading-row"><div class="spinner"></div>加载中…</div>';
     try {
       const c = chapters[idx];
       const content = await getChapterContent(source, c.url);
+      if (tk !== loadToken) return; /* 已换章或已退出：丢弃这次下载结果 */
       currentText = typeof content === 'string' ? content : String(content);
       renderText(c.name || `第 ${idx + 1} 章`);
       saveProgress(item.id || (source.id + ':' + item.bookUrl), { chapterIndex: idx });
@@ -431,6 +436,7 @@ export async function openNovelReader({ source, item, startChapter = 0 }) {
 
   /* ---------- 绑定 ---------- */
   $('[data-a="back"]', ov).onclick = () => {
+    loadToken++; /* v4.1：退出阅读即取消进行中的章节下载 */
     ttsOn = false;
     stopSpeak();
     if (clockTimer) clearInterval(clockTimer);

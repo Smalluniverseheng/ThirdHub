@@ -68,22 +68,25 @@ export async function updateSource(id, patch) {
   if (s) { Object.assign(s, patch); await db.put('sources', s); emit('sources:changed'); }
 }
 
-/* ---------- 统一搜索（多源并发） ---------- */
-export async function searchAll(keyword, { types = null, onProgress = null, page = 1, only = null } = {}) {
+/* ---------- 统一搜索（多源并发，v4.1 流式：每个源一返回就立刻回调完整条目） ---------- */
+export async function searchAll(keyword, { types = null, onProgress = null, page = 1, only = null, signal = null } = {}) {
   const { getEngine } = await import('./source-engine.js');
   let sources = await listSources();
   /* v3.8：only 传入单个连接器 id 时，只搜该源（进入源内部搜索，此时忽略类型筛选） */
   sources = sources.filter((s) => s.enabled && (only ? s.id === only : (!types || types.includes(s.type))));
   const results = [];
   await Promise.allSettled(sources.map(async (s) => {
+    if (signal && signal.aborted) return;
     try {
       const engine = getEngine(s);
       const list = await engine.search(keyword, page);
-      const arr = Array.isArray(list) ? list : (typeof list === 'string' ? JSON.parse(list) : []);
-      arr.forEach((item) => results.push({ ...item, sourceId: s.id, sourceName: s.name, type: s.type }));
-      onProgress && onProgress(s, arr.length, null);
+      if (signal && signal.aborted) return;
+      const raw = Array.isArray(list) ? list : (typeof list === 'string' ? JSON.parse(list) : []);
+      const arr = raw.map((item) => ({ ...item, sourceId: s.id, sourceName: s.name, type: s.type }));
+      arr.forEach((item) => results.push(item));
+      onProgress && onProgress(s, arr, null);
     } catch (e) {
-      onProgress && onProgress(s, 0, e.message);
+      onProgress && onProgress(s, [], e.message);
     }
   }));
   return results;

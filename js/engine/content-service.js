@@ -34,6 +34,11 @@ export async function getChapterList(source, bookUrl, force = false) {
 
 export async function getChapterContent(source, chapterUrl) {
   if (source.id === 'local') return localChapterContent(chapterUrl);
+  /* v4.1：音乐播放地址有时效（签名几分钟过期），不缓存，每次现取 */
+  if (source.type === 'music') {
+    const engine = getEngine(source);
+    return engine.chapterContent(chapterUrl);
+  }
   const cacheKey = 'content:' + source.id + ':' + chapterUrl;
   const cached = await db.get('cache', cacheKey);
   if (cached) return cached.v;

@@ -201,12 +201,19 @@ export async function renderMediaBoard(page, type) {
     if (kw) doSearch(kw);
   }
 
-  /* v2.8：搜索分页 —— 书源首页通常只有一二十条，点「加载更多」取下一页 */
-  let searchState = { kw: '', page: 1, results: [], loading: false, done: false };
+  /* v2.8：搜索分页 —— 书源首页通常只有一二十条，点「加载更多」取下一页
+     v4.1：流式搜索——每个源一返回就立刻上屏（搜一本蹦一本），不等全部源；
+     点击某本书时中止后台搜索，把带宽优先让给这本书的详情加载 */
+  let searchState = { kw: '', page: 1, results: [], loading: false, done: false, searching: false, ctrl: null, token: 0 };
+
+  function abortSearch() {
+    if (searchState.ctrl) { try { searchState.ctrl.abort(); } catch (e) {} searchState.ctrl = null; }
+    searchState.searching = false;
+  }
 
   function renderResults() {
-    const { kw, results } = searchState;
-    resultsEl.innerHTML = `<div class="muted" style="padding:4px 18px 10px">找到 ${results.length} 条结果</div>
+    const { kw, results, searching } = searchState;
+    resultsEl.innerHTML = `<div class="muted" style="padding:4px 18px 10px">找到 ${results.length} 条结果${searching ? '，<span class="spinner" style="width:12px;height:12px;display:inline-block;vertical-align:-2px"></span> 搜索中…' : ''}</div>
       <div class="discover-section"><div class="result-list">
         ${results.map((r, i) => `
           <button class="result-item card-press" data-i="${i}">
@@ -219,10 +226,11 @@ export async function renderMediaBoard(page, type) {
             </div>
           </button>`).join('')}
       </div></div>
-      ${searchState.done ? '' : '<div style="padding:6px 18px 26px"><button class="btn grow" data-a="more">加载更多</button></div>'}`;
+      ${searchState.done || searchState.searching ? '' : '<div style="padding:6px 18px 26px"><button class="btn grow" data-a="more">加载更多</button></div>'}`;
     $$('.result-item', resultsEl).forEach((b) => {
       b.onclick = () => {
         const r = searchState.results[+b.dataset.i];
+        abortSearch(); /* 优先这本书：停掉后台搜索，详情全速加载 */
         openDetail({ sourceId: r.sourceId, bookUrl: r.bookUrl, seed: r });
       };
     });
@@ -232,30 +240,43 @@ export async function renderMediaBoard(page, type) {
 
   async function doSearch(kw, page = 1) {
     if (searchState.loading) return;
+    abortSearch();
+    const token = ++searchState.token;
     searchState.loading = true;
     srclist.hidden = true;
     homeEl.classList.add('hidden');
     resultsEl.classList.remove('hidden');
     if (page === 1) {
-      searchState = { kw, page: 1, results: [], loading: true, done: false };
+      searchState = { kw, page: 1, results: [], loading: true, done: false, searching: true, ctrl: null, token };
       resultsEl.innerHTML = '<div class="loading-row"><div class="spinner"></div>' +
         (searchScope ? `正在搜索「${esc(searchScope.name)}」…` : `正在并发搜索所有${NAME}连接器…`) + '</div>';
     } else {
       const moreBtn = $('[data-a="more"]', resultsEl);
       if (moreBtn) { moreBtn.disabled = true; moreBtn.textContent = '加载中…'; }
     }
-    let batch = [];
-    try {
-      batch = await searchAll(kw, { types: isRead ? [...selTypes] : TYPES, page, only: searchScope ? searchScope.id : null });
-    } catch (e) { batch = []; }
-    /* 去重（同一书源同一本书分页重复返回时） */
     const seen = new Set(searchState.results.map((r) => r.sourceId + '|' + r.bookUrl));
-    const fresh = batch.filter((r) => !seen.has(r.sourceId + '|' + r.bookUrl));
-    searchState.results = searchState.results.concat(fresh);
+    const ctrl = new AbortController();
+    searchState.ctrl = ctrl;
+    /* 流式：源每返回一批就立刻合并去重上屏 */
+    const onProgress = (s, items, err) => {
+      if (token !== searchState.token) return; /* 新一轮搜索已开始，丢弃旧结果 */
+      if (err || !items || !items.length) return;
+      const fresh = items.filter((r) => !seen.has(r.sourceId + '|' + r.bookUrl));
+      if (!fresh.length) return;
+      fresh.forEach((r) => seen.add(r.sourceId + '|' + r.bookUrl));
+      searchState.results = searchState.results.concat(fresh);
+      renderResults();
+    };
+    try {
+      await searchAll(kw, { types: isRead ? [...selTypes] : TYPES, page, only: searchScope ? searchScope.id : null, onProgress, signal: ctrl.signal });
+    } catch (e) {}
+    if (token !== searchState.token) return;
     searchState.page = page;
     searchState.loading = false;
-    searchState.done = fresh.length === 0;
+    searchState.searching = false;
+    searchState.ctrl = null;
     if (!searchState.results.length) {
+      searchState.done = true;
       resultsEl.innerHTML = `<div class="empty"><div class="empty-ico">${icon('search')}</div><div class="empty-title">没有找到「${esc(kw)}」</div><div class="muted">试试其他关键词，或先导入更多${NAME}连接器</div></div>`;
       return;
     }

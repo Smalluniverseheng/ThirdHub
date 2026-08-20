@@ -31,6 +31,7 @@ export async function openComicReader({ source, item, startChapter = 0 }) {
   let brightness = await getSetting('comicBrightness');
   let crop = await getSetting('comicCropBorder');
   let preloadN = await getSetting('comicPreload');
+  let threads = (await getSetting('comicThreads')) || 8; /* v4.1：下载线程数 1–32 用户可调 */
   // 旧键兼容：comicMode = gallery → paged
   const legacyMode = await getSetting('comicMode');
   if (legacyMode === 'scroll' && layout === 'paged') layout = 'webtoon';
@@ -99,6 +100,7 @@ export async function openComicReader({ source, item, startChapter = 0 }) {
     try {
       const content = await getChapterContent(source, chapters[idx].url);
       images = parseImages(content);
+      resetPool(); /* v4.1：换章清空预取队列 */
       currentPage = toEnd ? Math.max(0, images.length - pageSize()) : 0;
       render();
       saveProgress(item.id || (source.id + ':' + item.bookUrl), { chapterIndex: idx });
@@ -228,10 +230,33 @@ export async function openComicReader({ source, item, startChapter = 0 }) {
     $('.cr-page-hint', ov).textContent = `${pageTxt} · ${idx + 1}/${chapters.length} 章`;
   }
 
-  function preloadAround(p) {
-    for (let i = p + 1; i <= Math.min(images.length - 1, p + preloadN); i++) { const it = images[i]; if (it.m) warmModifyImage(it.u, it.m); else { const im = new Image(); im.src = it.u; } }
-    for (let i = p - 1; i >= Math.max(0, p - preloadN); i--) { const it = images[i]; if (it.m) warmModifyImage(it.u, it.m); else { const im = new Image(); im.src = it.u; } }
+  /* v4.1：并发预取线程池——不再一次性全部发出，按用户设置的线程数排队下载，
+     翻页时优先当前页之后的图；退出阅读器时停止排队、丢弃未开始的下载 */
+  const pool = { q: [], active: 0, dead: false, seen: new Set() };
+  function prefetchOne(it) {
+    if (it.m) return warmModifyImage(it.u, it.m);
+    return new Promise((res) => { const im = new Image(); im.onload = im.onerror = () => res(); im.src = it.u; });
   }
+  function pump() {
+    while (!pool.dead && pool.active < Math.max(1, Math.min(32, threads)) && pool.q.length) {
+      const it = pool.q.shift();
+      pool.active++;
+      Promise.resolve(prefetchOne(it)).catch(() => {}).finally(() => { pool.active--; pump(); });
+    }
+  }
+  function preloadAround(p) {
+    const fwd = [], back = [];
+    for (let i = p + 1; i <= Math.min(images.length - 1, p + preloadN); i++) fwd.push(images[i]);
+    for (let i = p - 1; i >= Math.max(0, p - preloadN); i--) back.push(images[i]);
+    pool.q.length = 0; /* 未开始的旧任务让位给当前页附近 */
+    for (const it of fwd.concat(back)) {
+      if (!it.u || pool.seen.has(it.u)) continue;
+      pool.seen.add(it.u);
+      pool.q.push(it);
+    }
+    pump();
+  }
+  function resetPool() { pool.q.length = 0; pool.seen = new Set(); }
 
   /* ---------- 设置 ---------- */
   function curLayoutKey() { return layout + (layout === 'webtoon' ? '' : '-' + dir); }
@@ -247,6 +272,8 @@ export async function openComicReader({ source, item, startChapter = 0 }) {
       <input type="range" min="0.3" max="1" step="0.05" value="${brightness}" data-range="b" style="width:100%;margin-bottom:14px">
       <div class="muted mb8">预加载页数：<span data-lab="p">${preloadN}</span></div>
       <input type="range" min="1" max="8" step="1" value="${preloadN}" data-range="p" style="width:100%;margin-bottom:14px">
+      <div class="muted mb8">下载线程数：<span data-lab="t">${threads}</span>（1–32，越大越快）</div>
+      <input type="range" min="1" max="32" step="1" value="${threads}" data-range="t" style="width:100%;margin-bottom:14px">
       <div class="nr-set-row"><span>页间留白</span><button class="ai-toggle ${gap ? 'on' : ''}" data-tog="gap"></button></div>
       <div class="nr-set-row"><span>切除白边</span><button class="ai-toggle ${crop ? 'on' : ''}" data-tog="crop"></button></div>
     </div>`);
@@ -278,6 +305,12 @@ export async function openComicReader({ source, item, startChapter = 0 }) {
       $('[data-lab="p"]', body2).textContent = preloadN;
       await setSetting('comicPreload', preloadN);
     };
+    $('[data-range="t"]', body2).oninput = async (e) => {
+      threads = +e.target.value;
+      $('[data-lab="t"]', body2).textContent = threads;
+      await setSetting('comicThreads', threads);
+      pump(); /* 立即按新线程数补充任务 */
+    };
     $('[data-tog="gap"]', body2).onclick = async (e) => {
       gap = !gap;
       e.currentTarget.classList.toggle('on', gap);
@@ -292,7 +325,7 @@ export async function openComicReader({ source, item, startChapter = 0 }) {
     };
   }
 
-  $('[data-a="back"]', ov).onclick = () => ov.remove();
+  $('[data-a="back"]', ov).onclick = () => { pool.dead = true; pool.q.length = 0; ov.remove(); }; /* v4.1：退出即取消预取下载 */
   $('[data-a="mode"]', ov).onclick = showSettings;
   $('[data-a="prev"]', ov).onclick = () => loadChapter(idx - 1);
   $('[data-a="next"]', ov).onclick = () => loadChapter(idx + 1);

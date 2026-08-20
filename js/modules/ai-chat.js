@@ -186,7 +186,7 @@ export async function renderAIChat(page) {
         <div id="ai-dtab-content"></div>
       </div>
       <div class="ai-drawer-bottom">
-        <div class="ai-dsearch">${icon('search')}<input id="ai-dsearch-input" placeholder="搜索历史对话"></div>
+        <div class="ai-dsearch" id="ai-dsearch" ${drawerTab === 'history' ? '' : 'hidden'}>${icon('search')}<input id="ai-dsearch-input" placeholder="搜索历史对话"></div>
         <button class="ai-dnew" data-a="d-new" title="新对话">${icon('plus')}</button>
       </div>
     </aside>
@@ -290,6 +290,8 @@ export async function renderAIChat(page) {
     drawerTab = b.dataset.dtab;
     $$('#ai-dtabs .ai-dtab', page).forEach(x => x.classList.toggle('on', x === b));
     $('#ai-dfilters', page).hidden = drawerTab !== 'models';
+    /* v4.5：搜索框只属于「历史会话」，其他页签隐藏 */
+    const ds = $('#ai-dsearch', page); if (ds) ds.hidden = drawerTab !== 'history';
     renderDrawerTab(page);
   });
   $$('#ai-dfilters .ai-dfilter', page).forEach(b => b.onclick = () => {

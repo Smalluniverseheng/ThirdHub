@@ -539,8 +539,8 @@ async function chapterContent(chapterUrl) {
     }
     if (!u) continue;
     if (!/^https?:\\/\\//i.test(u)) continue;
-    /* 需要自定义请求头或需要图像处理（反混淆）的图片一律走中转 */
-    if (mod || (h && Object.keys(h).length)) u = legado.proxyUrl(u, h || {});
+    /* v4.5：漫画正文图片一律走中转（带源站 Referer/UA），防盗链 CDN（JM 等）直连会 403 */
+    u = legado.proxyUrl(u, (h && Object.keys(h).length) ? h : { referer: __src.url || '' });
     /* v4.0：带 modifyImage 脚本时输出对象，阅读器端用 Canvas 执行图像还原 */
     out.push(mod ? { u, m: String(mod) } : u);
   }

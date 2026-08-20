@@ -30,8 +30,18 @@ export async function runModifyImage(url, script) {
   if (!script) return url;
   if (cache.has(url)) return cache.get(url);
   const p = (async () => {
-    const resp = await fetch(url);
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    /* v4.5：直连失败（防盗链/CORS）时自动改走本站中转再试一次 */
+    let resp = await fetch(url).catch(() => null);
+    if (!resp || !resp.ok) {
+      try {
+        const { getBackendProxy } = await import('./proxy.js');
+        const backend = await getBackendProxy();
+        if (backend && !String(url).includes('/api/proxy')) {
+          resp = await fetch(backend + (backend.includes('?') ? '&' : '?') + 'url=' + encodeURIComponent(url)).catch(() => null);
+        }
+      } catch (e) {}
+    }
+    if (!resp || !resp.ok) throw new Error('HTTP ' + (resp ? resp.status : 'failed'));
     const blob = await resp.blob();
     const bmp = await createImageBitmap(blob);
     const src = new ImgWrap(bmp, bmp.width, bmp.height);

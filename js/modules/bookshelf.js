@@ -1,7 +1,7 @@
 /* ===== ThirdHub js/modules/bookshelf.js — 书架页（书架/历史/收藏/圈子） ===== */
 import { $, $$, esc, icon, toast, actionSheet, confirmDialog, fmtDate } from '../ui.js';
 import { db, kvGet, kvSet, on, emit } from '../store.js';
-import { removeFromShelf } from '../engine/content-service.js';
+import { removeFromShelf, getProgress } from '../engine/content-service.js';
 import { importLocalBook, deleteLocalBook } from '../engine/local-source.js';
 import { pushRow } from '../engine/sync-service.js';
 import { getSource } from '../engine/source-service.js';
@@ -178,12 +178,26 @@ export async function renderBookshelf(page) {
     }
 
     if (viewMode === 'grid' && storeName === 'shelf') {
-      box.innerHTML = `<div class="shelf-grid">` + items.map((it) => `
+      /* v4.3：番茄小说风格宫格 —— 封面大卡 + 标题 + 阅读进度副标题 */
+      const TYPE_TAG = { novel: '小说', comic: '漫画', video: '影视', audio: '听书', music: '音乐' };
+      const progresses = await Promise.all(items.map((it) => getProgress(it.id).catch(() => null)));
+      box.innerHTML = `<div class="shelf-grid">` + items.map((it, idx) => {
+        const p = progresses[idx];
+        let sub;
+        if (p && (p.chapterIndex != null || p.chapterTitle)) {
+          sub = '读至' + (p.chapterTitle ? `「${p.chapterTitle}」` : `第 ${(p.chapterIndex || 0) + 1} 章`);
+        } else {
+          sub = it.author || it.sourceName || '';
+        }
+        return `
         <button class="shelf-item shelf-grid-item ${selected.has(it.id) ? 'selected' : ''}" data-id="${esc(it.id)}">
-          <div class="shelf-cover">${it.coverUrl ? `<img src="${esc(it.coverUrl)}" loading="lazy" onerror="this.remove()">` : icon('book')}${it.top ? '<span class="shelf-top-badge">顶</span>' : ''}${selectMode ? `<span class="sel-badge">${selected.has(it.id) ? '✓' : ''}</span>` : ''}</div>
-          <div class="ellipsis" style="font-size:12.5px;font-weight:600;margin-top:6px">${esc(it.title)}</div>
-          <div class="muted ellipsis" style="font-size:11px">${esc(it.sourceName || '')}</div>
-        </button>`).join('') + '</div>';
+          <div class="shelf-cover">${it.coverUrl ? `<img src="${esc(it.coverUrl)}" loading="lazy" onerror="this.remove()">` : icon('book')}
+            <span class="shelf-type-badge">${TYPE_TAG[it.type] || ''}</span>
+            ${it.top ? '<span class="shelf-top-badge">顶</span>' : ''}${selectMode ? `<span class="sel-badge">${selected.has(it.id) ? '✓' : ''}</span>` : ''}</div>
+          <div class="shelf-g-title">${esc(it.title)}</div>
+          <div class="shelf-g-sub">${esc(sub)}</div>
+        </button>`;
+      }).join('') + '</div>';
     } else {
       box.innerHTML = items.map((it) => `
         <button class="shelf-item shelf-list-item card ${selected.has(it.id) ? 'selected' : ''}" data-id="${esc(it.id)}" style="margin-bottom:10px">

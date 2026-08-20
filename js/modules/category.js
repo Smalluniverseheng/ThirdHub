@@ -6,6 +6,7 @@ import { isLegadoJson, legadoToJsSources, isBasicJson, basicToJsSources } from '
 import { isVeneraJs, isVeneraIndex, veneraToJsSource } from '../engine/venera-adapter.js';
 import { getEngine, destroyEngines } from '../engine/source-engine.js';
 import { on, kvGet, kvSet } from '../store.js';
+import { getSupabase, hasCloud } from '../supabase.js';
 
 export async function renderCategory(page) {
   page.innerHTML = `
@@ -36,6 +37,7 @@ export async function renderCategory(page) {
     </button>`).join('');
 
   $('[data-role="manager"]', page).innerHTML = [
+    { a: 'official', ico: 'cloud', name: '官方仓库', desc: '密码保护的私有仓库，书源 / 图源 / 视频源集中存放' },
     { a: 'import', ico: 'import', name: '导入连接器', desc: '支持阅读APP书源、Venera 漫画图源、CSS书源、TVbox 配置、JS 连接器' },
     { a: 'test', ico: 'test', name: '连接器测试工具', desc: '验证连接器的搜索/目录/内容函数' },
     { a: 'proxy', ico: 'globe', name: '代理设置', desc: '配置后端代理地址（Cloudflare Worker）' },
@@ -405,7 +407,130 @@ export async function renderCategory(page) {
     if (a === 'import') b.onclick = importFlow;
     if (a === 'test') b.onclick = testFlow;
     if (a === 'proxy') b.onclick = proxyFlow;
+    if (a === 'official') b.onclick = officialRepoFlow;
   });
+
+  /* ---------- v4.3 官方仓库：密码保护的私有源仓库（云端存储，本人专用） ---------- */
+  async function officialRepoFlow() {
+    if (!hasCloud()) { toast('云端暂不可用，请检查网络后重试', 'err'); return; }
+    let pwd = await kvGet('repo:pwd', '');
+    const body = el(`<div>
+      ${formRow('仓库密码', `<input class="input" data-f="pwd" type="password" placeholder="请输入仓库密码" value="${esc(pwd)}">`)}
+      <label class="row gap8" style="padding:4px 2px;font-size:13px;cursor:pointer"><input type="checkbox" data-f="remember" ${pwd ? 'checked' : ''}> 在本机记住密码</label>
+      <div class="muted" style="font-size:12px;padding-top:6px">官方仓库是你私人的源仓库，源保存在云端，凭密码取用。初始密码 123456，进入后可修改。</div>
+    </div>`);
+    const m = modal({
+      title: '官方仓库', body,
+      footer: '<button class="btn grow" data-a="cancel">取消</button><button class="btn btn-primary grow" data-a="ok">解锁</button>',
+    });
+    $('[data-a="cancel"]', m.mask).onclick = m.close;
+    const unlock = async () => {
+      const pw = $('[data-f="pwd"]', body).value;
+      if (!pw) return toast('请输入密码', 'err');
+      const okBtn = $('[data-a="ok"]', m.mask);
+      okBtn.disabled = true; okBtn.textContent = '验证中…';
+      try {
+        const { data: pass } = await getSupabase().rpc('repo_check', { pwd: pw });
+        if (!pass) throw new Error('密码错误');
+        const { data, error } = await getSupabase().rpc('repo_list', { pwd: pw });
+        if (error) throw new Error(error.message || '云端错误');
+        if ($('[data-f="remember"]', body).checked) await kvSet('repo:pwd', pw); else await kvSet('repo:pwd', '');
+        m.close();
+        openOfficialRepo(pw, data);
+      } catch (e) {
+        toast('解锁失败：' + e.message, 'err');
+        okBtn.disabled = false; okBtn.textContent = '解锁';
+      }
+    };
+    $('[data-a="ok"]', m.mask).onclick = unlock;
+    $('[data-f="pwd"]', body).addEventListener('keydown', (e2) => { if (e2.key === 'Enter') unlock(); });
+  }
+
+  async function importOfficialEntry(entry, btn) {
+    if (btn) { btn.disabled = true; btn.textContent = '导入中…'; }
+    try {
+      const existing = await listSources();
+      if (existing.some((s) => s.name === entry.name)) { toast(`「${entry.name}」已存在`, 'err'); if (btn) { btn.textContent = '已添加'; } return 'exist'; }
+      if (entry.fmt === 'tvbox') await importSource(tvboxToJsSource(entry.data));
+      else if (entry.fmt === 'venera') await importSource(veneraToJsSource(entry.data.code || '', entry.data.name || entry.name));
+      else await importSource(legadoToJsSources(JSON.stringify([entry.data]))[0]);
+      if (btn) btn.textContent = '已添加';
+      return 'ok';
+    } catch (e) {
+      toast(`「${entry.name}」导入失败：${e.message}`, 'err');
+      if (btn) { btn.disabled = false; btn.textContent = '添加'; }
+      return 'fail';
+    }
+  }
+
+  function openOfficialRepo(pwd, rows) {
+    const groups = {};
+    (rows || []).forEach((r) => { const c = r.category || '其他'; (groups[c] = groups[c] || []).push(r); });
+    const cats = Object.keys(groups).sort();
+    const body = el(`<div>
+      <div class="row gap8" style="padding:0 0 10px">
+        <button class="btn btn-primary btn-sm grow" data-a="importall">全部导入（${(rows || []).length}）</button>
+        <button class="btn btn-sm" data-a="changepwd">修改密码</button>
+      </div>
+      <div data-role="list"></div>
+    </div>`);
+    const listBox = $('[data-role="list"]', body);
+    const renderRows = (rows2) => {
+      const g2 = {};
+      (rows2 || []).forEach((r) => { const c = r.category || '其他'; (g2[c] = g2[c] || []).push(r); });
+      const cats2 = Object.keys(g2).sort();
+      listBox.innerHTML = rows2 && rows2.length ? cats2.map((c) => `
+        <div class="section-head" style="padding:10px 2px 6px">${icon('folder')}<span>${esc(c)}</span><span class="muted">（${g2[c].length}）</span></div>
+        ${g2[c].map((r) => `
+          <div class="row gap8" style="padding:8px 4px;border-top:1px solid var(--line)">
+            <div class="grow" style="min-width:0">
+              <div style="font-size:14px;font-weight:600" class="ellipsis">${esc(r.name)}</div>
+              <div class="muted" style="font-size:12px">${r.fmt === 'tvbox' ? 'TVbox 视频源' : r.fmt === 'venera' ? 'Venera 图源' : '阅读APP书源'} · ${fmtDate(r.updated_at)}</div>
+            </div>
+            <button class="btn btn-primary" style="flex:none;padding:6px 14px" data-add="${esc(r.id)}">添加</button>
+          </div>`).join('')}`).join('')
+        : '<div class="ai-drawer-empty" style="padding:30px 0">仓库还是空的<br><span style="font-size:12px">在管理后台（admin.html）上传书源后会出现在这里</span></div>';
+      $$('[data-add]', listBox).forEach((b) => {
+        b.onclick = async () => {
+          const entry = (rows2 || []).find((x) => x.id === b.dataset.add);
+          if (entry) { await importOfficialEntry(entry, b); justImported = true; refreshSources(); }
+        };
+      });
+    };
+    renderRows(rows);
+    const m = modal({
+      title: '官方仓库', body,
+      footer: '<button class="btn grow" data-a="close">关闭</button>',
+    });
+    $('[data-a="close"]', m.mask).onclick = m.close;
+    $('[data-a="importall"]', body).onclick = async (ev) => {
+      const btn = ev.currentTarget; btn.disabled = true;
+      let ok = 0, exist = 0, fail = 0;
+      for (const r of rows || []) {
+        const res = await importOfficialEntry(r, null);
+        if (res === 'ok') ok++; else if (res === 'exist') exist++; else fail++;
+        btn.textContent = `导入中… ${ok + exist + fail}/${rows.length}`;
+      }
+      justImported = true; refreshSources();
+      toast(`导入完成：新增 ${ok}${exist ? `，已存在 ${exist}` : ''}${fail ? `，失败 ${fail}` : ''}`, ok ? 'ok' : 'err');
+      btn.textContent = '全部导入';
+    };
+    $('[data-a="changepwd"]', body).onclick = () => {
+      const b2 = el(`<div>${formRow('新密码', '<input class="input" data-f="np" type="password" placeholder="请输入新密码">')}<div class="muted" style="font-size:12px;padding-top:6px">修改后请用新密码解锁官方仓库，旧密码立即失效。</div></div>`);
+      const m2 = modal({
+        title: '修改仓库密码', body: b2,
+        footer: '<button class="btn grow" data-a="cancel">取消</button><button class="btn btn-primary grow" data-a="ok">确认修改</button>',
+      });
+      $('[data-a="cancel"]', m2.mask).onclick = m2.close;
+      $('[data-a="ok"]', m2.mask).onclick = async () => {
+        const np = $('[data-f="np"]', b2).value;
+        if (!np || np.length < 4) return toast('新密码至少 4 位', 'err');
+        const { data: okp } = await getSupabase().rpc('repo_set_password', { pwd, new_pwd: np });
+        if (okp) { await kvSet('repo:pwd', np); pwd = np; m2.close(); toast('密码已修改', 'ok'); }
+        else toast('修改失败', 'err');
+      };
+    };
+  }
 
   /* ---------- v3.0 源仓库：添加你自己的仓库地址（index.json），只从你的仓库选源导入 ---------- */
   const REPOS_KEY = 'source:repos';

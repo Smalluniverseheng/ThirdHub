@@ -1,5 +1,5 @@
 /* ===== ThirdHub app.js — 应用入口 / 路由 / 初始化 ===== */
-export const APP_VERSION = '4.2';
+export const APP_VERSION = '4.3';
 window.__TH_CSS_V = APP_VERSION; /* v2.7：CSS 按需加载的版本戳 */
 
 import { $, $$, icon, toast, loadCss } from './ui.js';
@@ -110,7 +110,8 @@ export async function switchTab(tab, force = false) {
       await render(page);
       rendered.add(tab);
     } catch (e) {
-      console.error('板块加载失败', e);
+      /* v4.3：带上板块名与真实错误信息，避免日志只剩 {} */
+      console.error(`板块加载失败[${board.id}/${board.name}]`, e && e.message ? `${e.name || 'Error'}: ${e.message}` : e, e && e.stack ? '\n' + e.stack : '');
       page.innerHTML = `<div style="padding:80px 24px;text-align:center;color:var(--tx-3,#888)">
         <div style="font-size:15px;margin-bottom:16px">「${board.name}」加载失败，请检查网络后重试</div>
         <button class="btn btn-primary" data-retry type="button" style="padding:10px 28px">重新加载</button>

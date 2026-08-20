@@ -28,6 +28,7 @@ var TABS = [
   { id: 'plans', name: '会员定价' },
   { id: 'prices', name: '模型定价' },
   { id: 'rank', name: '排行榜' },
+  { id: 'repo', name: '官方仓库' },
   { id: 'feedback', name: '意见反馈' },
   { id: 'paycfg', name: '收款设置' },
 ];
@@ -157,6 +158,7 @@ function renderBody() {
   else if (state.tab === 'plans') renderPlans(body);
   else if (state.tab === 'prices') renderPrices(body);
   else if (state.tab === 'rank') renderRank(body);
+  else if (state.tab === 'repo') renderRepo(body);
   else if (state.tab === 'feedback') renderFeedback(body);
   else if (state.tab === 'paycfg') renderPayCfg(body);
 }
@@ -602,7 +604,150 @@ function renderFeedback(body) {
     }).catch(function (e) { body.innerHTML = '<p class="adm-muted">加载失败：' + esc(e.message) + '</p>'; });
 }
 
-/* ---------- 收款设置 ---------- */
+/* ---------- v4.3 官方仓库：上传书源 / 自动分类 / 删除 / 改仓库密码 ---------- */
+var REPO_CATS = ['小说', '漫画', '有声', '视频', '音乐', '其他'];
+var repoParsed = [];   // 待上传的解析结果
+
+/* 自动识别格式并分类 */
+function repoClassifyLegado(src) {
+  var g = (src.bookSourceGroup || '').trim();
+  if (g) return g;
+  var t = Number(src.bookSourceType || 0);
+  if (t === 1) return '有声';
+  if (t === 2) return '漫画';
+  return '小说';
+}
+function repoClassifyTvbox(site) {
+  var t = String(site.type != null ? site.type : '');
+  var api = String(site.api || '');
+  if (/csp_/i.test(api) || t === '3' || t === '4') return '视频';
+  return '视频';
+}
+function repoParseText(text) {
+  var items = [];
+  var errors = [];
+  text = String(text || '').trim();
+  if (!text) return { items: items, errors: ['内容为空'] };
+  var parsed = null;
+  try { parsed = JSON.parse(text); } catch (e) { /* 非 JSON，按 Venera JS 图源处理 */ }
+  if (parsed !== null) {
+    var arr = Array.isArray(parsed) ? parsed : [parsed];
+    /* TVbox 配置整体 {sites:[...]} */
+    if (!Array.isArray(parsed) && parsed && Array.isArray(parsed.sites)) arr = parsed.sites;
+    arr.forEach(function (it, i) {
+      if (!it || typeof it !== 'object') { errors.push('第 ' + (i + 1) + ' 条不是对象'); return; }
+      if (it.bookSourceName || it.bookSourceUrl) {
+        items.push({ name: it.bookSourceName || it.bookSourceUrl, fmt: 'legado', category: repoClassifyLegado(it), data: it });
+      } else if (it.key && (it.api || it.type != null)) {
+        items.push({ name: it.name || it.key, fmt: 'tvbox', category: repoClassifyTvbox(it), data: it });
+      } else {
+        errors.push('第 ' + (i + 1) + ' 条无法识别');
+      }
+    });
+  } else {
+    /* 纯 JS 源码 → 视为 Venera 图源 */
+    var nm = '';
+    var m = text.match(/@name\s+(.+)/) || text.match(/name\s*[:=]\s*['"]([^'"]+)['"]/);
+    if (m) nm = m[1].trim();
+    items.push({ name: nm || '未命名图源', fmt: 'venera', category: '漫画', data: { code: text, name: nm || '未命名图源' } });
+  }
+  return { items: items, errors: errors };
+}
+
+function renderRepo(body) {
+  body.innerHTML =
+    '<p class="adm-muted" style="margin-bottom:14px">官方仓库是<b>你自己专用</b>的云端源仓库：用户端「分类 → 官方仓库」输入密码后取用（初始密码 123456）。把书源 JSON / TVbox 配置 / Venera 图源 JS 粘贴到下面或选择文件上传，系统会自动识别格式并分类，确认后上传。</p>' +
+    '<div class="adm-card" style="margin-bottom:12px"><b>上传源（自动分类）</b>' +
+      '<textarea class="adm-input" rows="6" data-f="repo-text" style="margin-top:8px" placeholder=\'粘贴书源 JSON（单条或数组）、TVbox 配置、或 Venera 图源 JS 代码…\'></textarea>' +
+      '<div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;align-items:center">' +
+        '<input type="file" data-f="repo-file" multiple accept=".json,.js,.txt" style="font-size:13px">' +
+        '<button class="adm-btn" data-act="repo-parse">解析预览</button>' +
+      '</div>' +
+      '<div data-v="repo-preview"></div>' +
+    '</div>' +
+    '<div class="adm-card" style="margin-bottom:12px"><b>仓库密码</b>' +
+      '<div style="display:flex;gap:10px;margin-top:8px;align-items:center">' +
+        '<input class="adm-input" data-f="repo-newpwd" type="text" placeholder="新密码（至少 4 位）" style="max-width:220px">' +
+        '<button class="adm-btn" data-act="repo-setpwd">修改仓库密码</button>' +
+      '</div>' +
+      '<p class="adm-muted" style="margin-top:8px">这是用户端取用官方仓库时要输入的密码，与后台登录密码独立。当前初始密码为 123456，建议尽快修改。</p>' +
+    '</div>' +
+    '<div class="adm-card"><b>仓库现有源</b><div data-v="repo-list" style="margin-top:8px"><p class="adm-muted">加载中…</p></div></div>';
+  /* 文件选择后读入文本框 */
+  $('[data-f="repo-file"]', body).addEventListener('change', function (e) {
+    var files = Array.prototype.slice.call(e.target.files || []);
+    if (!files.length) return;
+    var texts = [];
+    var done = 0;
+    files.forEach(function (f) {
+      var rd = new FileReader();
+      rd.onload = function () { texts.push(String(rd.result || '')); if (++done === files.length) { $('[data-f="repo-text"]').value = texts.join('\n,\n'); toast('已读入 ' + files.length + ' 个文件，点「解析预览」'); } };
+      rd.readAsText(f);
+    });
+  });
+  repoRenderList(body);
+}
+
+function repoRenderList(body) {
+  var box = $('[data-v="repo-list"]', body);
+  if (!box) return;
+  loadSb().then(function (cli) { return cli.rpc('admin_repo_list', { pwd: PWD }); })
+    .then(function (r) {
+      if (r.error) throw r.error;
+      var rows = r.data || [];
+      if (!rows.length) { box.innerHTML = '<p class="adm-muted">仓库还是空的，上传源后会显示在这里。</p>'; return; }
+      var groups = {};
+      rows.forEach(function (x) { var c = x.category || '其他'; (groups[c] = groups[c] || []).push(x); });
+      box.innerHTML = Object.keys(groups).sort().map(function (c) {
+        return '<div style="margin:10px 0 4px"><b>' + esc(c) + '</b> <span class="adm-muted">（' + groups[c].length + '）</span></div>' +
+          groups[c].map(function (x) {
+            return '<div class="adm-card" style="margin-bottom:6px;padding:8px 12px;display:flex;align-items:center;gap:10px">' +
+              '<div style="flex:1;min-width:0"><b>' + esc(x.name) + '</b> <span class="adm-muted">' + esc(x.fmt) + ' · ' + fmtDate(x.updated_at) + '</span></div>' +
+              '<button class="adm-btn adm-btn-sm" data-act="repo-del" data-id="' + esc(x.id) + '">删除</button></div>';
+          }).join('');
+      }).join('');
+    }).catch(function (e) { box.innerHTML = '<p class="adm-muted">加载失败：' + esc(e.message) + '</p>'; });
+}
+
+function repoDoParse() {
+  var text = $('[data-f="repo-text"]').value;
+  var res = repoParseText(text);
+  repoParsed = res.items;
+  var box = $('[data-v="repo-preview"]');
+  if (!repoParsed.length) { box.innerHTML = '<p class="adm-muted" style="margin-top:10px">没有识别到可用源' + (res.errors.length ? '：' + esc(res.errors.join('；')) : '') + '</p>'; return; }
+  box.innerHTML =
+    '<div style="margin-top:12px"><b>解析出 ' + repoParsed.length + ' 个源</b>' + (res.errors.length ? ' <span class="adm-muted">（' + res.errors.length + ' 条未识别）</span>' : '') + '</div>' +
+    '<div style="max-height:280px;overflow:auto;margin-top:8px">' + repoParsed.map(function (it, i) {
+      return '<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-top:1px solid #2a2f3a">' +
+        '<div style="flex:1;min-width:0"><b>' + esc(it.name) + '</b> <span class="adm-muted">' + esc(it.fmt) + '</span></div>' +
+        '<select class="adm-input" style="max-width:110px;padding:4px 8px" data-cat="' + i + '">' +
+          REPO_CATS.map(function (c) { return '<option' + (c === it.category ? ' selected' : '') + '>' + c + '</option>'; }).join('') +
+        '</select></div>';
+    }).join('') + '</div>' +
+    '<button class="adm-btn adm-btn-primary" data-act="repo-save" style="margin-top:10px">上传到官方仓库</button>';
+  $$('[data-cat]', box).forEach(function (sel) {
+    sel.addEventListener('change', function () { repoParsed[Number(sel.getAttribute('data-cat'))].category = sel.value; });
+  });
+}
+
+function repoDoSave(btn) {
+  if (!repoParsed.length) { toast('请先解析预览', false); return; }
+  var items = repoParsed.map(function (it) {
+    return { id: it.fmt + ':' + it.name, name: it.name, fmt: it.fmt, category: it.category, data: it.data };
+  });
+  btn.disabled = true; btn.textContent = '上传中…';
+  loadSb().then(function (cli) { return cli.rpc('admin_repo_upsert', { pwd: PWD, items: items }); })
+    .then(function (r) {
+      if (r.error) throw r.error;
+      toast('已上传 ' + r.data + ' 个源到官方仓库');
+      repoParsed = [];
+      $('[data-f="repo-text"]').value = '';
+      $('[data-v="repo-preview"]').innerHTML = '';
+      repoRenderList($('#adm-body'));
+    }).catch(function (e) { toast('上传失败：' + e.message, false); btn.disabled = false; btn.textContent = '上传到官方仓库'; });
+}
+
+
 function renderPayCfg(body) {
   body.innerHTML = '<p class="adm-muted">加载中…</p>';
   loadSb().then(function (cli) { return cli.from('th_pay_config').select('*').eq('key', 'payment'); })
@@ -717,6 +862,26 @@ document.addEventListener('click', function (e) {
       }).catch(function (err) { toast('操作失败：' + err.message, false); });
   } else if (act === 'save-paycfg') {
     savePayCfg();
+  } else if (act === 'repo-parse') {
+    repoDoParse();
+  } else if (act === 'repo-save') {
+    repoDoSave(t);
+  } else if (act === 'repo-del') {
+    if (!confirm('从官方仓库删除这个源？用户端将无法再取用（已导入的不受影响）。')) return;
+    loadSb().then(function (cli) { return cli.rpc('admin_repo_delete', { pwd: PWD, ids: [t.getAttribute('data-id')] }); })
+      .then(function (r) {
+        if (r.error) throw r.error;
+        toast('已删除'); repoRenderList($('#adm-body'));
+      }).catch(function (err) { toast('删除失败：' + err.message, false); });
+  } else if (act === 'repo-setpwd') {
+    var np = $('[data-f="repo-newpwd"]').value.trim();
+    if (!np || np.length < 4) { toast('新密码至少 4 位', false); return; }
+    loadSb().then(function (cli) { return cli.rpc('admin_repo_set_password', { pwd: PWD, new_pwd: np }); })
+      .then(function (r) {
+        if (r.error) throw r.error;
+        if (r.data) { toast('仓库密码已修改'); $('[data-f="repo-newpwd"]').value = ''; }
+        else toast('修改失败', false);
+      }).catch(function (err) { toast('修改失败：' + err.message, false); });
   } else if (act === 'toggle-invoice') {
     var ivCard = t.closest('[data-iv]');
     var ivId = ivCard.getAttribute('data-iv');

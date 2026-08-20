@@ -9,6 +9,26 @@ let installed = false;
 
 export async function getLogs() { return await kvGet('devlog:items', []); }
 
+/* v4.3：统一序列化 —— Error 对象 JSON.stringify 会变 {}，这里提取 name/message/stack；
+   普通对象用带循环引用的安全序列化，保证日志里能看到真实错误内容 */
+function serializeArg(a) {
+  try {
+    if (a instanceof Error) return `${a.name || 'Error'}: ${a.message || ''}${a.stack ? '\n' + a.stack : ''}`.trim();
+    if (typeof a === 'string') return a;
+    if (a === null || a === undefined) return String(a);
+    if (typeof a !== 'object') return String(a);
+    if (a && a.error instanceof Error) return serializeArg(a.error);
+    const seen = new WeakSet();
+    return JSON.stringify(a, (k, v) => {
+      if (v instanceof Error) return { name: v.name, message: v.message, stack: v.stack };
+      if (typeof v === 'object' && v !== null) { if (seen.has(v)) return '[Circular]'; seen.add(v); }
+      if (typeof v === 'function') return '[Function ' + (v.name || 'anonymous') + ']';
+      return v;
+    });
+  } catch (e) { try { return String(a); } catch (e2) { return '[Unserializable]'; } }
+}
+export { serializeArg as serializeLogArg };
+
 export async function addLog(level, tag, msg) {
   try {
     const logs = await getLogs();
@@ -32,9 +52,9 @@ export function installLogHooks() {
     addLog('error', 'promise', (r && (r.stack || r.message)) ? String(r.stack || r.message) : String(r));
   });
   const origErr = console.error.bind(console);
-  console.error = (...args) => { addLog('error', 'console', args.map((a) => { try { return typeof a === 'string' ? a : JSON.stringify(a); } catch (e) { return String(a); } }).join(' ')); origErr(...args); };
+  console.error = (...args) => { addLog('error', 'console', args.map(serializeArg).join(' ')); origErr(...args); };
   const origWarn = console.warn.bind(console);
-  console.warn = (...args) => { addLog('warn', 'console', args.map((a) => { try { return typeof a === 'string' ? a : JSON.stringify(a); } catch (e) { return String(a); } }).join(' ')); origWarn(...args); };
+  console.warn = (...args) => { addLog('warn', 'console', args.map(serializeArg).join(' ')); origWarn(...args); };
 }
 
 /* ================= 日志管理页面 ================= */

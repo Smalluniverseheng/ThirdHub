@@ -35,6 +35,7 @@ ThirdHub 网站版有三层备份，任何一层都可以把站点恢复到历�
 | v3.9 | `af6178c`（tag `v3.9`，含 v2.7–v3.9 全量累积） | `v3.9` | `88a00a34`（Venera 引擎对齐官方：搜索选项默认值、loadNext、异步 init、IIFE 隔离、同步 AES/MD5/SHA/HMAC、APP 全局、JSON Content-Type） | `e22e130` |
 | v4.0 | `c3e96f5`（tag `v4.0`） | `v4.0` | `5d9ec420`（Venera 图源图片修复：封面/正文反混淆 modifyImage、onThumbnailLoad/onImageLoad 头注入、评论/标签/推荐、源驱动发现页+查看更多、详情页安全富文本；部署修正 _worker.js 挂载） | `9181e53` |
 | v4.1 | `b8c0622`（tag `v4.1`） | `v4.1` | `a05ce050`（漫画线程数 1–32 可调+并发预取池、退出即取消；搜索流式逐条出结果、点书即中止优先打开；小说开始阅读自动下载本章、换章/退出作废；音乐模块支持落雪 LX 自定义源脚本，内置酷我/酷狗/咪咕/QQ/网易五平台搜索；音乐播放地址不缓存） | `a05ce050`（CF 部署快照 https://a05ce050.thirdhub.pages.dev） |
+| v4.2 | `cb8b9d6`（tag `v4.2`） | `v4.2` | `ddf08b0e`（wrangler 部署，含云端后端。视频播放器学习 TVBox 全量重写：自定义进度条+缓冲+拖动预览、倍速三方式、六种画面比例、片头片尾跳过、全手势、锁定、键盘快捷键；多端屏幕自适应 watch/narrow/phone/fold/tablet/desktop） | `ddf08b0e`（CF 部署快照 https://ddf08b0e.thirdhub.pages.dev） |
 
 ## 回退方法
 

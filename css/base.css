@@ -403,3 +403,14 @@ svg.ico.fill { fill: currentColor; stroke: none; }
 .ai-toggle.on { background: var(--primary); }
 .ai-toggle.on::after { transform: translateX(19px); }
 .ai-toggle.disabled { opacity: .4; }
+
+/* v4.3.1 修复：厂商品牌图标基础样式全局化（原仅在 ai-chat.css，开屏页等未加载该样式时图标错位/混乱） */
+.vendor-ico { display: inline-grid; place-items: center; border-radius: 50%; flex-shrink: 0; }
+.vendor-ico.brand { border-radius: 26%; overflow: hidden; position: relative; box-shadow: var(--shadow-card); }
+.vendor-ico.brand svg { width: 68%; height: 68%; }
+.vendor-ico.brand img { position: absolute !important; inset: 0; width: 100% !important; height: 100% !important; object-fit: contain; }
+.vendor-ico.brand .brand-letter { font-size: 12px; font-weight: 700; font-family: system-ui, sans-serif; }
+.vendor-ico.brand.raw { background: transparent !important; box-shadow: none !important; border: 0 !important; }
+.vendor-ico.brand.raw img { background: transparent !important; }
+.vendor-ico.brand.self-bg { background: transparent !important; box-shadow: none !important; border-radius: 0; overflow: visible; }
+.vendor-ico.brand.self-bg svg { width: 100%; height: 100%; }

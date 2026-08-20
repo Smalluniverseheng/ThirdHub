@@ -36,6 +36,11 @@ export async function renderMediaBoard(page, type) {
     </div>
     <div data-role="srclist" hidden></div>
     <div data-role="results"></div>
+    <div class="bm-subtabs" data-role="subtabs">
+      <button class="bm-subtab" data-st="discover">发现</button>
+      <button class="bm-subtab on" data-st="shelf">书架</button>
+    </div>
+    <div data-role="discover" hidden></div>
     <div data-role="home"></div>`;
 
   /* v3.2：默认书架视图，搜索收起在右上角放大镜后面 */
@@ -53,7 +58,7 @@ export async function renderMediaBoard(page, type) {
     srclist.hidden = true;
     resultsEl.innerHTML = '';
     resultsEl.classList.add('hidden');
-    homeEl.classList.remove('hidden');
+    homeEl.classList.toggle('hidden', curSub === 'discover'); /* v4.3：回到当前子页 */
     abortSearch();
     searchState = { kw: '', page: 1, results: [], loading: false, done: false, searching: false, ctrl: null, token: searchState.token || 0 };
   };
@@ -131,20 +136,25 @@ export async function renderMediaBoard(page, type) {
     }
     homeEl.innerHTML = html;
 
-    /* 连接器列表渲染到搜索视图里 */
+    /* 连接器列表渲染到搜索视图 + v4.3「发现」子页 */
+    const srcHtml = sources.length ? `<div class="discover-section">
+      <div class="section-head">${icon('plug')}<span>${NAME}连接器</span><span class="muted">${sources.length} 个</span></div>
+      <div class="source-cards">${sources.map((s) => `
+        <button class="source-card card card-press" data-src="${esc(s.id)}">
+          <span class="list-ico">${icon(typeIcon(s.type))}</span>
+          <span class="ellipsis" style="font-size:13px;font-weight:600">${esc(s.name)}</span>
+          <span class="muted">${isRead ? esc(typeName(s.type)) + ' · ' : ''}v${esc(s.version || '1.0')}</span>
+        </button>`).join('')}
+      </div>
+    </div>` : `<div class="muted" style="padding:10px 18px;font-size:12.5px">还没有${NAME}连接器，到「我的 → 连接器管理」导入后就能搜索了。</div>`;
     const srcBox = $('[data-role="srclist"]', page);
-    if (srcBox) {
-      srcBox.innerHTML = sources.length ? `<div class="discover-section">
-        <div class="section-head">${icon('plug')}<span>${NAME}连接器</span><span class="muted">${sources.length} 个</span></div>
-        <div class="source-cards">${sources.map((s) => `
-          <button class="source-card card card-press" data-src="${esc(s.id)}">
-            <span class="list-ico">${icon(typeIcon(s.type))}</span>
-            <span class="ellipsis" style="font-size:13px;font-weight:600">${esc(s.name)}</span>
-            <span class="muted">${isRead ? esc(typeName(s.type)) + ' · ' : ''}v${esc(s.version || '1.0')}</span>
-          </button>`).join('')}
-        </div>
-      </div>` : `<div class="muted" style="padding:10px 18px;font-size:12.5px">还没有${NAME}连接器，到「我的 → 连接器管理」导入后就能搜索了。</div>`;
-      $$('[data-src]', srcBox).forEach((b) => b.onclick = async () => {
+    const discoverBox = $('[data-role="discover"]', page);
+    if (srcBox) srcBox.innerHTML = srcHtml;
+    if (discoverBox) discoverBox.innerHTML = sources.length
+      ? `<div class="muted" style="padding:12px 18px 0;font-size:12.5px;line-height:1.7">点连接器进入对应内容源${isRead ? '（漫画源可选择进入它的发现页浏览推荐）' : ''}。</div>` + srcHtml
+      : `<div class="empty" style="margin-top:44px"><div class="empty-ico">${icon('compass')}</div><div class="empty-title">还没有连接器</div><div class="muted" style="max-width:280px;line-height:1.8">到「分类 → 源管理」或「官方仓库」导入连接器后，就能在这里浏览各源的内容。</div></div>`;
+    [srcBox, discoverBox].filter(Boolean).forEach((boxEl) => {
+      $$('[data-src]', boxEl).forEach((b) => b.onclick = async () => {
         /* v3.8：点连接器卡片 → 进入该源内部，搜索只走这一个源 */
         const s = sources.find((x) => x.id === b.dataset.src);
         if (!s) return;
@@ -171,13 +181,24 @@ export async function renderMediaBoard(page, type) {
         setSearchScope(s);
         $('[data-role="kw"]', page).focus();
       });
-    }
+    });
 
     $$('[data-shelf]', homeEl).forEach((b) => b.onclick = async () => {
       const it = shelf.find((x) => x.id === b.dataset.shelf);
       if (it) openDetail({ sourceId: it.sourceId, bookUrl: it.bookUrl, seed: it });
     });
   }
+  /* v4.3：发现 / 书架 子页签（默认书架） */
+  const subHome = homeEl, subDiscover = $('[data-role="discover"]', page);
+  let curSub = 'shelf';
+  $$('.bm-subtab', page).forEach((b) => b.onclick = () => {
+    curSub = b.dataset.st;
+    $$('.bm-subtab', page).forEach((x) => x.classList.toggle('on', x === b));
+    const showDiscover = curSub === 'discover';
+    subDiscover.hidden = !showDiscover;
+    subHome.classList.toggle('hidden', showDiscover);
+  });
+
   await renderHome();
   on('sources:changed', renderHome);
 

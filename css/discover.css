@@ -116,3 +116,14 @@
   font-size: 10.5px; color: var(--text-tertiary); background: var(--bg-input);
   padding: 2px 8px; border-radius: 999px;
 }
+
+/* v4.3：板块内「发现 / 书架」子页签 */
+.bm-subtabs {
+  display: flex; gap: 4px; padding: 4px 16px 8px;
+}
+.bm-subtab {
+  padding: 7px 20px; border-radius: 999px;
+  font-size: 14px; font-weight: 600; color: var(--text-tertiary);
+  transition: all .2s;
+}
+.bm-subtab.on { background: var(--bg-card); color: var(--text-primary); box-shadow: var(--shadow-card); }

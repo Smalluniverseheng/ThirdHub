@@ -54,7 +54,8 @@ export async function renderMediaBoard(page, type) {
     resultsEl.innerHTML = '';
     resultsEl.classList.add('hidden');
     homeEl.classList.remove('hidden');
-    searchState = { kw: '', page: 1, results: [], loading: false, done: false };
+    abortSearch();
+    searchState = { kw: '', page: 1, results: [], loading: false, done: false, searching: false, ctrl: null, token: searchState.token || 0 };
   };
 
   /* v1.7 设置分级：阅读设置归入小说模块，漫画设置归入漫画模块；v3.7 综合板块二选一 */

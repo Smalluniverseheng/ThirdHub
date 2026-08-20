@@ -1,0 +1,88 @@
+/* ===== ThirdHub adapt.css — 多端屏幕自适应（v4.2） =====
+   由 js/device-adapt.js 在 <html data-device="..."> 打标后生效：
+   watch 手表 · narrow 折叠外屏 · phone 直板机 · fold 折叠展开 · tablet 平板 · desktop 电脑 */
+
+/* ---------- 手表 / 超小屏（≤300px）：极简单列、大字块、少装饰 ---------- */
+html[data-device="watch"] .page-title { font-size: 17px; }
+html[data-device="watch"] .page-head { padding: 10px 10px 6px; gap: 8px; }
+html[data-device="watch"] .icon-btn { width: 34px; height: 34px; border-radius: 10px; }
+html[data-device="watch"] #tabbar { padding: 3px 2px calc(3px + env(safe-area-inset-bottom)); }
+html[data-device="watch"] .tab-ico { width: 34px; height: 22px; }
+html[data-device="watch"] .tab-label { display: none; }
+html[data-device="watch"] .shelf-grid,
+html[data-device="watch"] .result-grid,
+html[data-device="watch"] .cat-types { grid-template-columns: 1fr 1fr !important; }
+html[data-device="watch"] .list-item { padding: 8px; margin-bottom: 6px !important; }
+html[data-device="watch"] .btn { padding: 9px 14px; font-size: 13px; }
+html[data-device="watch"] .section-head { font-size: 13px; }
+html[data-device="watch"] .modal-box { width: calc(100vw - 16px) !important; }
+
+/* ---------- 折叠屏外屏 / 窄长屏（301–420px）：紧凑单列 ---------- */
+html[data-device="narrow"] .page-title { font-size: 20px; }
+html[data-device="narrow"] .shelf-grid,
+html[data-device="narrow"] .result-grid { grid-template-columns: repeat(2, 1fr) !important; }
+html[data-device="narrow"] .cat-types { grid-template-columns: repeat(3, 1fr) !important; }
+html[data-device="narrow"] .tab-label { font-size: 10px; }
+
+/* ---------- 直板手机（默认态，无需覆盖，仅留白规则） ---------- */
+
+/* ---------- 折叠屏展开（近方形触屏）：双栏充分利用宽度 ---------- */
+html[data-device="fold"] .shelf-grid { grid-template-columns: repeat(5, 1fr); }
+html[data-device="fold"] .result-grid { grid-template-columns: repeat(5, 1fr); }
+html[data-device="fold"] .cat-types { grid-template-columns: repeat(5, 120px); justify-content: center; }
+html[data-device="fold"] .page { padding-left: max(20px, calc((100% - 720px) / 2)); padding-right: max(20px, calc((100% - 720px) / 2)); }
+
+/* ---------- 平板 ---------- */
+html[data-device="tablet"] .shelf-grid { grid-template-columns: repeat(4, 1fr); }
+html[data-device="tablet"] .result-grid { grid-template-columns: repeat(4, 1fr); }
+
+/* ---------- 电脑端（≥1024px 键鼠）：左侧竖排导航 + 宽内容区 + 悬停态 ---------- */
+html[data-device="desktop"] body[data-navpos="bottom"] #app,
+html[data-device="desktop"] body[data-navpos="fold"] #app { flex-direction: row; }
+html[data-device="desktop"] body[data-navpos="bottom"] .safe-top,
+html[data-device="desktop"] body[data-navpos="fold"] .safe-top { display: none; }
+html[data-device="desktop"] body[data-navpos="bottom"] #tabbar,
+html[data-device="desktop"] body[data-navpos="fold"] #tabbar {
+  flex-direction: column; justify-content: flex-start; gap: 4px;
+  width: 76px; padding: 18px 8px;
+  border-top: 0; border-right: 1px solid var(--border);
+}
+html[data-device="desktop"] body[data-navpos="bottom"] .tab ,
+html[data-device="desktop"] body[data-navpos="fold"] .tab { flex: none; padding: 8px 0; border-radius: 12px; }
+html[data-device="desktop"] body[data-navpos="bottom"] .tab:hover,
+html[data-device="desktop"] body[data-navpos="fold"] .tab:hover { color: var(--primary); }
+html[data-device="desktop"] body[data-navpos="bottom"] #pages,
+html[data-device="desktop"] body[data-navpos="fold"] #pages { flex: 1; height: 100dvh; }
+html[data-device="desktop"] body[data-navpos="bottom"] .page ,
+html[data-device="desktop"] body[data-navpos="fold"] .page { padding: 0 max(40px, calc((100% - 1080px) / 2)) 48px; }
+html[data-device="desktop"] body[data-navpos="bottom"] .page-head,
+html[data-device="desktop"] body[data-navpos="fold"] .page-head { padding-top: 22px; }
+html[data-device="desktop"] body[data-navpos="bottom"] .shelf-grid,
+html[data-device="desktop"] body[data-navpos="fold"] .shelf-grid { grid-template-columns: repeat(6, 1fr); }
+html[data-device="desktop"] body[data-navpos="bottom"] .result-grid,
+html[data-device="desktop"] body[data-navpos="fold"] .result-grid { grid-template-columns: repeat(6, 1fr); }
+html[data-device="desktop"] body[data-navpos="bottom"] .icon-btn:hover,
+html[data-device="desktop"] body[data-navpos="fold"] .icon-btn:hover { background: var(--border); color: var(--text-primary); }
+html[data-device="desktop"] body[data-navpos="bottom"] .list-item:hover,
+html[data-device="desktop"] body[data-navpos="fold"] .list-item:hover { background: var(--bg-card-hover, rgba(128,128,128,.06)); }
+html[data-device="desktop"] body[data-navpos="bottom"] .btn:hover,
+html[data-device="desktop"] body[data-navpos="fold"] .btn:hover { filter: brightness(1.06); }
+/* 桌面端顶栏导航偏好失效时兜底：强制左侧竖排 */
+html[data-device="desktop"] body[data-navpos="top"] #app { flex-direction: column; }
+html[data-device="desktop"] body[data-navpos="top"] #tabbar {
+  flex-direction: row; width: auto; justify-content: center; gap: 8px;
+  border-right: 0; border-bottom: 1px solid var(--border);
+  padding: 6px 4px;
+}
+html[data-device="desktop"] body[data-navpos="top"] .tab { flex: 0 1 110px; }
+
+/* ---------- 阅读器 / 播放器在大屏的宽度收敛 ---------- */
+@media (min-width: 1024px) {
+  .nr-body { max-width: 860px; margin: 0 auto; width: 100%; }
+  .nr-catalog { max-width: 420px; }
+}
+
+/* ---------- 折叠屏铰链避让（支持 horizontal-viewport-segments 的设备） ---------- */
+@media (horizontal-viewport-segments: 2) {
+  html[data-device="fold"] .modal-box { max-width: calc(50vw - 48px); }
+}

@@ -68,3 +68,127 @@
 }
 .ap-item.on { color: var(--primary); font-weight: 700; background: rgba(59,91,253,.08); }
 .ap-item-idx { width: 26px; text-align: center; color: var(--text-tertiary); font-size: 12px; flex-shrink: 0; }
+
+/* ================= v4.2 TVBox 风格播放器增强 ================= */
+/* 顶栏信息：时钟 / 分辨率 */
+.vp-title-box { flex: 1; min-width: 0; }
+.vp-subtitle { font-size: 11px; color: rgba(255,255,255,.65); }
+.vp-meta { color: rgba(255,255,255,.75); font-size: 11px; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+
+/* 缓冲转圈（TVBox tv_pause_container 风格） */
+.vp-buffer {
+  position: absolute; inset: 0; z-index: 8;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  color: rgba(255,255,255,.85); font-size: 12px; pointer-events: none;
+}
+.vp-buffer .spinner { width: 34px; height: 34px; border-width: 3px; }
+
+/* 暂停时中央大播放键（OSC ll_pause 风格） */
+.vp-center-state {
+  position: absolute; inset: 0; z-index: 7;
+  display: grid; place-items: center; pointer-events: none;
+  color: rgba(255,255,255,.85);
+}
+.vp-center-state svg { width: 72px; height: 72px; filter: drop-shadow(0 4px 16px rgba(0,0,0,.5)); }
+
+/* 手势指示（OSC dialog_volume/dialog_bright 风格） */
+.vp-gesture {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  z-index: 12; display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 16px 22px; border-radius: 14px;
+  background: rgba(0,0,0,.62); color: #fff; pointer-events: none;
+}
+.vp-gesture svg { width: 28px; height: 28px; }
+.vp-gesture-text { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* 长按 3x 提示 */
+.vp-speed3 {
+  position: absolute; top: calc(14px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
+  z-index: 12; padding: 6px 16px; border-radius: 999px;
+  background: rgba(0,0,0,.62); color: #ffd54a; font-size: 12px; font-weight: 700;
+  pointer-events: none;
+}
+
+/* 跳过片尾悬浮钮 */
+.vp-skip-outro {
+  position: absolute; right: 18px; bottom: 108px; z-index: 12;
+  padding: 9px 18px; border-radius: 999px;
+  background: var(--primary); color: #fff; font-size: 13px; font-weight: 600;
+  box-shadow: 0 4px 14px rgba(59,91,253,.5);
+  animation: overlay-in .2s ease;
+}
+
+/* 自定义进度条（已播/缓冲/滑钮，TVBox video_progressbar） */
+.vp-bar-row { display: flex; align-items: center; gap: 10px; }
+.vp-bar {
+  position: relative; flex: 1; height: 22px; cursor: pointer; touch-action: none;
+  display: flex; align-items: center;
+}
+.vp-bar::before {
+  content: ''; position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%);
+  height: 3.5px; border-radius: 2px; background: rgba(255,255,255,.22);
+}
+.vp-bar-buffered, .vp-bar-played {
+  position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+  height: 3.5px; border-radius: 2px; width: 0;
+}
+.vp-bar-buffered { background: rgba(255,255,255,.38); }
+.vp-bar-played { background: var(--primary); }
+.vp-bar-knob {
+  position: absolute; top: 50%; transform: translate(-50%, -50%);
+  width: 13px; height: 13px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 5px rgba(0,0,0,.5);
+  opacity: 0; transition: opacity .15s;
+}
+.vp-bar:hover .vp-bar-knob, .vp-bar:active .vp-bar-knob { opacity: 1; }
+.vp-bar:hover::before, .vp-bar:hover .vp-bar-buffered, .vp-bar:hover .vp-bar-played { height: 5px; }
+
+/* 文字功能按钮（TVBox 底栏文字按钮风格） */
+.vp-tbtn {
+  min-width: 44px; height: 44px; padding: 0 8px; border-radius: 10px;
+  display: grid; place-items: center; color: #fff;
+  font-size: 13px; font-weight: 600; white-space: nowrap;
+  transition: transform .15s, background .2s;
+}
+.vp-tbtn:active { transform: scale(.88); background: rgba(255,255,255,.12); }
+
+/* 失败重试层 */
+.vp-error {
+  position: absolute; inset: 0; z-index: 14;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  background: rgba(0,0,0,.55); color: #fff; padding: 20px;
+}
+.vp-error-msg { font-size: 14px; text-align: center; line-height: 1.7; }
+.vp-error .btn { color: #fff; }
+.vp-error .btn:not(.btn-primary) { background: rgba(255,255,255,.15); }
+
+/* 锁屏浮动钮 */
+.vp-lock-fab {
+  position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+  z-index: 30; width: 46px; height: 46px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: rgba(255,255,255,.16); color: #fff;
+  backdrop-filter: blur(6px);
+}
+.vp-lock-fab svg { width: 22px; height: 22px; }
+
+/* 锁定时只保留锁钮 */
+.vp-overlay.ui-hidden .vp-top,
+.vp-overlay.ui-hidden .vp-controls { opacity: 0; pointer-events: none; }
+.vp-top, .vp-controls { transition: opacity .25s ease; }
+
+/* 桌面端：更宽选集面板 + 悬停效果 */
+@media (min-width: 1024px) and (hover: hover) {
+  .vp-episodes { width: 380px; }
+  .vp-ep-grid { grid-template-columns: repeat(4, 1fr); }
+  .vp-ep:hover { background: rgba(255,255,255,.16); }
+  .vp-btn:hover, .vp-tbtn:hover { background: rgba(255,255,255,.14); }
+}
+
+/* 手表/超小屏：隐藏文字按钮与元信息，只留核心控制 */
+@media (max-width: 380px) and (pointer: coarse) {
+  .vp-meta { display: none; }
+  .vp-tbtn[data-a="scale"], .vp-tbtn[data-a="skip"], .vp-tbtn[data-a="lines"] { display: none; }
+  .vp-btn-row { gap: 0; }
+  .vp-play { width: 48px; height: 48px; }
+}

@@ -1,5 +1,5 @@
 /* ThirdHub Service Worker */
-const VERSION = '4.1';
+const VERSION = '4.2';
 const CACHE_NAME = 'thirdhub-v' + VERSION;
 
 const CORE_ASSETS = [
@@ -9,6 +9,7 @@ const CORE_ASSETS = [
   './css/base.css?v=' + VERSION,
   './css/layout.css?v=' + VERSION,
   './css/theme.css?v=' + VERSION,
+  './css/adapt.css?v=' + VERSION,
   './js/app.js?v=' + VERSION,
   './js/store.js?v=' + VERSION,
   './js/ui.js?v=' + VERSION,

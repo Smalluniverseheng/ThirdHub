@@ -1,5 +1,5 @@
 /* ===== ThirdHub app.js — 应用入口 / 路由 / 初始化 ===== */
-export const APP_VERSION = '4.1';
+export const APP_VERSION = '4.2';
 window.__TH_CSS_V = APP_VERSION; /* v2.7：CSS 按需加载的版本戳 */
 
 import { $, $$, icon, toast, loadCss } from './ui.js';
@@ -9,6 +9,7 @@ import { initAuth } from './auth.js';
 import { initSync } from './engine/sync-service.js';
 import { checkUpdate } from './update-checker.js';
 import { BOARDS, PROFILE_BOARD, MAX_TABS, boardById } from './boards.js';
+import { initDeviceAdapt, getDevice } from './device-adapt.js';
 
 /* ---------- 主题 ---------- */
 async function initTheme() {
@@ -139,7 +140,7 @@ export async function rebuildTabs(preferTab = null) {
 }
 
 /* ---------- 多端导航位置（桌面 / 移动 / 手表 · 个性化设置） ---------- */
-const isWatchScreen = () => screen.width < 380 && 'ontouchstart' in window;
+const isWatchScreen = () => getDevice() === 'watch';
 const isMobileScreen = () => /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) && !isWatchScreen();
 export async function applyNavPos() {
   const key = isWatchScreen() ? 'navWatch' : isMobileScreen() ? 'navMobile' : 'navDesktop';
@@ -159,6 +160,8 @@ export async function applyNavPos() {
   }
 }
 window.addEventListener('th:navpos', applyNavPos);
+/* v4.2：屏幕形态变化（折叠展开/旋转/缩放窗口）后重判导航模式 */
+on('th:device', applyNavPos);
 
 /* ---------- Service Worker ---------- */
 function initSW() {
@@ -180,6 +183,7 @@ function initSW() {
 
 /* ---------- 启动 ---------- */
 async function boot() {
+  initDeviceAdapt(); /* v4.2：多端屏幕自适应，尽早打标 data-device */
   await openDB();
   await initTheme();
   initSW();

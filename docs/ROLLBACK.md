@@ -37,6 +37,7 @@ ThirdHub 网站版有三层备份，任何一层都可以把站点恢复到历�
 | v4.1 | `b8c0622`（tag `v4.1`） | `v4.1` | `a05ce050`（漫画线程数 1–32 可调+并发预取池、退出即取消；搜索流式逐条出结果、点书即中止优先打开；小说开始阅读自动下载本章、换章/退出作废；音乐模块支持落雪 LX 自定义源脚本，内置酷我/酷狗/咪咕/QQ/网易五平台搜索；音乐播放地址不缓存） | `a05ce050`（CF 部署快照 https://a05ce050.thirdhub.pages.dev） |
 | v4.2 | `cb8b9d6`（tag `v4.2`） | `v4.2` | `ddf08b0e`（wrangler 部署，含云端后端。视频播放器学习 TVBox 全量重写：自定义进度条+缓冲+拖动预览、倍速三方式、六种画面比例、片头片尾跳过、全手势、锁定、键盘快捷键；多端屏幕自适应 watch/narrow/phone/fold/tablet/desktop） | `ddf08b0e`（CF 部署快照 https://ddf08b0e.thirdhub.pages.dev） |
 | v4.3 | `98743cf`（tag `v4.3`） | `v4.3` | `1484f8e5`（wrangler 部署，含云端后端。官方仓库：Supabase th_official_repo 表 + RPC 密码门（初始123456）+ 管理后台批量上传自动分类；devlog Error 序列化修复；书架宫格番茄风格） | `1484f8e5`（CF 部署快照 https://1484f8e5.thirdhub.pages.dev） |
+| v4.5 | `a18dce8`（tag `v4.5`） | `v4.5` | `2a69f4cb`（wrangler 部署，含云端后端。阅读板块四子页签 发现/书架/历史/收藏；发现页按连接器细分；AI搜索框仅历史会话；漫画图片统一中转带Referer修复JM加载） | `2a69f4cb`（CF 部署快照 https://2a69f4cb.thirdhub.pages.dev） |
 | v4.4 | `8e09da2`（tag `v4.4`） | `v4.4` | `87f4b983`（wrangler 部署，含云端后端。品牌图标样式全局化修复开屏图标混乱；阅读板块新增 发现/书架 子页签，默认书架；GitHub 改用 PAT+ghfast 镜像直推） | `87f4b983`（CF 部署快照 https://87f4b983.thirdhub.pages.dev） |
 
 ## 回退方法

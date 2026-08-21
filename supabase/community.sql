@@ -611,3 +611,8 @@ begin
   on conflict (key) do update set value = excluded.value, updated_at = now();
   return jsonb_build_object('ok', true);
 end; $$;
+
+-- ============================================================
+-- v5.1 参数名对齐修复（PostgREST 按参数名匹配，admin.js 调用用 pwd/email/code 等）
+-- ============================================================
+

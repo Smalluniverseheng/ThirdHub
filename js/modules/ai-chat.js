@@ -120,6 +120,21 @@ let userPinned = false; // 流式期间用户上拉钉住
 const attachTexts = new Map(); // 文本附件内容（chip ref -> {name,text}）
 
 /* ================= 主渲染 ================= */
+
+/* v4.8：全局搜索唤起 —— 在已渲染的 AI 板块中打开指定历史会话 */
+export async function openChatById(id, page) {
+  if (!page) page = document.getElementById('page-ai');
+  const s = await db.get('chats', id);
+  if (!s || s.deletedAt) { toast('会话不存在或已删除', 'err'); return false; }
+  session = s;
+  if (s.model) currentModel = s.model;
+  if (s.mode) currentMode = s.mode;
+  updateTopbar(page);
+  page.__closeDrawer && page.__closeDrawer();
+  renderMessages(page);
+  return true;
+}
+
 export async function renderAIChat(page) {
   await refreshCustomProviders();
   currentModel = await kvGet('ai:last-model', { providerId: 'deepseek', model: 'deepseek-chat' });

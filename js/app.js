@@ -1,5 +1,5 @@
 /* ===== ThirdHub app.js — 应用入口 / 路由 / 初始化 ===== */
-export const APP_VERSION = '4.7';
+export const APP_VERSION = '4.8';
 window.__TH_CSS_V = APP_VERSION; /* v2.7：CSS 按需加载的版本戳 */
 
 import { $, $$, icon, toast, loadCss } from './ui.js';
@@ -38,7 +38,7 @@ let currentTab = null;
 async function loadEnabledTabs() {
   let tabs = await kvGet('ui:tabs', null);
   if (!Array.isArray(tabs)) tabs = null;
-  tabs = (tabs || ['ai']).filter((id) => BOARDS.some((b) => b.id === id));
+  tabs = (tabs || ['ai', 'search', 'read']).filter((id) => BOARDS.some((b) => b.id === id));
   /* v3.7：小说/漫画/有声合并为「阅读」板块——旧导航自动迁移（一次性） */
   const READ_GROUP = ['novel', 'comic', 'audio'];
   if (tabs.some((id) => READ_GROUP.includes(id))) {
@@ -55,12 +55,62 @@ async function loadEnabledTabs() {
 function buildChrome(tabIds) {
   activeBoards = [...tabIds.map(boardById), PROFILE_BOARD];
   $('#pages').innerHTML = activeBoards.map((b) => `<section class="page" id="page-${b.id}"></section>`).join('');
-  $('#tabbar').innerHTML = activeBoards.map((b) =>
-    `<button class="tab" data-tab="${b.id}"><span class="tab-ico" data-ico="${b.ico}"></span><span class="tab-label">${b.name}</span></button>`).join('');
+  /* v4.8：导航栏重构 —— 板块装入可滚动容器 + 跟随指示器；「我的」固定底部；左下角折叠钮 */
+  $('#tabbar').innerHTML = `
+    <div class="tab-scroll" data-role="tabscroll">
+      ${activeBoards.map((b) => `<button class="tab${b.id === 'profile' ? ' tab-pin' : ''}" data-tab="${b.id}"><span class="tab-ico" data-ico="${b.ico}"></span><span class="tab-label">${b.name}</span></button>`).join('')}
+      <div id="tab-indicator"></div>
+    </div>
+    <button id="tab-collapse" title="折叠 / 展开导航栏"></button>`;
   $$('#tabbar .tab-ico').forEach((s) => { s.innerHTML = icon(s.dataset.ico); });
   $$('#tabbar .tab').forEach((b) => b.addEventListener('click', () => switchTab(b.dataset.tab)));
+  $('#tab-collapse').onclick = toggleSidebarCollapsed;
+  initTabIndicator();
   rendered.clear();
   currentTab = null;
+}
+
+/* ---------- v4.8 导航栏交互：折叠持久化 + 移动端指示器跟随 ---------- */
+function initTabIndicator() {
+  const scroll = $('[data-role="tabscroll"]', $('#tabbar'));
+  if (!scroll) return;
+  const update = () => {
+    const active = scroll.querySelector('.tab.on');
+    if (!active) return;
+    const ind = $('#tab-indicator');
+    if (!ind) return;
+    ind.style.transform = `translateX(${active.offsetLeft - scroll.scrollLeft}px)`;
+    ind.style.width = `${active.offsetWidth}px`;
+  };
+  scroll.addEventListener('scroll', update, { passive: true });
+  window.addEventListener('resize', update);
+  requestAnimationFrame(update);
+}
+function toggleSidebarCollapsed() {
+  const collapsed = localStorage.getItem('sidebar:collapsed') === '1';
+  const next = !collapsed;
+  localStorage.setItem('sidebar:collapsed', next ? '1' : '0');
+  applySidebarState();
+}
+function applySidebarState() {
+  const collapsed = localStorage.getItem('sidebar:collapsed') === '1';
+  const tb = $('#tabbar');
+  if (!tb) return;
+  tb.classList.toggle('collapsed', collapsed);
+  const btn = $('#tab-collapse');
+  if (btn) btn.innerHTML = collapsed ? icon('arrowR') : icon('back');
+}
+export function refreshTabIndicator() {
+  requestAnimationFrame(() => {
+    const scroll = $('[data-role="tabscroll"]', $('#tabbar'));
+    if (!scroll) return;
+    const active = scroll.querySelector('.tab.on');
+    const ind = $('#tab-indicator');
+    if (active && ind) {
+      ind.style.transform = `translateX(${active.offsetLeft - scroll.scrollLeft}px)`;
+      ind.style.width = `${active.offsetWidth}px`;
+    }
+  });
 }
 
 /* v2.0：慢网/弱网加固 —— 板块模块加载带超时与自动重试，避免请求挂起导致永久转圈 */
@@ -124,6 +174,7 @@ export async function switchTab(tab, force = false) {
   requestAnimationFrame(() => page.classList.add('active'));
   currentTab = tab;
   emit('tab:' + tab);
+  refreshTabIndicator();
   try { history.replaceState(null, '', '#' + tab); } catch (e) {}
 }
 
@@ -147,6 +198,8 @@ export async function applyNavPos() {
   const key = isWatchScreen() ? 'navWatch' : isMobileScreen() ? 'navMobile' : 'navDesktop';
   const pos = await getSetting(key);
   document.body.dataset.navpos = pos || 'bottom';
+  applySidebarState(); /* v4.8：恢复侧栏折叠持久化状态 */
+  refreshTabIndicator();
   // 桌面端「可折叠」：底部悬浮折叠钮
   $('#tab-fold-handle')?.remove();
   if (pos === 'fold' && !isMobileScreen() && !isWatchScreen()) {
@@ -163,6 +216,14 @@ export async function applyNavPos() {
 window.addEventListener('th:navpos', applyNavPos);
 /* v4.2：屏幕形态变化（折叠展开/旋转/缩放窗口）后重判导航模式 */
 on('th:device', applyNavPos);
+
+/* v4.8：全局搜索快捷键 Ctrl/Cmd + K */
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+    e.preventDefault();
+    switchTab('search').then(() => emit('search:focus')).catch(() => {});
+  }
+});
 
 /* ---------- Service Worker ---------- */
 function initSW() {

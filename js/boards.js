@@ -6,6 +6,8 @@ export const BOARDS = [
   
 { id: 'ai',         name: 'AI',    ico: 'robot',     cat: 'ai',   desc: '多厂商 AI 对话 · 流式输出 · MCP · 联网搜索', css: ['css/ai-chat.css'], load: () => import('./modules/ai-chat.js'),          fn: 'renderAIChat' },
   
+{ id: 'search',     name: '搜索',  ico: 'search',    cat: 'tool', desc: '全局搜索：书架、AI 会话、资源源（Ctrl+K 快速唤起）', css: ['css/search.css'], load: () => import('./modules/search.js'),       fn: 'renderSearch' },
+  
 { id: 'read',       css: ['css/discover.css', 'css/bookshelf.css', 'css/category.css'], name: '阅读',   ico: 'books',     cat: 'fun',  desc: '小说 / 漫画 / 有声：同一书架，搜索可按类型多选', load: () => import('./modules/board-media.js'),       fn: 'renderMediaBoard', arg: 'read' },
   
 { id: 'novel',      css: ['css/discover.css', 'css/bookshelf.css', 'css/category.css'], name: '小说',   ico: 'book',      cat: 'fun',  desc: '网络小说搜索、阅读与书架',                 load: () => import('./modules/board-media.js'),       fn: 'renderMediaBoard', arg: 'novel' },
@@ -21,6 +23,8 @@ export const BOARDS = [
 { id: 'game',       name: '游戏',   ico: 'game',      cat: 'fun',  desc: 'H5 小游戏收藏与即点即玩',                  load: () => import('./modules/board-game.js'),        fn: 'renderGameBoard' },
   
 { id: 'storage',    name: '存储',   ico: 'cloud',     cat: 'tool', desc: '云存储容量、数据备份与恢复',               load: () => import('./modules/board-storage.js'),     fn: 'renderStorageBoard' },
+  
+{ id: 'community',  name: '社区',   ico: 'users',     cat: 'tool', desc: '书友圈：发帖、求助、实时评论',                 css: ['css/community.css'], load: () => import('./modules/community.js'), fn: 'renderCommunity' },
   
 { id: 'cloudphone', name: '云手机', ico: 'phone',     cat: 'tool', desc: '云端安卓实例（即将上线）',                 load: () => import('./modules/board-cloudphone.js'),  fn: 'renderCloudPhoneBoard' },
 ];

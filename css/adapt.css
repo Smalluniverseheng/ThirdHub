@@ -36,21 +36,62 @@ html[data-device="fold"] .page { padding-left: max(20px, calc((100% - 720px) / 2
 html[data-device="tablet"] .shelf-grid { grid-template-columns: repeat(4, 1fr); }
 html[data-device="tablet"] .result-grid { grid-template-columns: repeat(4, 1fr); }
 
-/* ---------- 电脑端（≥1024px 键鼠）：左侧竖排导航 + 宽内容区 + 悬停态 ---------- */
+/* ---------- 电脑端（≥1024px 键鼠）：左侧垂直导航栏（64px 图标条，hover 展开 200px）+ 宽内容区 ---------- */
 html[data-device="desktop"] body[data-navpos="bottom"] #app,
 html[data-device="desktop"] body[data-navpos="fold"] #app { flex-direction: row; }
 html[data-device="desktop"] body[data-navpos="bottom"] .safe-top,
 html[data-device="desktop"] body[data-navpos="fold"] .safe-top { display: none; }
+/* v4.8：左侧导航栏默认 64px 只显示图标；hover 展开 200px 显示文字；点击左下角折叠钮可永久折叠 */
 html[data-device="desktop"] body[data-navpos="bottom"] #tabbar,
 html[data-device="desktop"] body[data-navpos="fold"] #tabbar {
-  flex-direction: column; justify-content: flex-start; gap: 4px;
-  width: 76px; padding: 18px 8px;
+  flex-direction: column; justify-content: flex-start; gap: 2px;
+  width: 64px; padding: 14px 6px 8px;
   border-top: 0; border-right: 1px solid var(--border);
+  overflow: visible;
+  transition: width .25s ease;
 }
-html[data-device="desktop"] body[data-navpos="bottom"] .tab ,
-html[data-device="desktop"] body[data-navpos="fold"] .tab { flex: none; padding: 8px 0; border-radius: 12px; }
+html[data-device="desktop"] body[data-navpos="bottom"] #tabbar .tab-scroll,
+html[data-device="desktop"] body[data-navpos="fold"] #tabbar .tab-scroll {
+  flex: 1; min-height: 0; width: 100%;
+  flex-direction: column; justify-content: flex-start;
+  overflow-y: auto; overflow-x: visible;
+  scroll-snap-type: none;
+}
+html[data-device="desktop"] body[data-navpos="bottom"] #tabbar:not(.collapsed):hover,
+html[data-device="desktop"] body[data-navpos="fold"] #tabbar:not(.collapsed):hover,
+html[data-device="desktop"] body[data-navpos="bottom"] #tabbar.expanded,
+html[data-device="desktop"] body[data-navpos="fold"] #tabbar.expanded { width: 200px; }
+html[data-device="desktop"] body[data-navpos="bottom"] .tab,
+html[data-device="desktop"] body[data-navpos="fold"] .tab {
+  flex: none; flex-direction: row; justify-content: flex-start; gap: 12px;
+  width: 100%; min-width: 0; padding: 10px 16px; border-radius: 10px;
+  border-left: 4px solid transparent;
+  white-space: nowrap;
+}
+html[data-device="desktop"] body[data-navpos="bottom"] .tab .tab-label,
+html[data-device="desktop"] body[data-navpos="fold"] .tab .tab-label { display: none; font-size: 13px; }
+html[data-device="desktop"] body[data-navpos="bottom"] #tabbar:not(.collapsed):hover .tab .tab-label,
+html[data-device="desktop"] body[data-navpos="fold"] #tabbar:not(.collapsed):hover .tab .tab-label,
+html[data-device="desktop"] body[data-navpos="bottom"] #tabbar.expanded .tab .tab-label,
+html[data-device="desktop"] body[data-navpos="fold"] #tabbar.expanded .tab .tab-label { display: inline; }
 html[data-device="desktop"] body[data-navpos="bottom"] .tab:hover,
-html[data-device="desktop"] body[data-navpos="fold"] .tab:hover { color: var(--primary); }
+html[data-device="desktop"] body[data-navpos="fold"] .tab:hover { color: var(--primary); background: rgba(128,128,128,.06); }
+/* 当前激活板块：左侧 4px 彩色竖线 + 底色 */
+html[data-device="desktop"] body[data-navpos="bottom"] .tab.on,
+html[data-device="desktop"] body[data-navpos="fold"] .tab.on {
+  color: var(--primary);
+  border-left-color: var(--accent, #e8452c);
+  background: rgba(59,91,253,.08);
+}
+html[data-device="desktop"] body[data-navpos="bottom"] .tab.on .tab-ico,
+html[data-device="desktop"] body[data-navpos="fold"] .tab.on .tab-ico { background: transparent; }
+/* 桌面端指示器隐藏（左侧栏用竖线），「我的」固定底部不参与滚动 */
+html[data-device="desktop"] body[data-navpos="bottom"] #tab-indicator,
+html[data-device="desktop"] body[data-navpos="fold"] #tab-indicator { display: none; }
+html[data-device="desktop"] body[data-navpos="bottom"] .tab-pin,
+html[data-device="desktop"] body[data-navpos="fold"] .tab-pin { position: sticky; bottom: 0; background: var(--tabbar-bg); }
+html[data-device="desktop"] body[data-navpos="bottom"] #tab-collapse,
+html[data-device="desktop"] body[data-navpos="fold"] #tab-collapse { display: flex; }
 html[data-device="desktop"] body[data-navpos="bottom"] #pages,
 html[data-device="desktop"] body[data-navpos="fold"] #pages { flex: 1; height: 100dvh; }
 html[data-device="desktop"] body[data-navpos="bottom"] .page ,
@@ -75,6 +116,7 @@ html[data-device="desktop"] body[data-navpos="top"] #tabbar {
   padding: 6px 4px;
 }
 html[data-device="desktop"] body[data-navpos="top"] .tab { flex: 0 1 110px; }
+html[data-device="desktop"] body[data-navpos="top"] #tab-collapse { display: none; }
 
 /* ---------- 阅读器 / 播放器在大屏的宽度收敛 ---------- */
 @media (min-width: 1024px) {

@@ -10,8 +10,9 @@ import { currentUser } from '../auth.js';
 const TRACKED_KV = [
   'ai:prefs', 'ai:ctx', 'ai:chat-def', 'ai:asr',
   'ai:tts-mode', 'ai:tts-voice', 'ai:tts-model', 'ai:tts-autoread', 'ai:tts-rate', 'ai:tts-pitch',
+  'tts:rate', 'tts:autoNext',   /* v4.7 阅读器听书语速 / 自动下一章 */
   'ai:mem-on', 'ai:pin-open', 'recycle:days', 'storage:policy', 'splash:on',
-  'proxy:mod', 'proxy:backend', 'nav:tabs',
+  'proxy:mod', 'proxy:backend', 'ui:tabs',  /* v4.8 修复：导航板块配置（原误写 nav:tabs） */
 ];
 
 async function collectSettings() {

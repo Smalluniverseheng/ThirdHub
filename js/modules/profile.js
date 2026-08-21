@@ -595,7 +595,7 @@ export async function renderProfile(page) {
           </div>`;
         body.innerHTML = `
           <div class="muted" style="margin-bottom:14px;line-height:1.7">为不同设备分别设置导航栏样式，即时生效并云端同步。</div>
-          ${group('桌面端导航栏', 'navDesktop', navD, [['bottom', '底部导航'], ['top', '顶部导航'], ['fold', '可折叠导航']])}
+          ${group('桌面端导航栏', 'navDesktop', navD, [['bottom', '左侧导航（默认）'], ['top', '顶部导航'], ['fold', '可折叠导航']])}
           ${group('移动端导航栏', 'navMobile', navM, [['bottom', '底部导航'], ['top', '顶部导航']])}
           ${group('手表端导航栏', 'navWatch', navW, [['bottom', '底部导航'], ['top', '顶部导航']])}
           ${group('AI 抽屉方向', 'aiDrawerSide', drawerSide, [['left', '左侧'], ['right', '右侧']])}
@@ -667,7 +667,7 @@ export async function renderProfile(page) {
   /* ================= 导航栏板块管理（1-5 个，「我的」固定） ================= */
   async function showTabManager() {
     const { BOARDS, MAX_TABS, MIN_TABS } = await import('../boards.js');
-    const cur = await kvGet('ui:tabs', ['ai']);
+    const cur = await kvGet('ui:tabs', ['ai', 'search', 'read']);
     const picked = new Set(Array.isArray(cur) && cur.length ? cur : ['ai']);
 
     const body = el('<div></div>');

@@ -1,7 +1,7 @@
-/* ===== ThirdHub js/admin.js — 管理后台（v1.9） =====
+/* ===== ThirdHub js/admin.js — 管理后台（v1.2） =====
    入口 admin.html · 账号 admin · 密码由管理员在云端配置（不在此展示）
    仪表盘 / 用户管理（等级分组·关注星标）/ 用户数据（书源·API 密钥）/ 订单管理 / 发票管理 / 会员定价 /
-   模型定价（花费估算价目·支持文件导入）/ 排行榜（综合榜云端维护）/ 意见反馈 / 收款设置
+   模型定价（花费估算价目·支持文件导入）/ 排行榜（综合榜云端维护）/ 系统设置（限时免费模型·历史版本）/ 意见反馈 / 收款设置
    所有写操作经 Supabase RPC 口令校验，无需暴露 service key */
 (function () {
 'use strict';
@@ -755,7 +755,7 @@ function renderSystem(body) {
   body.innerHTML =
     '<div class="adm-card" style="margin-bottom:12px;cursor:pointer" data-a="fm">' +
       '<b>限时免费模型</b>' +
-      '<p class="adm-muted" style="margin-top:6px">添加 / 管理限时免费模型：每个等级可用的 Token 配额与模型范围（需云端表与 RPC，见 supabase/community.sql 附录）</p>' +
+      '<p class="adm-muted" style="margin-top:6px">添加 / 管理限时免费模型：全体或仅指定用户 · 限时 / 限量 / 限时+限量（需云端表与 RPC，见 supabase/community.sql 附录）</p>' +
     '</div>' +
     '<div class="adm-card" style="margin-bottom:12px;cursor:pointer" data-a="hist">' +
       '<b>历史版本</b>' +
@@ -766,6 +766,7 @@ function renderSystem(body) {
 }
 
 var ADMIN_CHANGELOG = [
+  { v: '1.2', d: '2026-08-21', items: ['限时免费模型升级：仅指定用户可用（按 uid 分配，不只全员开放）、限时窗口（时间窗内无限用）、限量额度（次数 / Token，用完即止）、限时+限量组合；支持编辑与用量展示'] },
   { v: '1.1', d: '2026-08-21', items: ['系统设置上线：限时免费模型管理（多模型 / 分等级 Token 配额 / 可用模型范围）、历史版本页'] },
   { v: '1.0', d: '2026-08-21', items: ['管理后台初始化：仪表盘 / 用户管理 / 订单 / 会员定价 / 模型定价 / 排行榜 / 官方仓库'] },
 ];
@@ -780,28 +781,129 @@ function renderAdminChangelog(body) {
     '</div><button class="adm-btn" style="margin-top:12px" data-a="back">返回</button>';
   $('[data-a="back"]', body).onclick = function () { renderSystem(body); };
 }
-
-var FM_LEVELS = ['guest', 'user', 'advanced', 'vip', 'agent'];
-var FM_LEVEL_NAMES = { guest: '游客', user: '普通', advanced: '进阶', vip: 'VIP', agent: '代理' };
+var FM_EDIT_ID = null;
+function toLocalInput(iso) {
+  if (!iso) return '';
+  var d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  var p = function (n) { return String(n).padStart(2, '0'); };
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+function parseUids(s) {
+  return String(s || '').split(/[\n,，;；\s]+/).map(function (x) { return x.trim(); }).filter(Boolean);
+}
+function fmTimeBadge(x) {
+  var now = Date.now();
+  if (x.start_time && now < new Date(x.start_time).getTime()) return '<span style="font-size:11px;padding:1px 8px;border-radius:10px;color:#fbbf24;border:1px solid #fbbf2455;background:#fbbf2422">未开始</span>';
+  if (x.end_time && now > new Date(x.end_time).getTime()) return '<span style="font-size:11px;padding:1px 8px;border-radius:10px;color:#9aa3b2;border:1px solid #9aa3b255;background:#9aa3b222">已过期</span>';
+  return '<span style="font-size:11px;padding:1px 8px;border-radius:10px;color:#34d399;border:1px solid #34d39955;background:#34d39922">生效中</span>';
+}
 function renderFreeModels(body) {
   body.innerHTML =
-    '<div class="adm-card" style="margin-bottom:12px"><b>添加限时免费模型</b>' +
+    '<div class="adm-card" style="margin-bottom:12px">' +
+      '<b data-v="ftitle">添加限时免费模型</b>' +
       '<div class="row" style="margin-top:10px;gap:8px">' +
-        '<input class="adm-input" data-f="provider" placeholder="厂商 id（如 deepseek / zhipu / openai）" style="flex:1;margin-bottom:0">' +
-        '<input class="adm-input" data-f="model" placeholder="模型名（如 deepseek-v4-flash）" style="flex:1.2;margin-bottom:0">' +
-        '<input class="adm-input" data-f="quota" type="number" placeholder="月 Token 配额" style="flex:.8;margin-bottom:0">' +
-        '<button class="adm-btn adm-btn-primary" data-a="add">添加</button>' +
+        '<input class="adm-input" data-f="provider" placeholder="厂商 id（deepseek / zhipu / openai）" style="flex:1;margin-bottom:0">' +
+        '<input class="adm-input" data-f="model" placeholder="模型名（deepseek-v4-flash）" style="flex:1.2;margin-bottom:0">' +
+        '<input class="adm-input" data-f="name" placeholder="显示名（可选）" style="flex:.8;margin-bottom:0">' +
       '</div>' +
-      '<p class="adm-muted" style="margin-top:8px">每个等级可额外限制（留空 = 不限制）：</p>' +
+      '<p class="adm-muted" style="margin:10px 0 6px">适用范围</p>' +
+      '<div class="row" style="gap:16px">' +
+        '<label style="font-size:13px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="radio" name="fm-scope" value="all" checked> 全体用户</label>' +
+        '<label style="font-size:13px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="radio" name="fm-scope" value="users"> 仅指定用户</label>' +
+      '</div>' +
+      '<textarea data-f="uids" placeholder="指定用户的 uid，每行一个（勾选“仅指定用户”后填写）" style="display:none;width:100%;margin-top:8px;padding:8px;min-height:70px;box-sizing:border-box;border:1px solid #2a2f3a;border-radius:6px;background:#0d0f14;color:var(--text);font-size:13px"></textarea>' +
+      '<p class="adm-muted" style="margin:10px 0 6px">限时窗口（留空 = 不限时；窗口内无限使用）</p>' +
+      '<div class="row" style="gap:8px">' +
+        '<input class="adm-input" type="datetime-local" data-f="start" style="flex:1;margin-bottom:0">' +
+        '<input class="adm-input" type="datetime-local" data-f="end" style="flex:1;margin-bottom:0">' +
+      '</div>' +
+      '<p class="adm-muted" style="margin:10px 0 6px">限量（留空 = 不限量；用完即止）</p>' +
+      '<div class="row" style="gap:8px">' +
+        '<input class="adm-input" data-f="maxq" type="number" min="1" placeholder="最大可用量" style="flex:1;margin-bottom:0">' +
+        '<select class="adm-input" data-f="unit" style="flex:.7;margin-bottom:0">' +
+          '<option value="count">次数</option>' +
+          '<option value="tokens">Token</option>' +
+        '</select>' +
+      '</div>' +
+      '<p class="adm-muted" style="margin:10px 0 6px">等级日配额（可选，留空 = 该等级不限）</p>' +
       '<div class="row" style="gap:6px;flex-wrap:wrap">' +
-        FM_LEVELS.map(function (lv) {
-          return '<label style="font-size:12px;display:flex;align-items:center;gap:4px">' + FM_LEVEL_NAMES[lv] + ' <input type="number" data-lv="' + lv + '" placeholder="不限" style="width:72px;padding:4px 6px;border:1px solid #2a2f3a;border-radius:6px;background:#0d0f14;color:var(--text)"> <span class="adm-muted">token/日</span></label>';
+        LEVELS.map(function (lv) {
+          return '<label style="font-size:12px;display:flex;align-items:center;gap:4px">' + lv.name + ' <input type="number" data-lv="' + lv.id + '" placeholder="不限" style="width:70px;padding:4px 6px;border:1px solid #2a2f3a;border-radius:6px;background:#0d0f14;color:var(--text)"> <span class="adm-muted">token/日</span></label>';
         }).join('') +
+      '</div>' +
+      '<input class="adm-input" data-f="note" placeholder="备注（可选）" style="margin-top:10px">' +
+      '<div class="row" style="margin-top:12px;gap:8px">' +
+        '<button class="adm-btn adm-btn-primary" data-a="save">添加</button>' +
+        '<button class="adm-btn" data-a="cancel" style="display:none">取消编辑</button>' +
       '</div>' +
     '</div>' +
     '<div class="adm-card"><b>当前免费模型</b><div data-v="list" style="margin-top:10px"><p class="adm-muted">加载中…</p></div></div>' +
     '<button class="adm-btn" style="margin-top:12px" data-a="back">返回</button>';
   var listBox = $('[data-v="list"]', body);
+  var uidsBox = $('[data-f="uids"]', body);
+  function scopeVal() { var r = $('input[name="fm-scope"]:checked', body); return r ? r.value : 'all'; }
+  function toggleUids() { uidsBox.style.display = scopeVal() === 'users' ? 'block' : 'none'; }
+  $$('input[name="fm-scope"]', body).forEach(function (r) { r.onchange = toggleUids; });
+  function readForm() {
+    var st = $('[data-f="start"]', body).value, en = $('[data-f="end"]', body).value;
+    var limits = {};
+    LEVELS.forEach(function (lv) {
+      var v = parseInt(($('[data-lv="' + lv.id + '"]', body) || {}).value, 10) || 0;
+      if (v > 0) limits[lv.id] = v;
+    });
+    return {
+      provider: $('[data-f="provider"]', body).value.trim(),
+      model: $('[data-f="model"]', body).value.trim(),
+      name: $('[data-f="name"]', body).value.trim() || null,
+      scope: scopeVal(),
+      user_ids: scopeVal() === 'users' ? parseUids(uidsBox.value) : [],
+      start_time: st ? new Date(st).toISOString() : null,
+      end_time: en ? new Date(en).toISOString() : null,
+      max_quota: parseInt($('[data-f="maxq"]', body).value, 10) || 0,
+      quota_unit: $('[data-f="unit"]', body).value,
+      level_limits: limits,
+      note: $('[data-f="note"]', body).value.trim() || null
+    };
+  }
+  function fillForm(x) {
+    FM_EDIT_ID = x.id;
+    $('[data-v="ftitle"]', body).textContent = '编辑模型：' + x.provider + '/' + x.model;
+    $('[data-f="provider"]', body).value = x.provider || '';
+    $('[data-f="model"]', body).value = x.model || '';
+    $('[data-f="name"]', body).value = x.name || '';
+    var sc = x.scope === 'users' ? 'users' : 'all';
+    var r0 = $('input[name="fm-scope"][value="' + sc + '"]', body); if (r0) r0.checked = true;
+    uidsBox.value = (x.user_ids || []).join('\n');
+    toggleUids();
+    $('[data-f="start"]', body).value = toLocalInput(x.start_time);
+    $('[data-f="end"]', body).value = toLocalInput(x.end_time);
+    $('[data-f="maxq"]', body).value = x.max_quota > 0 ? String(x.max_quota) : '';
+    $('[data-f="unit"]', body).value = x.quota_unit === 'tokens' ? 'tokens' : 'count';
+    var ll = {};
+    try { ll = x.level_limits && typeof x.level_limits === 'object' ? x.level_limits : JSON.parse(x.level_limits || '{}'); } catch (e) { ll = {}; }
+    LEVELS.forEach(function (lv) {
+      var inp = $('[data-lv="' + lv.id + '"]', body);
+      if (inp) inp.value = ll[lv.id] ? String(ll[lv.id]) : '';
+    });
+    $('[data-f="note"]', body).value = x.note || '';
+    $('[data-a="save"]', body).textContent = '保存修改';
+    $('[data-a="cancel"]', body).style.display = '';
+    body.scrollIntoView();
+  }
+  function resetForm() {
+    FM_EDIT_ID = null;
+    $('[data-v="ftitle"]', body).textContent = '添加限时免费模型';
+    ['provider', 'model', 'name', 'start', 'end', 'maxq', 'note'].forEach(function (k) {
+      var inp = $('[data-f="' + k + '"]', body); if (inp) inp.value = '';
+    });
+    uidsBox.value = '';
+    var r0 = $('input[name="fm-scope"][value="all"]', body); if (r0) r0.checked = true;
+    toggleUids();
+    LEVELS.forEach(function (lv) { var inp = $('[data-lv="' + lv.id + '"]', body); if (inp) inp.value = ''; });
+    $('[data-a="save"]', body).textContent = '添加';
+    $('[data-a="cancel"]', body).style.display = 'none';
+  }
   function load() {
     loadSb().then(function (cli) { return cli.rpc('admin_free_models_list', { pwd: PWD }); })
       .then(function (r) {
@@ -809,39 +911,71 @@ function renderFreeModels(body) {
         var rows = r.data || [];
         if (!rows.length) { listBox.innerHTML = '<p class="adm-muted">还没有免费模型</p>'; return; }
         listBox.innerHTML = rows.map(function (x) {
+          var scopeTxt = x.scope === 'users' ? '指定 ' + (x.user_ids || []).length + ' 人' : '全体';
+          var timeTxt = '';
+          if (x.start_time || x.end_time) {
+            timeTxt = fmTimeBadge(x) + ' ' + (x.start_time ? fmtDate(x.start_time) : '…') + ' ~ ' + (x.end_time ? fmtDate(x.end_time) : '…');
+          }
+          var quotaTxt = x.max_quota > 0
+            ? '限量 ' + esc(x.used_quota || 0) + ' / ' + esc(x.max_quota) + (x.quota_unit === 'tokens' ? ' token' : ' 次')
+            : ((x.used_quota || 0) > 0 ? '已用 ' + esc(x.used_quota) : '不限量');
           return '<div class="adm-card" style="margin-bottom:6px;padding:8px 12px;display:flex;align-items:center;gap:10px">' +
-            '<div style="flex:1;min-width:0"><b>' + esc(x.provider) + '/' + esc(x.model) + '</b> <span class="adm-muted">' + (x.quota ? '月配额 ' + esc(x.quota) : '不限量') + ' · ' + (x.level_limits ? esc(x.level_limits) : '等级不限') + '</span></div>' +
-            '<button class="adm-btn adm-btn-sm" data-del="' + esc(x.id) + '">删除</button></div>';
+            '<div style="flex:1;min-width:0">' +
+              '<b>' + esc(x.provider) + '/' + esc(x.model) + '</b>' + (x.name ? ' <span class="adm-muted">' + esc(x.name) + '</span>' : '') +
+              '<div class="adm-muted" style="margin-top:3px;font-size:12px">' +
+                '<span style="color:#60a5fa">' + scopeTxt + '</span>' +
+                (timeTxt ? ' · ' + timeTxt : '') +
+                ' · ' + quotaTxt +
+              '</div>' +
+            '</div>' +
+            '<button class="adm-btn adm-btn-sm" data-edit="' + esc(x.id) + '">编辑</button>' +
+            '<button class="adm-btn adm-btn-sm" data-del="' + esc(x.id) + '">删除</button>' +
+          '</div>';
         }).join('');
         $$('[data-del]', listBox).forEach(function (b) {
           b.onclick = function () {
             loadSb().then(function (cli) { return cli.rpc('admin_free_models_remove', { pwd: PWD, id: b.getAttribute('data-del') }); })
-              .then(function (rr) { if (rr.error) throw rr.error; toast('已删除'); load(); }).catch(function (e) { toast('删除失败：' + e.message, false); });
+              .then(function (rr) {
+                if (rr.error) throw rr.error;
+                toast('已删除');
+                if (FM_EDIT_ID === parseInt(b.getAttribute('data-del'), 10)) resetForm();
+                load();
+              }).catch(function (e) { toast('删除失败：' + e.message, false); });
+          };
+        });
+        $$('[data-edit]', listBox).forEach(function (b) {
+          b.onclick = function () {
+            var x = rows.find(function (row) { return String(row.id) === b.getAttribute('data-edit'); });
+            if (x) fillForm(x);
           };
         });
       }).catch(function (e) { listBox.innerHTML = '<p class="adm-muted">加载失败：' + esc(e.message) + '</p>'; });
   }
-  $('[data-a="add"]', body).onclick = function () {
-    var provider = $('[data-f="provider"]', body).value.trim();
-    var model = $('[data-f="model"]', body).value.trim();
-    if (!provider || !model) { toast('请填写厂商与模型名', false); return; }
-    var quota = parseInt($('[data-f="quota"]', body).value) || 0;
-    var limits = {};
-    FM_LEVELS.forEach(function (lv) {
-      var v = parseInt(($('[data-lv="' + lv + '"]', body) || {}).value) || 0;
-      if (v > 0) limits[lv] = v;
-    });
-    var btn = $('[data-a="add"]', body); btn.disabled = true; btn.textContent = '添加中…';
-    loadSb().then(function (cli) { return cli.rpc('admin_free_models_add', { pwd: PWD, provider: provider, model: model, quota: quota, level_limits: limits }); })
-      .then(function (r) {
-        if (r.error) throw r.error;
-        toast('已添加免费模型', true);
-        $('[data-f="provider"]', body).value = ''; $('[data-f="model"]', body).value = ''; $('[data-f="quota"]', body).value = '';
-        load();
-      }).catch(function (e) { toast('添加失败：' + e.message, false); })
-      .finally(function () { btn.disabled = false; btn.textContent = '添加'; });
+  $('[data-a="save"]', body).onclick = function () {
+    var f = readForm();
+    if (!f.provider || !f.model) { toast('请填写厂商与模型名', false); return; }
+    if (f.scope === 'users' && !f.user_ids.length) { toast('请填写至少一个指定用户 uid', false); return; }
+    var btn = $('[data-a="save"]', body);
+    btn.disabled = true;
+    var arg = { pwd: PWD, provider: f.provider, model: f.model, name: f.name, scope: f.scope, user_ids: f.user_ids, start_time: f.start_time, end_time: f.end_time, max_quota: f.max_quota, quota_unit: f.quota_unit, level_limits: f.level_limits, note: f.note };
+    loadSb().then(function (cli) {
+      if (FM_EDIT_ID) {
+        var arg2 = { id: FM_EDIT_ID };
+        for (var k in arg) arg2[k] = arg[k];
+        return cli.rpc('admin_free_models_update', arg2);
+      }
+      return cli.rpc('admin_free_models_add', arg);
+    }).then(function (r) {
+      if (r.error) throw r.error;
+      toast(FM_EDIT_ID ? '已保存修改' : '已添加免费模型', true);
+      resetForm();
+      load();
+    }).catch(function (e) { toast('保存失败：' + e.message, false); })
+      .finally(function () { btn.disabled = false; btn.textContent = FM_EDIT_ID ? '保存修改' : '添加'; });
   };
+  $('[data-a="cancel"]', body).onclick = resetForm;
   $('[data-a="back"]', body).onclick = function () { renderSystem(body); };
+  toggleUids();
   load();
 }
 

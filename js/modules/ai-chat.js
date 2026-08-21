@@ -138,19 +138,89 @@ function ensureLocalSubscription() {
       if (!s || s.done) return;
       if (msg.type === 'stream_token') {
         s.acc += msg.payload.token || '';
-        s.bubble.innerHTML = renderMarkdown(s.acc);
+        s.boxes.text.innerHTML = renderMarkdown(s.acc);
         scrollBottom(document.getElementById('page-ai'));
+      } else if (msg.type === 'reasoning_delta') {
+        s.reasoning = (s.reasoning || '') + (msg.payload.text || '');
+        renderLocalReasoning(s);
+        scrollBottom(document.getElementById('page-ai'));
+      } else if (msg.type === 'tool_call') {
+        const id = String(msg.payload.id || '');
+        const idx = s.tools.findIndex((t) => t.id === id);
+        const entry = { id: id, name: msg.payload.name || '工具', arguments: msg.payload.arguments || '', ok: true, result: '' };
+        if (idx >= 0) s.tools[idx] = Object.assign({}, s.tools[idx], entry);
+        else s.tools.push(entry);
+        renderLocalTools(s);
+        scrollBottom(document.getElementById('page-ai'));
+      } else if (msg.type === 'tool_result') {
+        const t = s.tools.find((x) => x.id === String(msg.payload.id || '')) || s.tools[s.tools.length - 1];
+        if (t) { t.ok = msg.payload.ok !== false; t.result = msg.payload.result || ''; }
+        renderLocalTools(s);
+        scrollBottom(document.getElementById('page-ai'));
+      } else if (msg.type === 'turn_stats' || msg.type === 'stream_done') {
+        if (msg.payload.stats) { s.stats = msg.payload.stats; renderLocalStats(s); }
       } else if (msg.type === 'stream_done') {
         s.done = true;
-        s.bubble.innerHTML = renderMarkdown(msg.payload.full_text || s.acc);
+        s.boxes.text.innerHTML = renderMarkdown(msg.payload.full_text || s.acc);
         s.acc = msg.payload.full_text || s.acc;
         toast('本地算力回复完成', 'ok');
       } else if (msg.type === 'error') {
         s.done = true;
-        s.bubble.innerHTML = '<div class="muted">⚠️ ' + esc((msg.payload && msg.payload.message) || '请求失败') + '</div>';
+        s.boxes.text.innerHTML = '<div class="muted">⚠️ ' + esc((msg.payload && msg.payload.message) || '请求失败') + '</div>';
       }
     });
   });
+}
+
+/* v6.2：本地算力气泡四分区渲染（思考 / 工具 / 正文 / 统计），
+   分区更新避免重建 DOM —— 用户展开的详情保持展开不重置 */
+function localBubbleShell() {
+  const wrap = document.createElement('div');
+  wrap.className = 'ai-tr-wrap';
+  wrap.innerHTML = '<div class="ai-tr-reasoning-box"></div><div class="ai-tr-tools-box"></div><div class="ai-tr-text"></div><div class="ai-tr-stats"></div>';
+  const q = (c) => wrap.querySelector(c);
+  return { wrap, rbox: q('.ai-tr-reasoning-box'), tbox: q('.ai-tr-tools-box'), text: q('.ai-tr-text'), sbox: q('.ai-tr-stats') };
+}
+function localFmtMs(ms) {
+  if (ms == null || isNaN(ms)) return '-';
+  const s = ms / 1000;
+  if (s < 60) return s.toFixed(1) + 's';
+  const m = Math.floor(s / 60), r = Math.round(s % 60);
+  return m + 'm' + (r < 10 ? '0' : '') + r + 's';
+}
+function localFmtTok(n) {
+  if (n == null || isNaN(n)) return '-';
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'k';
+  return String(n);
+}
+function renderLocalReasoning(s) {
+  const t = (s.reasoning || '').trim();
+  s.boxes.rbox.innerHTML = t
+    ? '<details class="ai-tr-details" open><summary>💭 思考过程 ' + t.length + ' 字</summary><div class="ai-tr-reasoning">' + esc(t) + '</div></details>'
+    : '';
+}
+function renderLocalTools(s) {
+  if (!s.tools || !s.tools.length) { s.boxes.tbox.innerHTML = ''; return; }
+  s.boxes.tbox.innerHTML = s.tools.map((t) => {
+    const fail = t.ok === false;
+    return '<details class="ai-tr-details ai-tr-tool"' + (fail ? ' open' : '') + '><summary>🔧 ' + esc(t.name || '工具') + (fail ? ' <span style="color:#ef4444">失败</span>' : '') + '</summary>' +
+      '<div class="ai-tr-args">' + esc(t.arguments || '') + '</div>' +
+      (t.result ? '<div class="ai-tr-result">' + esc(t.result) + '</div>' : '') +
+      '</details>';
+  }).join('');
+}
+function renderLocalStats(s) {
+  const st = s.stats;
+  if (!st) { s.boxes.sbox.innerHTML = ''; return; }
+  const parts = [];
+  parts.push((st.turns || 0) + ' 轮 · ' + (st.steps || 0) + ' 步');
+  parts.push('LLM ' + localFmtMs(st.llmMs) + (st.toolMs ? ' · 工具 ' + localFmtMs(st.toolMs) : ''));
+  if (st.firstTokenMs != null) parts.push('首token ' + localFmtMs(st.firstTokenMs));
+  if (st.rate) parts.push(st.rate + ' tok/s');
+  if (st.cacheRate != null) parts.push('缓存 ' + st.cacheRate + '%');
+  if (st.inTokens || st.outTokens) parts.push('输入 ' + localFmtTok(st.inTokens) + ' · 输出 ' + localFmtTok(st.outTokens));
+  s.boxes.sbox.innerHTML = '<div class="ai-tr-stats">' + parts.join(' | ') + '</div>';
 }
 
 /* v4.8：全局搜索唤起 —— 在已渲染的 AI 板块中打开指定历史会话 */
@@ -1500,10 +1570,13 @@ function scrollBottom(page, force = false) {
 }
 
 /* ================= 发送 ================= */
-/* v5.3：运行模式面板（加号 → 运行模式）：直连 / 本地算力设备 + 灰色问号说明 */
+/* v6.2：运行模式面板（加号 → 运行模式）：直连 / 后端设备（DSH）/ 设备模型选择 / 同步 DeepSeek Key */
 async function openRunModePanel(page) {
-  const { listDevices, getStatus, connectDevice } = await import('./compute.js');
+  const { listDevices, getStatus, connectDevice, sendToDevice, onAgentMessage } = await import('./compute.js');
+  const { getApiKey } = await import('../ai/ai-api.js');
   const devs = listDevices();
+  const devModels = {};   // deviceId -> models[]
+  const devActive = {};   // deviceId -> activeModel
   openOverlay({
     title: '运行模式',
     build: (body) => {
@@ -1512,7 +1585,7 @@ async function openRunModePanel(page) {
           <b>直连模式</b>：请求由当前设备（浏览器 / 前端）直接发送到模型厂商接口，响应快、无需额外部署；适合日常对话。
           <span class="ai-help-dot" data-a="help" title="说明">?</span>
         </div>
-        <div class="section-title" style="margin-top:16px">后端设备（可运行 Python / 插件 / MCP）</div>
+        <div class="section-title" style="margin-top:16px">后端设备（DeepSeek Harness 算力：可运行 Python / 插件 / MCP）</div>
         <div class="col gap8" data-role="devs">
           ${devs.length ? devs.map((d) => `
             <button class="list-item" style="width:100%" data-dev="${d.id}">
@@ -1522,16 +1595,54 @@ async function openRunModePanel(page) {
                 <div class="muted" style="font-size:11.5px">${d.host}:${d.port}</div>
               </div>
               <span class="list-arrow">${localMode.on && localMode.deviceId === d.id ? '✓' : ''}</span>
-            </button>`).join('') : '<div class="muted" style="font-size:12.5px">还没有后端设备，去「后端」板块添加。</div>'}
+            </button>`).join('') : '<div class="muted" style="font-size:12.5px">还没有后端设备，去「后端」板块添加（本机 127.0.0.1:9600 + 访问密码）。</div>'}
         </div>
-        <button class="btn" style="width:100%;margin-top:12px" data-a="direct">${!localMode.on ? '✓ ' : ''}切换到直连模式</button>
+        <div data-role="dmodels" style="margin-top:6px"></div>
+        <button class="btn" style="width:100%;margin-top:10px" data-a="sync">把当前 DeepSeek Key 同步到设备（自动添加模型）</button>
+        <button class="btn" style="width:100%;margin-top:8px" data-a="direct">${!localMode.on ? '✓ ' : ''}切换到直连模式</button>
       </div>`;
+      const dmodelsBox = $('[data-role="dmodels"]', body);
+      function renderDeviceModels(id) {
+        const ms = devModels[id] || [];
+        const act = devActive[id] || (localMode.on && localMode.deviceId === id ? localMode.modelId : '');
+        if (!ms.length) {
+          dmodelsBox.innerHTML = '<div class="muted" style="font-size:12px">该设备还没有模型：连接后点「同步当前 DeepSeek Key 到设备」自动添加</div>';
+          return;
+        }
+        dmodelsBox.innerHTML = '<div class="section-title" style="margin:10px 0 6px">设备模型（点击切换 · 流式输出）</div>' +
+          ms.map((m) => `
+            <button class="list-item" style="width:100%" data-m="${esc(m.id)}">
+              <div class="grow" style="text-align:left;min-width:0">
+                <b style="font-size:13px">${esc(m.name || m.id)}</b>
+                <span class="muted" style="font-size:11px"> · ${esc(m.modelId || '')}${m.apiKeyMasked ? ' · key ' + esc(m.apiKeyMasked) : ' · 未配置Key'}</span>
+              </div>
+              <span class="list-arrow">${act === m.id ? '✓' : ''}</span>
+            </button>`).join('');
+        $$('[data-m]', dmodelsBox).forEach((b) => b.onclick = () => {
+          localMode = { on: true, deviceId: id, modelId: b.dataset.m };
+          devActive[id] = b.dataset.m;
+          toast('已切换到设备模型：' + (b.dataset.m || ''), 'ok');
+          renderDeviceModels(id);
+        });
+      }
+      function refreshModels(id) {
+        sendToDevice(id, { type: 'config', id: 'lst-' + Date.now(), payload: { action: 'list' } });
+      }
+      /* 一次性订阅 config_result：同步 / 列表刷新 */
+      const off = onAgentMessage((msg, did) => {
+        if (msg.type !== 'config_result' || !msg.payload) return;
+        if (Array.isArray(msg.payload.models)) {
+          devModels[did] = msg.payload.models;
+          devActive[did] = msg.payload.activeModel || devActive[did] || '';
+          renderDeviceModels(did);
+        }
+      });
       $('[data-a="help"]', body).onclick = () => modal({
         title: '直连 vs 后端说明',
         body: el(`<div style="font-size:13.5px;line-height:1.9;color:var(--text-secondary)">
           <p><b>直连模式</b>：请求直接从当前页面发往各厂商接口。优点：零部署、Key 只在本机；限制：<b>网页环境无法运行 Python 代码、无法连接本地 MCP 服务、无法读写本地文件</b>。</p>
           <p style="margin-top:10px"><b>后端算力模式</b>：消息发送到你电脑 / 手机上的 ThirdHub-Agent（基于 DeepSeek Harness），由后端调用模型并执行工具——<b>支持 Python / Shell 代码执行、本地文件读写、MCP 插件、多步骤任务</b>，能力与桌面 Agent 一致。</p>
-          <p style="margin-top:10px" class="muted">常用模型厂商的接口均可通过直连使用；需要完整工具链时建议切换到后端算力设备。</p>
+          <p style="margin-top:10px"><b>同步 Key</b>：把当前直连的 DeepSeek API Key 加密同步到设备（AES-256-GCM 存设备本地），设备模型列表自动出现；选中的模型在本地模式下生效。</p>
         </div>`),
         footer: '<button class="btn grow" data-a="ok">知道了</button>',
       }).then((m) => { $('[data-a="ok"]', m.mask).onclick = m.close; });
@@ -1543,15 +1654,31 @@ async function openRunModePanel(page) {
           const r = await connectDevice(dev, { silent: true });
           if (!r.ok) return toast(r.error, 'err');
         }
-        localMode = { on: true, deviceId: id };
+        localMode = { on: true, deviceId: id, modelId: devActive[id] || '' };
         toast('已切换到本地模式：' + (dev.name || dev.host), 'ok');
-        document.querySelectorAll('.overlay').forEach((x) => x.remove());
+        refreshModels(id);
+        renderDeviceModels(id);
       });
+      $('[data-a="sync"]', body).onclick = async () => {
+        const pid = currentModel && currentModel.providerId;
+        if (pid !== 'deepseek') { toast('当前直连模型不是 DeepSeek；DSH 内核当前支持 DeepSeek 官方接口', 'err'); return; }
+        const key = await getApiKey(pid);
+        if (!key) { toast('请先在 AI 设置中配置 DeepSeek API Key', 'err'); return; }
+        const did = localMode.on ? localMode.deviceId : null;
+        if (!did) { toast('请先选择一台后端设备', 'err'); return; }
+        const mid = (currentModel && currentModel.model) || 'deepseek-chat';
+        sendToDevice(did, { type: 'config', id: 'sync-' + Date.now(), payload: { action: 'save', id: 'deepseek:' + mid, name: 'DeepSeek · ' + mid, baseUrl: '', modelId: mid, apiKey: key, active: true } });
+        toast('已同步 DeepSeek Key 到设备，内核重启中…', 'ok');
+        setTimeout(() => refreshModels(did), 3500);
+      };
       $('[data-a="direct"]', body).onclick = () => {
-        localMode = { on: false, deviceId: null };
+        localMode = { on: false, deviceId: null, modelId: '' };
         toast('已切换到直连模式', 'ok');
+        off();
         document.querySelectorAll('.overlay').forEach((x) => x.remove());
       };
+      /* 面板关闭时解除订阅 */
+      setTimeout(() => { const ov = document.querySelector('.overlay'); if (ov && ov.__close) { const oc = ov.__close; ov.__close = () => { off(); oc(); }; } }, 0);
     },
   });
 }
@@ -1575,10 +1702,14 @@ async function sendLocalMessage(page, text) {
   userPinned = false; const jb = $('#ai-jump-btn', page); if (jb) jb.hidden = true;
 
   const am = appendMessage(page, { role: 'assistant', content: '' }, -2);
-  localStreams.set(msgId, { bubble: am.bubble, acc: '', done: false });
+  const shell = localBubbleShell();
+  am.bubble.appendChild(shell.wrap);
+  localStreams.set(msgId, { bubble: am.bubble, boxes: shell, acc: '', reasoning: '', tools: [], stats: null, done: false });
   scrollBottom(page);
 
-  const ok = sendToDevice(localMode.deviceId, { type: 'chat', id: msgId, payload: { text: clean } });
+  /* v6.2：本地算力消息带设备模型 + 会话 ID（保持 DSH 上下文，切换模型即生效） */
+  const sessId = session && session.id ? String(session.id) : ('web-' + Date.now().toString(36));
+  const ok = sendToDevice(localMode.deviceId, { type: 'chat', id: msgId, session_id: sessId, payload: { text: clean, modelId: localMode.modelId || '' } });
   if (!ok) {
     sending = false;
     localStreams.delete(msgId);

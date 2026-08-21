@@ -1,6 +1,15 @@
 /* ===== ThirdHub changelog.js — 版本更新日志（发版时在末尾追加） ===== */
 export const CHANGELOG = [
   {
+    version: '6.2',
+    date: '2026-08-22',
+    items: [
+      'AI 本地算力模式接入 DeepSeek Harness：一键同步 DeepSeek Key 到设备（AES 加密），设备模型自动添加与切换',
+      '轨迹可视化：思考过程 / 工具调用（参数与结果）流式同步到前端，可展开折叠；轮次统计条（轮数·步数·LLM/工具耗时·首token·tok/s·缓存命中·输入输出token）',
+      'ThirdHub-Agent v0.3：消息级模型切换、推理/工具/统计事件流、会话上下文保持',
+    ],
+  },
+  {
     version: '6.1',
     date: '2026-08-22',
     items: [
@@ -587,7 +596,7 @@ export const CHANGELOG = [
     ],
   },
   {
-    version: '6.0',
+    version: '6.1',
     date: '2026-08-21',
     items: [
       '个人资料页（我的 → 用户卡）桌面端改为浮窗式界面：背后页面保留并整体模糊，中间浮起居中圆角面板，圆形返回键贴在面板左上角、点背景空白处也可关闭；移动端保持全屏不变',

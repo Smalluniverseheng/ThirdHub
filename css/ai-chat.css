@@ -1231,3 +1231,20 @@ button.rank-row-item:active { background: var(--bg-input); }
 /* v5.3：图标加载完成隐藏兜底字母（杜绝图层重叠） */
 .vendor-ico.brand.loaded .brand-letter { display: none; }
 .vendor-ico.brand.loaded { background: transparent !important; box-shadow: none; }
+
+
+/* ===== v6.2 本地算力轨迹展示（思考/工具/统计） ===== */
+.ai-tr-wrap { display: flex; flex-direction: column; gap: 6px; width: 100%; min-width: 0; }
+.ai-tr-details {
+  border: 1px solid rgba(120,140,255,.18); border-radius: 8px; background: rgba(120,140,255,.05);
+  font-size: 12.5px; line-height: 1.6;
+}
+.ai-tr-details summary { cursor: pointer; padding: 6px 10px; color: var(--text-secondary); user-select: none; list-style: none; display: flex; align-items: center; gap: 6px; }
+.ai-tr-details summary::-webkit-details-marker { display: none; }
+.ai-tr-details summary::after { content: '▸'; margin-left: auto; transition: transform .15s; opacity: .6; }
+.ai-tr-details[open] summary::after { transform: rotate(90deg); }
+.ai-tr-reasoning { padding: 0 10px 8px; color: var(--muted); white-space: pre-wrap; word-break: break-word; font-size: 12px; }
+.ai-tr-tool { border-color: rgba(250,204,21,.16); background: rgba(250,204,21,.04); }
+.ai-tr-args { padding: 0 10px 6px; color: var(--text-secondary); white-space: pre-wrap; word-break: break-all; font-size: 11.5px; font-family: ui-monospace, monospace; max-height: 160px; overflow: auto; }
+.ai-tr-result { padding: 0 10px 8px; color: var(--muted); white-space: pre-wrap; word-break: break-word; font-size: 11.5px; max-height: 200px; overflow: auto; border-top: 1px dashed rgba(120,140,255,.12); margin-top: 2px; }
+.ai-tr-stats { font-size: 11px; color: var(--muted); opacity: .85; padding: 4px 2px 0; }

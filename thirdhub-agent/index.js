@@ -137,7 +137,7 @@ function broadcast(msg, except) {
   for (const [ws] of clients) if (ws !== except && ws.readyState === 1) ws.send(JSON.stringify(msg));
 }
 
-function handleChat(ws, msg) {
+async function handleChat(ws, msg) {
   const payload = msg.payload || {};
   const text = String(payload.text || '').trim();
   if (!text) return send(ws, { type: 'error', id: msg.id, payload: { code: 'EMPTY', message: '消息为空' } });
@@ -146,33 +146,141 @@ function handleChat(ws, msg) {
   const session = sessions.get(sessionId);
   session.messages.push({ role: 'user', content: text });
 
+  /* v0.3：前端可在消息里带 modelId 切换设备模型（切换后重启内核） */
+  const modelId = String(payload.modelId || '').trim();
+  if (modelId && modelId !== (config.activeModel || '')) {
+    config.activeModel = modelId;
+    saveConfig(config);
+    await closeHarness();
+  }
+
   if (!harness) spawnHarness().catch((e) => send(ws, { type: 'error', id: msg.id, payload: { code: 'NO_ENGINE', message: 'DSH 内核未就绪：' + e.message } }));
+
+  /* ---- 轨迹聚合（v0.3）：思考/工具/统计流式转发 ---- */
+  const st = {
+    turn: 0, step: 0,
+    llmMs: 0, toolMs: 0,
+    firstTokenMs: null, stepStartMs: null, toolStartMs: null,
+    inTokens: 0, outTokens: 0, cacheHit: 0, cacheMiss: 0,
+    curCall: null, toolCount: 0,
+  };
+  function fmtMs(ms) {
+    if (ms == null) return '-';
+    const s = ms / 1000;
+    if (s < 60) return s.toFixed(1) + 's';
+    const m = Math.floor(s / 60), r = Math.round(s % 60);
+    return m + 'm' + (r < 10 ? '0' : '') + r + 's';
+  }
+  function fmtTok(n) {
+    if (n == null) return '-';
+    if (n >= 1e9) return (n / 1e9).toFixed(1) + 'B';
+    if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+    if (n >= 1e3) return (n / 1e3).toFixed(1) + 'k';
+    return String(n);
+  }
+  function buildStats() {
+    const hit = st.cacheHit || 0, miss = st.cacheMiss || 0;
+    const cacheRate = (hit + miss) > 0 ? Math.round(hit * 1000 / (hit + miss)) / 10 : null;
+    const totalIn = st.inTokens || 0, totalOut = st.outTokens || 0;
+    return {
+      turns: st.turn, steps: st.step,
+      llmMs: st.llmMs, toolMs: st.toolMs,
+      firstTokenMs: st.firstTokenMs,
+      rate: st.llmMs > 0 && totalOut > 0 ? Math.round(totalOut * 1000 / st.llmMs) : null,
+      cacheRate: cacheRate,
+      inTokens: totalIn, outTokens: totalOut,
+      fmtMs, fmtTok,
+    };
+  }
+
   const run = harness.run(text, {
     sessionId: sessionId === 'default' ? undefined : sessionId,
     onNotification: (n) => {
       const p = n.params || {};
-      if (n.method === 'session.event') {
-        const ev = p.event;
-        if (!ev) return;
-        if (ev.type === 'assistant/chunk') {
-          const c = ev.data && ev.data.chunk;
-          if (c && c.type === 'text-delta' && c.text) {
-            send(ws, { type: 'stream_token', id: msg.id, session_id: sessionId, payload: { token: c.text } });
+      if (n.method !== 'session.event') return;
+      const ev = p.event;
+      if (!ev) return;
+      const t0 = ev.time || Date.now();
+      if (ev.type === 'turn/start') {
+        st.turn = (ev.data && ev.data.turn) || st.turn + 1;
+        st.toolCount = 0; st.curCall = null;
+        send(ws, { type: 'turn_info', id: msg.id, session_id: sessionId, payload: { turn: st.turn } });
+        return;
+      }
+      if (ev.type === 'step/start') {
+        st.step = (ev.data && ev.data.step) || st.step + 1;
+        st.stepStartMs = t0; st.firstTokenMs = null;
+        send(ws, { type: 'step_info', id: msg.id, session_id: sessionId, payload: { turn: st.turn, step: st.step } });
+        return;
+      }
+      if (ev.type === 'assistant/chunk') {
+        const c = ev.data && ev.data.chunk;
+        if (!c) return;
+        if (st.firstTokenMs == null && (c.type === 'text-delta' || c.type === 'reasoning-delta')) {
+          st.firstTokenMs = t0 - st.stepStartMs;
+        }
+        if (c.type === 'text-delta' && c.text) {
+          send(ws, { type: 'stream_token', id: msg.id, session_id: sessionId, payload: { token: c.text } });
+        } else if (c.type === 'reasoning-delta' && c.text) {
+          send(ws, { type: 'reasoning_delta', id: msg.id, session_id: sessionId, payload: { text: c.text } });
+        } else if (c.type === 'tool-call-delta') {
+          if (!st.curCall || st.curCall.id !== c.id) {
+            st.curCall = { id: c.id, name: c.name || '', args: '' };
           }
+          if (c.name) st.curCall.name = c.name;
+          st.curCall.args += c.argumentsDelta || '';
+          send(ws, { type: 'tool_call', id: msg.id, session_id: sessionId, payload: { id: st.curCall.id, name: st.curCall.name || '工具', arguments: st.curCall.args } });
+        } else if (c.type === 'usage' && c.usage) {
+          const u = c.usage;
+          st.inTokens = (u.input_tokens ?? u.prompt_tokens ?? 0);
+          st.outTokens = (u.output_tokens ?? u.completion_tokens ?? 0);
+          st.cacheHit = (u.prompt_cache_hit_tokens ?? 0);
+          st.cacheMiss = (u.prompt_cache_miss_tokens ?? 0);
         }
-        if (ev.type === 'tool/start' || ev.type === 'tool/call') {
-          send(ws, { type: 'tool_call', id: msg.id, session_id: sessionId, payload: { tool_name: (ev.data && (ev.data.tool || ev.data.name)) || '工具', arguments: ev.data } });
+        return;
+      }
+      if (ev.type === 'tool/start' || ev.type === 'tool/call') {
+        st.toolStartMs = t0;
+        st.toolCount++;
+        const name = (ev.data && (ev.data.tool || ev.data.name)) || (st.curCall && st.curCall.name) || '工具';
+        send(ws, { type: 'tool_call', id: msg.id, session_id: sessionId, payload: { id: (ev.data && ev.data.id) || '', name: name, arguments: (ev.data && ev.data.arguments) || (st.curCall ? st.curCall.args : '') } });
+        return;
+      }
+      if (ev.type === 'tool/result') {
+        if (st.toolStartMs != null) st.toolMs += t0 - st.toolStartMs;
+        st.toolStartMs = null;
+        const d = ev.data || {};
+        const msg2 = d.message || {};
+        let resultTxt = '';
+        try { resultTxt = typeof msg2.content === 'string' ? msg2.content : JSON.stringify(msg2.content); } catch (e) { resultTxt = String(msg2.content || ''); }
+        if (resultTxt && resultTxt.length > 2000) resultTxt = resultTxt.slice(0, 2000) + '…';
+        send(ws, { type: 'tool_result', id: msg.id, session_id: sessionId, payload: { name: d.tool || (msg2.tool_name) || '工具', ok: !ev.data.error, result: resultTxt, error: ev.data.error || null } });
+        return;
+      }
+      if (ev.type === 'assistant/message') {
+        const d = ev.data || {};
+        if (st.stepStartMs != null) st.llmMs += t0 - st.stepStartMs;
+        st.stepStartMs = null;
+        if (d.usage) {
+          const u = d.usage;
+          st.inTokens = (u.input_tokens ?? u.prompt_tokens ?? st.inTokens);
+          st.outTokens = (u.output_tokens ?? u.completion_tokens ?? st.outTokens);
+          st.cacheHit = (u.prompt_cache_hit_tokens ?? st.cacheHit);
+          st.cacheMiss = (u.prompt_cache_miss_tokens ?? st.cacheMiss);
         }
-        if (ev.type === 'tool/result') {
-          send(ws, { type: 'tool_result', id: msg.id, session_id: sessionId, payload: { tool_name: (ev.data && ev.data.tool) || '工具', result: ev.data } });
-        }
+        send(ws, { type: 'assistant_done', id: msg.id, session_id: sessionId, payload: { turn: d.turn, step: d.step, interrupted: !!d.interrupted } });
+        return;
+      }
+      if (ev.type === 'turn/end') {
+        send(ws, { type: 'turn_stats', id: msg.id, session_id: sessionId, payload: { stats: buildStats(), reason: (ev.data && ev.data.reason) || '' } });
+        return;
       }
     },
   });
   run.then((result) => {
     session.messages.push({ role: 'assistant', content: result.finalResponse || '' });
     appendFileSync(SESSIONS_FILE, JSON.stringify({ session_id: sessionId, ts: Date.now(), messages: session.messages }) + String.fromCharCode(10));
-    send(ws, { type: 'stream_done', id: msg.id, session_id: sessionId, payload: { full_text: result.finalResponse || '', session_id: result.sessionId } });
+    send(ws, { type: 'stream_done', id: msg.id, session_id: sessionId, payload: { full_text: result.finalResponse || '', session_id: result.sessionId, stats: buildStats() } });
   }).catch((e) => {
     send(ws, { type: 'error', id: msg.id, session_id: sessionId, payload: { code: 'RUN_FAIL', message: e.message } });
   });
@@ -185,7 +293,7 @@ function handleConfig(ws, msg) {
       id: m.id, name: m.name, baseUrl: m.baseUrl || '', modelId: m.modelId || '',
       apiKeyMasked: m.apiKeyBox ? (m.apiKeyMask || '') : '',
     }));
-    return send(ws, { type: 'config_result', id: msg.id, payload: { models, activeModel: config.activeModel || null, agentVersion: '0.1.0' } });
+    return send(ws, { type: 'config_result', id: msg.id, payload: { models, activeModel: config.activeModel || null, agentVersion: '0.3.0' } });
   }
   if (action === 'save') {
     const m = msg.payload || {};

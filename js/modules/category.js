@@ -690,7 +690,7 @@ export async function renderCategory(page) {
         <button class="icon-btn" data-del="${i}" title="删除仓库">${icon('trash')}</button>
       </div>`).join('') + `
       <button class="btn grow" data-a="addrepo" style="margin-bottom:4px">＋ 添加源仓库地址</button>
-      <div class="muted" style="font-size:12px;padding:2px 2px 8px;line-height:1.7">填入你维护的 index.json 地址（GitHub / jsDelivr 均可），仓库里整理的书源、图源会列在这里，随取随用。</div>
+      <div class="muted" style="font-size:12px;padding:2px 2px 8px;line-height:1.7">填入你维护的 index.json 地址（GitHub / jsDelivr 均可），仓库里整理的书源、图源会列在这里，随取随用。</div>`;
     $$('[data-open]', box).forEach((b) => { b.onclick = async () => openRepo((await getRepos())[Number(b.dataset.open)]); });
     $$('[data-del]', box).forEach((b) => {
       b.onclick = async () => {

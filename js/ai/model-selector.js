@@ -83,7 +83,7 @@ export async function pickModel({ multi = false, selected = [], type = 'chat' } 
           const id = p.id + '/' + x.id;
           const item = document.createElement('button');
           item.className = 'ms-item' + (picked.has(id) ? ' on' : '') + (keys[p.id] ? '' : ' dim');
-          item.innerHTML = `<span class="ellipsis">${esc(x.nick)}${x.nick !== x.id ? `<span class="muted" style="font-size:11px;margin-left:6px">${esc(x.id)}</span>` : ''}</span>${x.isNew ? '<span class="tag tag-blue">新上线</span>' : ''}${picked.has(id) ? icon('check') : ''}`;
+          item.innerHTML = `<span class="ellipsis">${esc(x.nick)}${x.nick !== x.id ? `<span class="muted" style="font-size:11px;margin-left:6px">${esc(x.id)}</span>` : ''}</span>${x.isNew ? '<span class="tag tag-blue">新上线</span>' : ''}${modelCapTags(p.id, x.id)}${picked.has(id) ? icon('check') : ''}`;
           item.onclick = () => {
             if (multi) {
               picked.has(id) ? picked.delete(id) : picked.add(id);

@@ -109,6 +109,73 @@ export const PROVIDERS = [
   { id: 'custom', name: '自定义提供商', base: '', type: 'openai', models: [], deprecated: [] },
 ];
 
+/* v5.4：厂商 API Key 创建页与简介（配置弹窗「去创建」跳转） */
+export const PROVIDER_SITES = {
+  openai: { create: 'https://platform.openai.com/api-keys', intro: 'OpenAI 官方平台，Key 以 sk- 开头；按用量计费，可开通 Plus 会员获得高级模型额度' },
+  anthropic: { create: 'https://console.anthropic.com/settings/keys', intro: 'Anthropic 官方控制台，Key 以 sk-ant- 开头；按 Token 计费' },
+  google: { create: 'https://aistudio.google.com/apikey', intro: 'Google AI Studio 免费获取 Gemini API Key（AIza 开头）' },
+  xai: { create: 'https://console.x.ai', intro: 'xAI 控制台，Key 以 xai- 开头；Grok 系列模型' },
+  deepseek: { create: 'https://platform.deepseek.com/api_keys', intro: 'DeepSeek 开放平台，Key 以 sk- 开头；价格低廉、中文优秀' },
+  xiaomi: { create: 'https://platform.xiaomimimo.com', intro: '小米 MiMo 开放平台：支持按量付费与会员计划两种计费，Key 以 tp- 开头；会员计划请求头与按量不同，请在下方选择对应模式' },
+  aliyun: { create: 'https://bailian.console.aliyun.com/', intro: '阿里云百炼平台（通义千问），使用 DashScope API Key（sk- 开头）' },
+  tencent: { create: 'https://console.cloud.tencent.com/hunyuan', intro: '腾讯云混元大模型控制台' },
+  baidu: { create: 'https://console.bce.baidu.com/qianfan/ais/console/onlineTest', intro: '百度智能云千帆平台（文心一言）' },
+  bytedance: { create: 'https://console.volcengine.com/ark', intro: '火山引擎方舟平台（豆包），创建推理接入点后使用' },
+  moonshot: { create: 'https://platform.moonshot.cn/console/api-keys', intro: '月之暗面 Kimi 开放平台，Key 以 sk- 开头' },
+  zhipu: { create: 'https://open.bigmodel.cn/usercenter/apikeys', intro: '智谱 AI 开放平台，Key 为 数字.数字.数字 格式' },
+  siliconflow: { create: 'https://cloud.siliconflow.cn/account/ak', intro: '硅基流动平台：聚合 DeepSeek/Qwen 等开源模型，注册送免费额度' },
+  minimax: { create: 'https://platform.minimaxi.com', intro: 'MiniMax 开放平台（海螺 / 星野）' },
+  stepfun: { create: 'https://platform.stepfun.com', intro: '阶跃星辰 Step 开放平台' },
+  spark: { create: 'https://console.xfyun.cn/services/bm3', intro: '讯飞星火开放平台' },
+  mistral: { create: 'https://console.mistral.ai/api-keys', intro: 'Mistral AI 欧洲开源模型平台' },
+  cohere: { create: 'https://dashboard.cohere.com/api-keys', intro: 'Cohere Command 系列企业级模型' },
+  perplexity: { create: 'https://www.perplexity.ai/settings/api', intro: 'Perplexity Sonar 联网搜索模型，Key 以 pplx- 开头' },
+  groq: { create: 'https://console.groq.com/keys', intro: 'Groq 极速推理平台，Key 以 gsk_ 开头，Llama 系列免费额度' },
+  openrouter: { create: 'https://openrouter.ai/settings/keys', intro: 'OpenRouter 聚合平台：一个 Key 用全部模型，Key 以 sk-or- 开头' },
+  nvidia: { create: 'https://build.nvidia.com', intro: 'NVIDIA NIM 平台，Key 以 nvapi- 开头' },
+  together: { create: 'https://api.together.ai/settings/api-keys', intro: 'Together AI 开源模型托管平台' },
+  fireworks: { create: 'https://fireworks.ai/api-keys', intro: 'Fireworks AI 模型托管平台' },
+};
+export function providerSite(id) { return PROVIDER_SITES[id] || null; }
+
+/* v5.4：模型能力标签（上下文窗口 / 模态）——按规则匹配，约值标注 */
+const CAP_RULES = [
+  [/^gpt-|^o[0-9]/, '400K', 'vision'],
+  [/^claude-/, '1M', 'vision'],
+  [/^gemini-/, '1M', 'vision'],
+  [/^deepseek-/, '128K', 'text'],
+  [/^kimi-/, '128K', 'vision'],
+  [/^glm-/, '128K', 'vision'],
+  [/^qwen/, '128K', 'vision'],
+  [/^doubao-|^seed/, '128K', 'vision'],
+  [/^hunyuan/, '256K', 'vision'],
+  [/^ernie-/, '128K', 'vision'],
+  [/^mimo-/, '128K', 'vision'],
+  [/^MiniMax-/, '128K', 'vision'],
+  [/^grok-/, '256K', 'vision'],
+  [/^llama-|^Llama/, '128K', 'vision'],
+  [/^mistral|^codestral|^pixtral/, '128K', 'vision'],
+  [/^command-/, '128K', 'text'],
+  [/^sonar/, '128K', 'text'],
+  [/^SenseChat/, '128K', 'vision'],
+  [/^yi-/, '32K', 'text'],
+  [/^Baichuan/, '128K', 'text'],
+  [/^step-/, '128K', 'text'],
+  [/^sky-/, '32K', 'text'],
+];
+export function modelCaps(providerId, model) {
+  const m = String(model || '');
+  for (const [re, ctx, modal] of CAP_RULES) if (re.test(m)) {
+    const vision = /vision|vl|omni|multimodal|image/i.test(m) ? 'vision' : modal;
+    return { ctx, modal: vision };
+  }
+  return { ctx: '32K', modal: 'text' };
+}
+export function modelCapTags(providerId, model) {
+  const c = modelCaps(providerId, model);
+  return `<span class="tag tag-gray" style="font-size:10px;margin-left:6px">${c.ctx}</span><span class="tag ${c.modal === 'vision' ? 'tag-blue' : 'tag-gray'}" style="font-size:10px;margin-left:4px">${c.modal === 'vision' ? '多模态' : '纯文本'}</span>`;
+}
+
 export function providerById(id) {
   return PROVIDERS.find((p) => p.id === id) || PROVIDERS[PROVIDERS.length - 1];
 }

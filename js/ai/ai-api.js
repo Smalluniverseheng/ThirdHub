@@ -8,6 +8,45 @@ import { getLocalBackend, chatLocalBackend, cloudBase, getCloudAccessToken } fro
 export async function getApiKey(providerId) {
   return await kvGet('ai:key:' + providerId, '');
 }
+
+/* ---------- v5.4：多 Key 管理（每个厂商可保存多个 Key，自命名 + 计费模式） ---------- */
+const keysList = async (pid) => (await kvGet('ai:keys:' + pid, [])) || [];
+const saveKeysList = async (pid, list) => kvSet('ai:keys:' + pid, list);
+
+/* 厂商 Key 列表：[{name, key, mode}]（mode: payg 按量付费 | plan 会员计划） */
+export async function listProviderKeys(providerId) {
+  const list = await keysList(providerId);
+  const legacy = await kvGet('ai:key:' + providerId, '');
+  if (!list.length && legacy) list.push({ name: '默认', key: legacy, mode: 'payg' });
+  return list;
+}
+export async function addProviderKey(providerId, entry) {
+  const list = await keysList(providerId);
+  if (entry.id) {
+    const i = list.findIndex((x) => x.id === entry.id);
+    if (i >= 0) list[i] = entry; else list.push(entry);
+  } else list.push({ id: 'k' + Date.now().toString(36), ...entry });
+  await saveKeysList(providerId, list);
+  if (list.length === 1) await setApiKey(providerId, entry.key || '');
+  return list;
+}
+export async function removeProviderKey(providerId, id) {
+  let list = await keysList(providerId);
+  const rem = list.find((x) => x.id === id);
+  list = list.filter((x) => x.id !== id);
+  await saveKeysList(providerId, list);
+  if (rem && (await getApiKey(providerId)) === rem.key) {
+    await setApiKey(providerId, list.length ? (list[0].key || '') : '');
+  }
+  return list;
+}
+export async function setActiveProviderKey(providerId, id) {
+  const list = await keysList(providerId);
+  const hit = list.find((x) => x.id === id);
+  if (hit) await setApiKey(providerId, hit.key || '');
+  return hit || null;
+}
+
 export async function setApiKey(providerId, key) {
   await kvSet('ai:key:' + providerId, (key || '').trim());
   emit('ai:keys-changed');

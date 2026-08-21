@@ -204,8 +204,8 @@ export async function renderAIChat(page) {
           <button class="ai-send" data-a="send">${icon('send')}</button>
         </div>
         <div class="ai-voicebar" id="ai-voicebar" hidden>
-          <button class="ai-tool-btn" data-a="kb" title="键盘输入">${icon('edit')}</button>
           <button class="ai-hold-btn" id="ai-hold">按住 说话</button>
+          <button class="ai-tool-btn" data-a="kb" title="键盘输入">${icon('keyboard')}</button>
           <div class="ai-voice-hint" id="ai-voice-hint" hidden>松开发送 · 上滑取消</div>
         </div>
         <div class="ai-token-hint" id="ai-token-hint"></div>
@@ -2228,7 +2228,7 @@ export async function showAISettings(focusProvider = null) {
         box.innerHTML = '';
         for (const p of PROVIDERS) {
           if (!(p.models || []).length && !(p.image || []).length && !(p.video || []).length) continue;
-          const key = await getApiKey(p.id);
+          let key = await getApiKey(p.id);
           const item = el(`<button class="list-item" style="width:100%">
             <span class="list-ico" style="background:none">${vendorIcon(p.id)}</span>
             <div class="grow" style="text-align:left;min-width:0">
@@ -2293,23 +2293,52 @@ export async function showAISettings(focusProvider = null) {
 export async function showKeySettings(focusProvider = null) { return showAISettings(focusProvider); }
 
 async function editProviderKey(p, onChange) {
-  const key = await getApiKey(p.id);
+  let key = await getApiKey(p.id);
   const base = await getBaseOverride(p.id);
   const kv = await import('./keyvault.js');
   const keyMode = await kv.getKeyMode(p.id);
+  const site = (await import('../ai/ai-models.js')).providerSite(p.id);
   const body = el(`<div>
     <div class="row gap8 mb16"><span style="width:32px;height:32px">${vendorIcon(p.id)}</span><div><div style="font-weight:700">${esc(p.name)}</div><div class="muted">${esc(p.base || '需填写接口地址')}</div></div></div>
-    ${formRow('API Key', `<input class="input" data-f="key" type="password" value="${esc(key)}" placeholder="sk-..." autocomplete="off">`)}
+    ${site && site.intro ? `<div class="card" style="padding:10px 12px;margin-bottom:12px"><div class="muted" style="font-size:12px;line-height:1.7">📌 ${esc(site.intro)}</div></div>` : ''}
+    <div style="font-size:13px;font-weight:700;margin-bottom:8px">API Key（可保存多个，自命名）</div>
+    <div class="col gap8" data-role="keys"></div>
+    <button class="btn btn-sm" data-a="addkey" style="margin:8px 0 12px">＋ 添加 Key</button>
+    <div data-v="editor" style="display:none;margin-bottom:10px">
+      ${formRow('Key 名称', '<input class="input" data-f="kname" placeholder="如：主力账号 / 备用">')}
+      ${formRow('计费模式', '<select class="input" data-f="kmode"><option value="payg">按量付费</option><option value="plan">会员计划（部分厂商请求头不同）</option></select>')}
+      ${formRow('API Key', '<input class="input" data-f="key" type="password" placeholder="sk-..." autocomplete="off">')}
+    </div>
     ${formRow('自定义接口地址（可选，留空用官方）', `<input class="input" data-f="base" value="${esc(base)}" placeholder="${esc(p.base || 'https://...')}">`)}
     ${kv.keyModeRowHtml(keyMode)}
     <p class="muted" style="margin-bottom:10px">🔐 加密上传使用「我的 → 全局设置 → 二级密码」进行本地加密，丢失二级密码将无法解密。</p>
     <div data-v="result" style="margin-bottom:10px"></div>
   </div>`);
   kv.bindKeyModeRow(body, p.id, () => { afterKeySavedHook(p); });
+  const { listProviderKeys, addProviderKey, removeProviderKey, setActiveProviderKey, setApiKey, setBaseOverride } = await import('../ai/ai-api.js');
+  const keys = await listProviderKeys(p.id);
+  const keysBox = $('[data-role="keys"]', body);
+  const editor = $('[data-v="editor"]', body);
+  const maskKey2 = (k2) => { const s = String(k2 || ''); if (s.length <= 8) return '****'; return s.slice(0, 3) + '...' + s.slice(-4); };
+  const renderKeys = () => {
+    keysBox.innerHTML = keys.length ? keys.map((k2) => `
+      <label class="row gap8" style="align-items:center;padding:8px 10px;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;cursor:pointer">
+        <input type="radio" name="pk" data-rid="${esc(k2.id)}" ${k2.key === key ? 'checked' : ''}>
+        <div class="grow" style="min-width:0">
+          <div style="font-size:13px;font-weight:600" class="ellipsis">${esc(k2.name || '未命名')} ${k2.key === key ? '<span class="tag tag-green" style="font-size:10px">当前</span>' : ''}</div>
+          <div class="muted" style="font-size:11px">${k2.mode === 'plan' ? '会员计划' : '按量付费'} · ${esc(maskKey2(k2.key))}</div>
+        </div>
+        <span class="list-arrow" data-del="${esc(k2.id)}" style="cursor:pointer;color:var(--danger)" title="删除">×</span>
+      </label>`).join('') : '<div class="muted" style="font-size:12px;padding:4px 2px">还没有 Key，点「＋ 添加 Key」</div>';
+    $$('[data-rid]', keysBox).forEach((r2) => r2.onchange = async () => { const hit = await setActiveProviderKey(p.id, r2.dataset.rid); if (hit) { key = hit.key; onChange && onChange(); } });
+    $$('[data-del]', keysBox).forEach((d2) => d2.onclick = async (e) => { e.preventDefault(); e.stopPropagation(); if (!(await confirmDialog('删除该 Key？', '', '删除', true))) return; await removeProviderKey(p.id, d2.dataset.del); location.reload(); });
+  };
+  renderKeys();
+  $('[data-a="addkey"]', body).onclick = () => { editor.style.display = 'block'; $('[data-f="kname"]', body).value = ''; $('[data-f="kmode"]', body).value = 'payg'; $('[data-f="key"]', body).value = ''; $('[data-f="key"]', body).focus(); };
   const result = $('[data-v="result"]', body);
   const m = modal({
     title: '配置 ' + p.name, body,
-    footer: `<button class="btn grow" data-a="cancel">取消</button>${key ? '<button class="btn grow btn-danger" data-a="del">删除</button>' : ''}<button class="btn grow" data-a="sync">同步模型</button><button class="btn grow" data-a="verify">对话验证</button><button class="btn btn-primary grow" data-a="save">保存</button>`,
+    footer: `<button class="btn grow" data-a="cancel">取消</button>${key ? '<button class="btn grow btn-danger" data-a="del">删除</button>' : ''}<button class="btn grow" data-a="sync">同步模型</button><button class="btn grow" data-a="save">保存</button><button class="btn btn-primary grow" data-a="verify">对话验证并保存</button>${site && site.create ? `<a class="btn" href="${esc(site.create)}" target="_blank" rel="noopener" style="text-decoration:none">去创建 ↗</a>` : ''}`,
   });
   $('[data-a="cancel"]', m.mask).onclick = m.close;
   const delBtn = $('[data-a="del"]', m.mask);
@@ -2345,18 +2374,45 @@ async function editProviderKey(p, onChange) {
     result.innerHTML = '';
     try {
       const r = await testProviderKey(p.id, k);
-      result.innerHTML = `<div style="color:var(--primary)">验证通过：${esc(p.name)} · ${esc(r.model)} 已正常返回对话</div>`;
+      /* v5.4：验证通过自动保存 */
+      const kname = ($('[data-f="kname"]', body) || {}).value || '默认';
+      const kmode = ($('[data-f="kmode"]', body) || {}).value || 'payg';
+      await setApiKey(p.id, k);
+      await setBaseOverride(p.id, $('[data-f="base"]', body).value.trim());
+      if (k !== key) { const list = await addProviderKey(p.id, { name: kname, mode: kmode, key: k }); if (list.length) { await setActiveProviderKey(p.id, list[list.length - 1].id); key = k; } }
+      afterKeySavedHook(p); onChange && onChange();
+      result.innerHTML = `<div style="color:var(--primary)">验证通过并已保存：${esc(p.name)} · ${esc(r.model)} 已正常返回对话</div>`;
+      setTimeout(() => { m.close(); toast('验证通过，已保存', 'ok'); }, 600);
     } catch (err) {
       result.innerHTML = `<div style="color:var(--danger)">验证失败：${esc(err.message)}${err.quota ? '（账户余额可能不足）' : ''}</div>`;
+      modal({
+        title: '密钥验证未通过', center: true,
+        body: '<p style="font-size:14px;line-height:1.8;color:var(--text-secondary)">刚刚输入的密钥验证失败，可能是：<br>① Key 复制不完整或有空格<br>② 会员计划 / 按量付费模式选择错误<br>③ Key 属于其他厂商<br><br>是否自动识别该 Key 属于哪家厂商？</p>',
+        footer: '<button class="btn grow" data-a="no">否</button><button class="btn btn-primary grow" data-a="yes">自动识别</button>',
+      }).then((m2) => {
+        $('[data-a="no"]', m2.mask).onclick = m2.close;
+        $('[data-a="yes"]', m2.mask).onclick = async () => {
+          m2.close();
+          result.innerHTML = '<div class="muted">正在并行验证各家厂商…</div>';
+          try {
+            const hit = await identifyApiKey(k, (line) => { result.innerHTML = '<div class="muted">' + esc(line) + '</div>'; });
+            result.innerHTML = `<div style="color:var(--primary)">识别结果：该 Key 属于「${esc(hit.provider.name)}」（${esc(hit.model)}）</div>`;
+          } catch (e2) { result.innerHTML = `<div style="color:var(--danger)">未识别到匹配厂商：${esc(e2.message)}</div>`; }
+        };
+      });
     }
     e.target.disabled = false;
-    e.target.textContent = '对话验证';
+    e.target.textContent = '对话验证并保存';
   };
   $('[data-a="save"]', m.mask).onclick = async () => {
-    await setApiKey(p.id, $('[data-f="key"]', body).value);
-    await setBaseOverride(p.id, $('[data-f="base"]', body).value);
+    const kIn = ($('[data-f="key"]', body) || {}).value || '';
+    const k = kIn.trim() || key;
+    if (!k) return toast('请先输入 Key，或点「＋ 添加 Key」');
+    await setApiKey(p.id, k);
+    if (kIn.trim() && kIn.trim() !== key) { const list = await addProviderKey(p.id, { name: ($('[data-f="kname"]', body) || {}).value || '默认', mode: ($('[data-f="kmode"]', body) || {}).value || 'payg', key: k }); if (list.length) await setActiveProviderKey(p.id, list[list.length - 1].id); }
+    await setBaseOverride(p.id, $('[data-f="base"]', body).value.trim());
     m.close();
-    toast('已保存', 'ok');
+    toast('已保存（未验证，建议点「对话验证并保存」）', 'ok');
     afterKeySavedHook(p);
     onChange && onChange();
   };
@@ -2437,14 +2493,17 @@ async function showSearchServiceDialog() {
     listEl.innerHTML = '';
     SEARCH_SERVICES.forEach((s) => {
       const on = sel === s.id;
-      const b = el(`<button class="search-svc ${on ? 'sel' : ''}">
-        <span class="search-svc-radio">${on ? icon('check') : ''}</span>
-        <div class="grow" style="text-align:left;min-width:0">
-          <div style="font-size:14px;font-weight:600">${esc(s.name)} ${cfg.service === s.id && (cfg.key || cfg.url) ? '<span class="tag tag-green">已配置</span>' : ''}</div>
-          <div class="muted">${esc(s.desc)}</div>
+      const b = el(`<div class="search-svc ${on ? 'sel' : ''}" style="padding:12px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span class="search-svc-radio" style="flex:none">${on ? icon('check') : ''}</span>
+          <div class="grow" style="text-align:left;min-width:0;cursor:pointer" data-v="pick">
+            <div style="font-size:14px;font-weight:600">${esc(s.name)} ${cfg.service === s.id && (cfg.key || cfg.url) ? '<span class="tag tag-green">已配置</span>' : ''}</div>
+            <div class="muted">${esc(s.desc)}</div>
+          </div>
+          ${s.createUrl ? `<a class="btn btn-sm" href="${esc(s.createUrl)}" target="_blank" rel="noopener" style="flex:none;text-decoration:none" data-v="create">去创建 Key ↗</a>` : ''}
         </div>
-      </button>`);
-      b.onclick = () => { sel = s.id; renderList(); renderForm(); };
+      </div>`);
+      $('[data-v="pick"]', b).onclick = () => { sel = s.id; renderList(); renderForm(); };
       listEl.appendChild(b);
     });
   }
@@ -2453,20 +2512,40 @@ async function showSearchServiceDialog() {
 
   const m = modal({
     title: '联网搜索服务', body,
-    footer: '<button class="btn grow" data-a="cancel">取消</button><button class="btn btn-primary grow" data-a="save">保存</button>',
+    footer: '<button class="btn grow" data-a="cancel">取消</button><button class="btn grow" data-a="save">保存</button><button class="btn btn-primary grow" data-a="verify">保存并验证</button>',
   });
   $('[data-a="cancel"]', m.mask).onclick = m.close;
-  $('[data-a="save"]', m.mask).onclick = async () => {
-    if (!sel) return toast('请选择一个搜索服务');
+  const collect = () => {
     const s = SEARCH_SERVICES.find((x) => x.id === sel);
     const key = ($('[data-f="key"]', formEl) || {}).value || '';
     const url = ($('[data-f="url"]', formEl) || {}).value || '';
-    if (s.needUrl && !url.trim()) return toast('请填写 SearXNG 实例地址');
-    if (!s.needUrl && !key.trim()) return toast('请填写 API Key');
-    await setSearchConfig({ service: sel, key, url });
-    m.close();
-    toast('联网搜索服务已保存', 'ok');
+    if (!s) return { err: '请选择搜索服务' };
+    if (s.needUrl && !url.trim()) return { err: '请填写实例地址' };
+    if (!s.needUrl && !key.trim() && s.id !== 'jina') return { err: '请填写 API Key' };
+    return { s, key, url };
   };
+  const save = async (v, verify) => {
+    const btn = $('[data-a="verify"]', m.mask);
+    if (verify) { btn.disabled = true; btn.textContent = '验证中…'; }
+    const saved = await setSearchConfig({ service: v.s.id, key: v.key, url: v.url });
+    if (!verify) { m.close(); toast('已保存（未验证，建议点「保存并验证」）', 'ok'); return; }
+    try {
+      const { searchWeb } = await import('../ai/web-search.js');
+      const items = await searchWeb('ThirdHub', 3);
+      toast('验证通过：返回 ' + (items || []).length + ' 条结果，已保存', 'ok');
+      m.close();
+    } catch (e) {
+      btn.disabled = false; btn.textContent = '保存并验证';
+      toast('验证失败：' + e.message, 'err');
+      modal({
+        title: '验证未通过', center: true,
+        body: '<p style="font-size:14px;line-height:1.8;color:var(--text-secondary)">刚刚保存的「' + esc(v.s.name) + '」密钥验证未通过（已保存但可能不可用）。请检查：<br>① Key 是否复制完整（注意前后空格）<br>② 是否开通了该服务的 API 权限<br>③ 可以点击上方「去创建 Key ↗」重新获取<br><br>若你配置的是其他厂商的 Key，可到「提供商与模型管理 → API 密钥 → 自动识别 Key」尝试识别。</p>',
+        footer: '<button class="btn grow" data-a="ok">知道了</button>',
+      }).then((m2) => { $('[data-a="ok"]', m2.mask).onclick = m2.close; });
+    }
+  };
+  $('[data-a="save"]', m.mask).onclick = async () => { const v = collect(); if (v.err) return toast(v.err); await save(v, false); };
+  $('[data-a="verify"]', m.mask).onclick = async () => { const v = collect(); if (v.err) return toast(v.err); await save(v, true); };
 }
 
 /* ================= MCP 添加弹窗 ================= */

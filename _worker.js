@@ -368,6 +368,7 @@ export default {
     }
 
     try {
+      if (path === '/api/v1/version' && request.method === 'GET') return json({ version: APP_LATEST, name: 'ThirdHub', update_url: 'https://thirdhub.pages.dev' });
       if (path === '/api/v1/health' && request.method === 'GET') return await handleHealth(request);
       if (path === '/api/proxy' && (request.method === 'GET' || request.method === 'POST')) return await handleProxy(request, url);
       if (path === '/api/v1/chat/completions' && request.method === 'POST') return await handleCompletions(request);

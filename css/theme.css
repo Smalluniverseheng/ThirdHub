@@ -1,0 +1,51 @@
+/* ===== ThirdHub theme.css — 深色 / 浅色主题变量 ===== */
+:root {
+  --primary: #3b5bfd;
+  --primary-deep: #2a3fd0;
+  --accent: #f5a623;
+  --danger: #ff4d4f;
+  --success: #2ecc71;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
+}
+
+body[data-theme="dark"] {
+  --bg-page: #0f1117;
+  --bg-card: #181b26;
+  --bg-input: #1f2331;
+  --bg-elevated: #232838;
+  --text-primary: #eef0f6;
+  --text-secondary: #a8aec2;
+  --text-tertiary: #6b7186;
+  --border: rgba(255,255,255,.07);
+  --shadow-card: 0 2px 12px rgba(0,0,0,.28);
+  --tabbar-bg: rgba(15,17,23,.88);
+  --reader-bg: #14161f;
+}
+
+body[data-theme="light"] {
+  --bg-page: #f4f5f9;
+  --bg-card: #ffffff;
+  --bg-input: #eceef4;
+  --bg-elevated: #ffffff;
+  --text-primary: #1c1f2a;
+  --text-secondary: #5a6072;
+  --text-tertiary: #9aa0b4;
+  --border: rgba(20,24,40,.08);
+  --shadow-card: 0 2px 12px rgba(30,40,80,.07);
+  --tabbar-bg: rgba(255,255,255,.9);
+  --reader-bg: #f7f3ea;
+}
+
+/* 会员等级配色 */
+.lv-guest { color: #8c8c96; }
+.lv-satellite { color: #4da3ff; }
+.lv-planet { color: #3dd68c; }
+.lv-star { color: #f5a623; }
+.lv-galaxy { color: #b98aff; }
+.lv-universe { color: #ffd54d; text-shadow: 0 0 12px rgba(255,213,77,.5); }
+
+/* 主题切换过渡 */
+body, .card, .list-item, .input, .modal, #tabbar { transition: background-color .25s ease, color .25s ease, border-color .25s ease; }

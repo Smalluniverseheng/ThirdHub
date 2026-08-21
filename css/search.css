@@ -1,0 +1,60 @@
+/* ===== ThirdHub search.css — 全局搜索（v4.8） ===== */
+.sch-wrap {
+  max-width: 680px; margin: 0 auto; padding: 8px 16px 32px;
+}
+.sch-box {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 16px; padding: 6px 14px;
+  box-shadow: var(--shadow-card); position: sticky; top: 8px; z-index: 5;
+}
+.sch-box:focus-within { border-color: var(--primary); }
+.sch-ico { color: var(--text-tertiary); display: grid; place-items: center; flex-shrink: 0; }
+.sch-ico svg { width: 20px; height: 20px; }
+.sch-input {
+  flex: 1; min-width: 0; background: none; border: none; outline: none;
+  font-size: 16px; color: var(--text-primary); padding: 10px 0;
+}
+.sch-clear {
+  background: none; border: none; color: var(--text-tertiary);
+  font-size: 20px; cursor: pointer; padding: 2px 6px; flex-shrink: 0;
+}
+.sch-body { margin-top: 16px; }
+.sch-empty { text-align: center; color: var(--text-tertiary); padding: 48px 16px; font-size: 14px; line-height: 1.9; }
+.sch-history { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 10px; }
+.sch-h-chip {
+  padding: 7px 14px; border-radius: 999px; font-size: 13px;
+  background: var(--bg-card); border: 1px solid var(--border); color: var(--text-secondary);
+  cursor: pointer;
+}
+.sch-h-chip:active { opacity: .7; }
+.sch-clear-hist {
+  background: none; border: none; color: var(--text-tertiary);
+  font-size: 12px; text-decoration: underline; cursor: pointer; margin-left: 4px;
+}
+.sch-sec { margin-bottom: 18px; }
+.sch-sec-head {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 14px; font-weight: 700; margin-bottom: 8px;
+}
+.sch-sec-head .grow { flex: 1; }
+.sch-more {
+  background: none; border: none; color: var(--primary);
+  font-size: 12.5px; cursor: pointer; padding: 2px 4px;
+}
+.sch-item {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 12px; padding: 10px 12px; margin-bottom: 8px;
+  text-align: left; cursor: pointer;
+}
+.sch-item:active { opacity: .8; }
+.sch-item .list-ico { width: 38px; height: 38px; border-radius: 10px; background: var(--bg-input); display: grid; place-items: center; color: var(--text-secondary); flex-shrink: 0; }
+.sch-item .list-ico svg { width: 19px; height: 19px; }
+.sch-thumb { width: 38px; height: 50px; border-radius: 8px; object-fit: cover; background: var(--bg-input); flex-shrink: 0; }
+.sch-item-main { flex: 1; min-width: 0; }
+.sch-item-title { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sch-item-sub { font-size: 12px; color: var(--text-tertiary); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sch-spin-row { display: flex; align-items: center; gap: 8px; color: var(--text-tertiary); font-size: 12.5px; padding: 8px 2px; }
+.sch-tag { font-size: 10.5px; color: var(--text-tertiary); border: 1px solid var(--border); border-radius: 6px; padding: 1px 6px; flex-shrink: 0; }
+html[data-device="desktop"] .sch-wrap { padding-top: 28px; }

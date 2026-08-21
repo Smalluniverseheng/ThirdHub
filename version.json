@@ -1,9 +1,9 @@
 {
-  "version": "6.7",
+  "version": "6.8",
   "type": "recommended",
-  "title": "ThirdHub v6.7",
-  "content": "修复 AI 对话 / 我的 板块打不开的问题；OpenCode Zen 免费模型、中转密钥等 v6.6 新功能同步上线。",
+  "title": "ThirdHub v6.8",
+  "content": "后端模式全面修复：刷新不掉线、离线自动重连、多设备并发排队；新增公网中继，Chrome 浏览器也能连电脑后端。",
   "downloadUrl": "",
   "releaseDate": "2026-08-23",
-  "releaseNotes": "修复AI/我的板块打不开/OpenCode Zen免费模型/中转密钥"
+  "releaseNotes": "后端模式修复/公网中继/多设备并发"
 }

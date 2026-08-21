@@ -249,6 +249,8 @@ export async function renderAIChat(page) {
   vidRatio = await kvGet('ai:vid-ratio', '16:9');
   vidDur = await kvGet('ai:vid-dur', 5);
   refreshFreeModels().catch(() => {});
+  /* v6.7：恢复后端模式（页面刷新后仍保持，不再悄悄退回直连） */
+  try { const lm = await kvGet('ai:local-mode', null); if (lm && lm.on && lm.deviceId) localMode = { on: true, deviceId: lm.deviceId, modelId: lm.modelId || '' }; } catch (e) {}
   bindPreviewCode();
 
   page.classList.add('ai-page');
@@ -648,6 +650,7 @@ async function pickModelFlow(page) {
   /* v6.5：后端模式下切换模型 → 设备同步联动 */
   if (localMode.on && localMode.deviceId && currentModel) {
     localMode.modelId = currentModel.providerId + ':' + currentModel.model;
+    kvSet('ai:local-mode', localMode).catch(() => {});
     toast('已切换模型，后端设备将同步使用：' + currentModel.model, 'ok');
   }
   updateTopbar(page);
@@ -1630,6 +1633,7 @@ async function openRunModePanel(page) {
         $$('[data-m]', dmodelsBox).forEach((b) => b.onclick = () => {
           if (localMode.on && localMode.deviceId === id) { localMode.modelId = b.dataset.m; }
           else { localMode.modelId = b.dataset.m; }
+          if (localMode.on) kvSet('ai:local-mode', localMode).catch(() => {});
           toast('已预选设备模型：' + (b.dataset.m || ''), 'ok');
           renderDeviceModels(id);
         });
@@ -1649,6 +1653,7 @@ async function openRunModePanel(page) {
       });
       $('[data-a="direct"]', body).onclick = () => {
         localMode = { on: false, deviceId: null, modelId: '' };
+        kvSet('ai:local-mode', localMode).catch(() => {});
         toast('已切换到直连模式', 'ok');
         off();
         document.querySelectorAll('.overlay').forEach((x) => x.remove());
@@ -1666,6 +1671,7 @@ async function openRunModePanel(page) {
         if (res.fail) { btn.disabled = false; btn.textContent = '切换到后端模式'; return toast('设备连接中断，同步失败', 'err'); }
         if (!res.count) { btn.disabled = false; btn.textContent = '切换到后端模式'; return toast('前端还没有配置任何厂商 Key，请先在 AI 设置中添加', 'err'); }
         localMode = { on: true, deviceId: selDev, modelId: res.first };
+        kvSet('ai:local-mode', localMode).catch(() => {});
         toast('后端模式已启用：同步 ' + res.count + ' 个厂商 Key', 'ok');
         setTimeout(() => { refreshModels(selDev); renderDeviceModels(selDev); }, 3500);
         off();
@@ -1703,10 +1709,13 @@ async function syncAllProviderKeys(deviceId) {
 
 /* v5.0：本地算力模式 —— 消息经 WebSocket 发到设备端 DSH，流式渲染 */
 async function sendLocalMessage(page, text) {
-  const { getStatus, sendToDevice } = await import('./compute.js');
+  const { getStatus, sendToDevice, listDevices, connectDevice } = await import('./compute.js');
   if (getStatus(localMode.deviceId) !== 'online') {
-    toast('后端设备离线，请先在「后端」页连接', 'err');
-    return;
+    const dev = (listDevices() || []).find((d) => d.id === localMode.deviceId);
+    if (dev && (dev.auto || dev.paired)) {
+      const rr = await connectDevice(dev, { silent: true });
+      if (!rr.ok) { toast('后端设备离线：' + (rr.error || '连接失败'), 'err'); return; }
+    } else { toast('后端设备离线，请先在「后端」页连接', 'err'); return; }
   }
   const clean = text.trim();
   if (!clean) return;

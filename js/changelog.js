@@ -1,6 +1,13 @@
 /* ===== ThirdHub changelog.js — 版本更新日志（发版时在末尾追加） ===== */
 export const CHANGELOG = [
   {
+    version: '6.8',
+    date: '2026-08-23',
+    items: [
+      '后端模式大修：页面刷新后保持后端模式不再退回直连；设备离线自动重连；多设备同时对话排队串行不冲突；新增公网中继（cloudflared）——手机 Chrome/Edge 因私有网络访问限制无法直连局域网时，可用「🌐 公网连接」一键经公网隧道连到电脑',
+    ],
+  },
+  {
     version: '6.7',
     date: '2026-08-23',
     items: [

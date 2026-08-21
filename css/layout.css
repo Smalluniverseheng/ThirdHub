@@ -94,6 +94,54 @@
 .overlay-body { flex: 1; overflow-y: auto; overflow-x: hidden; position: relative; display: flex; flex-direction: column; -webkit-overflow-scrolling: touch; }
 .overlay-body > .ov-fill { flex: 1; display: flex; flex-direction: column; min-height: 100%; }
 
+/* v5.9：浮窗式覆盖层（个人资料等桌面端子页）
+   默认/移动端：.overlay-panel 不产生盒子，保持原全屏覆盖层结构；
+   桌面端：背景模糊 + 居中圆角浮窗面板 + 面板角上的圆形返回键，点背景空白处关闭 */
+.overlay-panel { display: contents; }
+@media (min-width: 768px) {
+  .overlay.ov-float {
+    background: rgba(8, 10, 20, .45);
+    -webkit-backdrop-filter: blur(16px) saturate(1.15);
+    backdrop-filter: blur(16px) saturate(1.15);
+    align-items: center; justify-content: center;
+    padding: 28px;
+  }
+  .overlay.ov-float .overlay-panel {
+    position: relative;
+    width: min(560px, 100%);
+    max-height: min(88dvh, 920px);
+    background: var(--bg-page);
+    border: 1px solid var(--border);
+    border-radius: 22px;
+    box-shadow: 0 30px 80px rgba(0, 0, 0, .45);
+    display: flex; flex-direction: column;
+    animation: ov-float-in .3s cubic-bezier(.2, .9, .3, 1);
+  }
+  @keyframes ov-float-in { from { transform: translateY(16px) scale(.97); opacity: 0; } }
+  .overlay.ov-float .overlay-head {
+    position: relative; flex-shrink: 0;
+    padding: 18px 18px 12px;
+    border-bottom: 1px solid var(--border);
+    border-radius: 22px 22px 0 0;
+    background: var(--bg-elevated);
+  }
+  .overlay.ov-float .ov-back {
+    position: absolute; top: -18px; left: 20px;
+    width: 38px; height: 38px; border-radius: 50%;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    box-shadow: 0 8px 22px rgba(0, 0, 0, .35);
+    color: var(--text-primary);
+    z-index: 6;
+  }
+  .overlay.ov-float .ov-back:active { transform: scale(.9); }
+  .overlay.ov-float .overlay-title { text-align: center; font-size: 15.5px; }
+  .overlay.ov-float .overlay-body {
+    border-radius: 0 0 22px 22px;
+    background: var(--bg-page);
+  }
+}
+
 /* AI 聊天页：输入栏紧贴底部导航，无额外留白 */
 .page.ai-page { padding-bottom: 0 !important; overflow: hidden; }
 

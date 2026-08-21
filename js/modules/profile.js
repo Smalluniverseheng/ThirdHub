@@ -168,6 +168,7 @@ export async function renderProfile(page) {
     const lv = levelById(u.level);
     const ref = openOverlay({
       title: '个人资料',
+      float: true, /* v5.9：桌面端呈居中浮窗（背景模糊 + 圆角面板 + 配套返回键），移动端保持全屏 */
       build: (body) => {
         body.innerHTML = `
           <div class="profile-hero">

@@ -102,15 +102,15 @@ export function actionSheet(title, actions) {
 }
 
 /* ---------- 全屏覆盖层 ---------- */
-export function openOverlay({ title = '', build, onClose = null, headExtra = '' }) {
+export function openOverlay({ title = '', build, onClose = null, headExtra = '', float = false }) {
   const root = $('#overlay-root');
   if (title) {
     $$('#overlay-root .overlay').forEach((old) => { const t2 = old.querySelector('.overlay-title'); if (t2 && t2.textContent === title) old.remove(); });
   }
   const ov = el(`
-    <div class="overlay">
+    <div class="overlay${float ? ' ov-float' : ''}">
       <div class="overlay-head">
-        <button class="icon-btn ov-back">${icon('back')}</button>
+        <button class="icon-btn ov-back" title="返回">${icon('back')}</button>
         <div class="overlay-title ellipsis">${esc(title)}</div>
         ${headExtra}
       </div>
@@ -123,6 +123,15 @@ export function openOverlay({ title = '', build, onClose = null, headExtra = '' 
     onClose && onClose();
   };
   $('.ov-back', ov).onclick = close;
+  /* v5.9：浮窗模式 —— 头部+正文包进 .overlay-panel（桌面端呈居中浮窗，背景模糊）；
+     点背景空白处也可关闭（与 modal 交互一致） */
+  if (float) {
+    const panel = el('<div class="overlay-panel"></div>');
+    const head = $('.overlay-head', ov);
+    ov.insertBefore(panel, head);
+    panel.append(head, body);
+    ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
+  }
   root.appendChild(ov);
   build && build(body, close);
   return { ov, body, close, setTitle: (t) => { $('.overlay-title', ov).textContent = t; } };

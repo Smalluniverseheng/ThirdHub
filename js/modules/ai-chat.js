@@ -933,7 +933,25 @@ async function renderDrawerSessions(page, box, kw = '') {
   if (key) list = list.filter(s => (s.title || '').toLowerCase().includes(key) ||
     (s.messages || []).some(m => typeof m.content === 'string' && m.content.toLowerCase().includes(key)));
   box.innerHTML = '';
-  if (!list.length) { box.innerHTML = `<div class="ai-drawer-empty">${key ? '没有匹配的会话' : '暂无历史会话'}</div>`; return; }
+  /* v7.1：DSH 会话（电脑后端）同步显示 */
+  if (localMode.on && localMode.deviceId && !key) {
+    try {
+      const { dshCall } = await import('./compute.js');
+      const r = await dshCall(localMode.deviceId, '/api/session.list', {});
+      const items = (r && r.data && r.data.result && r.data.result.value && r.data.result.value.items) || [];
+      if (items.length) {
+        const head = el(`<div class="ai-drawer-sec" style="padding:8px 4px 6px;display:flex;align-items:center;gap:6px">${icon('cpu')}<span>DSH 会话（电脑）</span><span class="muted" style="font-size:11px">${items.length}</span></div>`);
+        box.appendChild(head);
+        items.slice(0, 20).forEach((s) => {
+          const title = (s.projections && s.projections.values && s.projections.values.title) || s.sessionId;
+          const item = el(`<button class="ai-session"><span class="ai-session-ico">${icon('cpu')}</span><span class="ai-session-info"><span class="ai-session-title ellipsis">${esc(title)}</span><span class="ai-session-date">${s.running ? '🟢 运行中 · ' : ''}${esc((s.projections && s.projections.values && s.projections.values.agentPreset) || 'DSH')}</span></span></button>`);
+          item.onclick = async () => showDshTrajectoryModal(s.sessionId);
+          box.appendChild(item);
+        });
+      }
+    } catch (e) {}
+  }
+  if (!list.length && !box.children.length) { box.innerHTML = `<div class="ai-drawer-empty">${key ? '没有匹配的会话' : '暂无历史会话'}</div>`; return; }
 
   const rerender = () => renderDrawerSessions(page, box, kw);
   const pinned = list.filter((s) => s.pinned);
@@ -953,6 +971,23 @@ async function renderDrawerSessions(page, box, kw = '') {
     if (open) pinned.forEach((s) => box.appendChild(buildSessionItem(page, s, rerender)));
   }
   normal.forEach((s) => box.appendChild(buildSessionItem(page, s, rerender)));
+}
+
+/* v7.1：DSH 会话轨迹弹层 */
+async function showDshTrajectoryModal(sid) {
+  try {
+    const { dshCall } = await import('./compute.js');
+    const r = await dshCall(localMode.deviceId, '/api/session.history', { sessionId: sid });
+    const events = (r && r.data && r.data.result && r.data.result.value && r.data.result.value.events) || [];
+    const lines = [];
+    for (const e of events) {
+      const ev = e.event || e; const t = ev.type || ''; const d = ev.data || {};
+      if (t === 'user/message') { const c = (d.content || [])[0]; lines.push('<div style="padding:6px 8px">👤 ' + esc((c && (c.text || c.content)) || '[内容]') + '</div>'); }
+      else if (t === 'assistant/chunk') { const c = d.chunk || {}; if (c.type === 'text-delta' && c.text) { const last = lines[lines.length - 1] || ''; if (last.startsWith('🤖')) lines[lines.length - 1] = last + esc(c.text); else lines.push('🤖 ' + esc(c.text)); } }
+      else if (t === 'tool/call') { lines.push('<div class="muted" style="font-size:12px;padding:3px 8px">🔧 ' + esc(String(d.tool || d.name || '工具')) + '</div>'); }
+    }
+    openOverlay({ title: 'DSH 轨迹', build: (b) => { b.innerHTML = lines.length ? lines.join('') : '<div class="empty"><div class="empty-title">暂无轨迹内容</div></div>'; } });
+  } catch (e) { toast('轨迹加载失败：' + e.message, 'err'); }
 }
 
 /* 单个会话条目：点击打开 · 长按/右键弹出操作菜单 · 删除进回收站 */
@@ -1318,10 +1353,25 @@ function bindHoldToTalk(page) {
   hold.addEventListener('pointercancel', finish);
 }
 
-/* ================= 停止对话 ================= */
+/* ================= 停止对话(v7.1:即时停止,不再弹确认框) ================= */
 async function confirmStop() {
-  const ok = await confirmDialog('是否停止对话', '正在生成的回答将被中断', '确认', true);
-  if (ok && abortCtl) abortCtl.abort();
+  if (localMode.on && localMode.deviceId) {
+    try {
+      const { sendToDevice } = await import('./compute.js');
+      sendToDevice(localMode.deviceId, { type: 'stop', id: 'st-' + Date.now() });
+    } catch (e) {}
+    for (const [k, s] of localStreams) {
+      if (!s.done) { s.done = true; try { s.boxes.text.innerHTML = (s.boxes.text.innerHTML || '') + '<div class="muted" style="font-size:12px">⏹ 已停止</div>'; } catch (err) {} }
+    }
+    sending = false;
+    updateInputBar(document.getElementById('page-ai'));
+    toast('已停止生成', 'ok');
+    return;
+  }
+  if (abortCtl) abortCtl.abort();
+  sending = false;
+  updateInputBar(document.getElementById('page-ai'));
+  toast('已停止生成', 'ok');
 }
 
 /* ================= 打字机 ================= */
@@ -1607,37 +1657,11 @@ async function openRunModePanel(page) {
               <span class="list-arrow">${selDev === d.id ? '✓' : ''}</span>
             </button>`).join('') : '<div class="muted" style="font-size:12.5px">还没有后端设备：电脑端安装运行 ThirdHub-Agent 后会自动发现，或去「后端」板块添加。</div>'}
         </div>
-        <div data-role="dmodels" style="margin-top:4px"></div>
         <div class="row" style="gap:8px;margin-top:14px">
           <button class="btn btn-primary grow" data-a="backend">切换到后端模式</button>
           <button class="btn grow" data-a="direct">切换到直连模式</button>
         </div>
       </div>`;
-      const dmodelsBox = $('[data-role="dmodels"]', body);
-      const refreshModels = (id) => sendToDevice(id, { type: 'config', id: 'lst-' + Date.now(), payload: { action: 'list' } });
-      const off = onAgentMessage((msg, did) => {
-        if (msg.type !== 'config_result' || !msg.payload || !Array.isArray(msg.payload.models)) return;
-        devModels[did] = msg.payload.models;
-        renderDeviceModels(did);
-      });
-      function renderDeviceModels(id) {
-        const ms = devModels[id] || [];
-        const act = localMode.on && localMode.deviceId === id ? localMode.modelId : '';
-        if (!ms.length) { dmodelsBox.innerHTML = '<div class="muted" style="font-size:12px">设备模型列表（切换后端模式时自动同步 Key 后出现）</div>'; return; }
-        dmodelsBox.innerHTML = '<div class="section-title" style="margin:8px 0 6px">设备模型（点击预选）</div>' +
-          ms.map((m) => `<button class="list-item" style="width:100%" data-m="${esc(m.id)}">
-            <div class="grow" style="text-align:left;min-width:0"><b style="font-size:13px">${esc(m.name || m.id)}</b>
-            <span class="muted" style="font-size:11px"> · ${esc(m.modelId || '')}${m.apiKeyMasked ? ' · key ' + esc(m.apiKeyMasked) : ' · 未配置Key'}</span></div>
-            <span class="list-arrow">${act === m.id ? '✓' : ''}</span>
-          </button>`).join('');
-        $$('[data-m]', dmodelsBox).forEach((b) => b.onclick = () => {
-          if (localMode.on && localMode.deviceId === id) { localMode.modelId = b.dataset.m; }
-          else { localMode.modelId = b.dataset.m; }
-          if (localMode.on) kvSet('ai:local-mode', localMode).catch(() => {});
-          toast('已预选设备模型：' + (b.dataset.m || ''), 'ok');
-          renderDeviceModels(id);
-        });
-      }
       $$('[data-dev]', body).forEach((b) => b.onclick = async () => {
         const id = b.dataset.dev;
         const dev = devs.find((x) => x.id === id);
@@ -1648,8 +1672,6 @@ async function openRunModePanel(page) {
         }
         selDev = id;
         body.querySelectorAll('[data-dev]').forEach((x) => { x.querySelector('.list-arrow').textContent = x.dataset.dev === id ? '✓' : ''; });
-        refreshModels(id);
-        renderDeviceModels(id);
       });
       $('[data-a="direct"]', body).onclick = () => {
         localMode = { on: false, deviceId: null, modelId: '' };
@@ -1673,7 +1695,6 @@ async function openRunModePanel(page) {
         localMode = { on: true, deviceId: selDev, modelId: res.first };
         kvSet('ai:local-mode', localMode).catch(() => {});
         toast('后端模式已启用：同步 ' + res.count + ' 个厂商 Key', 'ok');
-        setTimeout(() => { refreshModels(selDev); renderDeviceModels(selDev); }, 3500);
         off();
         document.querySelectorAll('.overlay').forEach((x) => x.remove());
       };

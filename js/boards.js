@@ -1,0 +1,44 @@
+/* ===== ThirdHub boards.js — 板块注册表（每个板块独立、按需加载） =====
+   未加入底部导航的板块：代码不下载、不执行、不渲染。
+   用户在「我的 → 导航栏管理」中增删板块（至少 1 个，最多 5 个）。 */
+
+export const BOARDS = [
+  
+{ id: 'ai',         name: 'AI',    ico: 'robot',     cat: 'ai',   desc: '多厂商 AI 对话 · 流式输出 · MCP · 联网搜索', css: ['css/ai-chat.css'], load: () => import('./modules/ai-chat.js'),          fn: 'renderAIChat' },
+  
+{ id: 'search',     name: '搜索',  ico: 'search',    cat: 'tool', desc: '全局搜索：书架、AI 会话、资源源（Ctrl+K 快速唤起）', css: ['css/search.css'], load: () => import('./modules/search.js'),       fn: 'renderSearch' },
+  
+{ id: 'read',       css: ['css/discover.css', 'css/bookshelf.css', 'css/category.css'], name: '阅读',   ico: 'books',     cat: 'fun',  desc: '小说 / 漫画 / 有声：同一书架，搜索可按类型多选', load: () => import('./modules/board-media.js'),       fn: 'renderMediaBoard', arg: 'read' },
+  
+{ id: 'novel',      css: ['css/discover.css', 'css/bookshelf.css', 'css/category.css'], name: '小说',   ico: 'book',      cat: 'fun',  desc: '网络小说搜索、阅读与书架',                 load: () => import('./modules/board-media.js'),       fn: 'renderMediaBoard', arg: 'novel' },
+  
+{ id: 'comic',      css: ['css/discover.css', 'css/bookshelf.css', 'css/category.css'], name: '漫画',   ico: 'comic',     cat: 'fun',  desc: '漫画搜索与阅读',                           load: () => import('./modules/board-media.js'),       fn: 'renderMediaBoard', arg: 'comic' },
+  
+{ id: 'music',      css: ['css/discover.css', 'css/bookshelf.css', 'css/category.css'], name: '音乐',   ico: 'music',     cat: 'fun',  desc: '音乐搜索与播放',                           load: () => import('./modules/board-media.js'),       fn: 'renderMediaBoard', arg: 'music' },
+  
+{ id: 'audio',      css: ['css/discover.css', 'css/bookshelf.css', 'css/category.css'], name: '有声',   ico: 'headphone', cat: 'fun',  desc: '有声书 / 广播剧收听',                      load: () => import('./modules/board-media.js'),       fn: 'renderMediaBoard', arg: 'audio' },
+  
+{ id: 'video',      css: ['css/discover.css', 'css/bookshelf.css', 'css/category.css'], name: '视频',   ico: 'film',      cat: 'fun',  desc: '影视 / 短剧搜索与播放',                    load: () => import('./modules/board-media.js'),       fn: 'renderMediaBoard', arg: 'video' },
+  
+{ id: 'game',       name: '游戏',   ico: 'game',      cat: 'fun',  desc: 'H5 小游戏收藏与即点即玩',                  load: () => import('./modules/board-game.js'),        fn: 'renderGameBoard' },
+  
+{ id: 'storage',    name: '存储',   ico: 'cloud',     cat: 'tool', desc: '云存储容量、数据备份与恢复',               load: () => import('./modules/board-storage.js'),     fn: 'renderStorageBoard' },
+  
+{ id: 'community',  name: '社区',   ico: 'users',     cat: 'tool', desc: '书友圈：发帖、求助、实时评论',                 css: ['css/community.css'], load: () => import('./modules/community.js'), fn: 'renderCommunity' },
+  
+{ id: 'compute',    name: '后端',   ico: 'cpu',       cat: 'tool', desc: '本地 / 云端 Agent 后端（DSH）：直连或中转，浏览器之外跑完整工具', css: ['css/compute.css'], load: () => import('./modules/compute.js'),    fn: 'renderCompute' },
+  
+{ id: 'cloudphone', name: '云设备', ico: 'phone',     cat: 'tool', desc: '云端设备实例（即将上线）',                 load: () => import('./modules/board-cloudphone.js'),  fn: 'renderCloudPhoneBoard' },
+];
+
+/* 「我的」固定存在，不占 5 个板块名额 */
+export const PROFILE_BOARD = 
+{ id: 'profile', name: '我的', ico: 'user', css: ['css/profile.css'], load: () => import('./modules/profile.js'), fn: 'renderProfile' };
+
+export const MAX_TABS = 999; /* v6.0：板块数量不设上限（导航可滑动/滚动） */
+export const MIN_TABS = 1;
+
+export function boardById(id) {
+  if (id === PROFILE_BOARD.id) return PROFILE_BOARD;
+  return BOARDS.find((b) => b.id === id);
+}

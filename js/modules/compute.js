@@ -63,6 +63,23 @@ export function dshGet(deviceId, path) {
   });
 }
 
+/* v7.1：后端执行（书源托管 / 电子书存储 / 搜索执行） */
+export function backendCall(deviceId, action, payload = {}) {
+  const c = wsPool.get(deviceId);
+  if (!c || c.status !== 'online' || !c.ws || c.ws.readyState !== 1) return Promise.reject(new Error('设备离线'));
+  return new Promise((resolve, reject) => {
+    const id = 'bk-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    const timer = setTimeout(() => reject(new Error('后端请求超时')), 40000);
+    const off = onAgentMessage((msg, did) => {
+      if (did !== deviceId || msg.id !== id) return;
+      clearTimeout(timer); off();
+      if (msg.type === 'backend_result') resolve(msg.payload);
+      else if (msg.type === 'error') reject(new Error((msg.payload && msg.payload.message) || '后端错误'));
+    });
+    c.ws.send(JSON.stringify({ type: 'backend', id, payload: Object.assign({ action }, payload) }));
+  });
+}
+
 /* 连接设备：返回 Promise<{ok, info?}> */
 function tryConnect(dev, timeoutMs) {
   const url = dev.relay ? String(dev.relay).trim() : ('ws://' + dev.host + ':' + dev.port);

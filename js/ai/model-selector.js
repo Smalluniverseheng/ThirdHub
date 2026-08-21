@@ -73,9 +73,10 @@ export async function pickModel({ multi = false, selected = [], type = 'chat' } 
       const pins = (await kvGet('ai:model-pins', [])) || [];
       const pinRank = (x) => { const i = pins.indexOf(p.id + '/' + x.id); return i < 0 ? 999 : i; };
       entries = entries.sort((a, b) => pinRank(a) - pinRank(b));
-      /* v6.6：限时免费/推荐优先，再按隐私等级 安全→注意→风险 排序 */
+      /* v7.1：已配置厂商优先 + 限时免费/推荐，再按隐私等级 安全→注意→风险 排序 */
       const plv = (x) => { const v = x.meta && x.meta.privacyLevel; return v === 'risk' ? 2 : v === 'caution' ? 1 : v === 'safe' ? 0 : 1; };
-      const hot = (x) => (x.free ? 1 : 0) || ((x.meta && x.meta.recommended) ? 1 : 0);
+      const cfgW = !!keys[p.id] ? 2 : 0;
+      const hot = (x) => (x.free ? 4 : 0) + ((x.meta && x.meta.recommended) ? 2 : 0) + cfgW;
       entries = entries.sort((a, b) => (hot(b) - hot(a)) || (plv(a) - plv(b)));
       if (!entries.length) return;
       if (p.custom && !myHeader) {

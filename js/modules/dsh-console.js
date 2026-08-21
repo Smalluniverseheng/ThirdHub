@@ -1,6 +1,6 @@
 /* ===== ThirdHub js/modules/dsh-console.js — DSH 工作台（v6.9）：通过 Agent 转发 DSH Web API ===== */
 import { $, $$, el, esc, icon, toast } from '../ui.js';
-import { listDevices, getStatus, dshCall, dshGet } from './compute.js';
+import { listDevices, getStatus, dshCall, dshGet, backendCall } from './compute.js';
 
 let _devId = null;
 let _curTab = 'overview';
@@ -18,7 +18,7 @@ async function get(path) {
   return r.data;
 }
 
-function tabName(t) { return { overview: '总览', presets: '模式预设', tasks: '任务看板', sessions: '会话轨迹', plugins: '插件', models: '模型', settings: '设置' }[t] || t; }
+function tabName(t) { return { overview: '总览', presets: '模式预设', tasks: '任务看板', sessions: '会话轨迹', plugins: '插件', models: '模型', settings: '设置', storage: '电脑存储' }[t] || t; }
 
 function shell(page) {
   const dev = (listDevices() || []).find((d) => d.id === _devId);

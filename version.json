@@ -1,9 +1,9 @@
 {
-  "version": "7.0",
+  "version": "7.1",
   "type": "recommended",
-  "title": "ThirdHub v7.0",
-  "content": "DSH 工作台：模式预设/任务看板/会话轨迹/插件/模型远程控制；断联自动排队补发；局域网优先连接。",
+  "title": "ThirdHub v7.1",
+  "content": "停止对话即时响应；已配置模型置顶；历史会话同步 DSH 轨迹；电脑存储（书源托管/电子书/后端搜索）；内容模块独立设置；修复官方仓库密码；云手机更名云设备。",
   "downloadUrl": "",
   "releaseDate": "2026-08-23",
-  "releaseNotes": "DSH工作台/断联自动补发/局域网优先"
+  "releaseNotes": "停止即时响应/DSH历史同步/电脑存储/模块独立设置/仓库密码修复"
 }

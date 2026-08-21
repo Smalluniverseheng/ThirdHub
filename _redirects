@@ -1,0 +1,3 @@
+# 修复 clean-URL 308 重定向(部分 WebView 不跟随 308 导致页面打不开)
+/index.html / 200
+/admin.html /admin 200

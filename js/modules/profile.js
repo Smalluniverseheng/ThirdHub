@@ -540,17 +540,100 @@ function showAvatarPicker(body, u) {
       $('[data-a="now"]', b2).onclick = () => { m2.close(); checkUpdate(true); };
     };
     $('[data-a="changelog"]', box).onclick = showChangelog;
-    $('[data-a="about"]', box).onclick = () => {
-      modal({
+    $('[data-a="about"]', box).onclick = () => showAboutPage();
+
+    /* v5.3：关于页（模块介绍 / 开源致谢 / 云存储实时用量） */
+    function showAboutPage() {
+      openOverlay({
         title: '关于 ThirdHub',
-        body: `
-          <div style="text-align:center;padding:12px 0 20px">
-            <div style="font-size:18px;font-weight:800">第三方科技 · ThirdHub</div>
-            <div class="muted mt8">v${APP_VERSION}</div>
-            <div class="muted mt8" style="max-width:300px;margin:8px auto 0;line-height:1.8">全平台智能聚合平台。软件不预置任何内容源，所有内容接入能力由用户自行导入配置后启用。</div>
-          </div>`,
+        build: async (body) => {
+          const u = await currentUser();
+          const lv = levelById(u ? u.level : 'guest');
+          body.innerHTML = `
+            <div style="text-align:center;padding:14px 0 6px">
+              <img src="icons/launcher.png" style="width:64px;height:64px;border-radius:18px;box-shadow:var(--shadow-card)">
+              <div style="font-size:18px;font-weight:800;margin-top:10px">第三方科技 · ThirdHub</div>
+              <div class="muted">v${APP_VERSION} · MIT License</div>
+              <div class="muted" style="max-width:320px;margin:8px auto 0;line-height:1.8">全平台智能聚合平台。软件不预置任何内容源，所有内容接入能力由用户自行导入配置后启用。</div>
+            </div>
+            <div class="col gap8" style="margin-top:16px">
+              <button class="list-item" style="width:100%" data-a="storage">
+                <span class="list-ico">${icon('cloud')}</span>
+                <div class="grow" style="text-align:left;min-width:0">
+                  <div style="font-size:14px;font-weight:600">云存储用量</div>
+                  <div class="muted" data-role="storage-text">${u ? fmtBytes(u.storageUsed || 0) + ' / ' + (lv.storage === Infinity ? '无限' : fmtBytes(lv.storage)) : '未登录'}</div>
+                </div>
+                <span class="list-arrow">${icon('refresh')}</span>
+              </button>
+              <button class="list-item" style="width:100%" data-a="modules">
+                <span class="list-ico">${icon('grid')}</span>
+                <div class="grow" style="text-align:left;min-width:0">
+                  <div style="font-size:14px;font-weight:600">模块介绍</div>
+                  <div class="muted">AI 对话 / 阅读 / 算力 / 社区 / 搜索 / 存储…</div>
+                </div>
+                <span class="list-arrow">${icon('arrowR')}</span>
+              </button>
+              <button class="list-item" style="width:100%" data-a="credits">
+                <span class="list-ico">${icon('heart')}</span>
+                <div class="grow" style="text-align:left;min-width:0">
+                  <div style="font-size:14px;font-weight:600">开源致谢</div>
+                  <div class="muted">向我们借鉴与集成的开源项目致敬</div>
+                </div>
+                <span class="list-arrow">${icon('arrowR')}</span>
+              </button>
+              <button class="list-item" style="width:100%" data-a="changelog">
+                <span class="list-ico">${icon('history')}</span>
+                <div class="grow" style="text-align:left;min-width:0">
+                  <div style="font-size:14px;font-weight:600">版本历史</div>
+                  <div class="muted">从 v1.0 到 v${APP_VERSION}</div>
+                </div>
+                <span class="list-arrow">${icon('arrowR')}</span>
+              </button>
+            </div>`;
+          $('[data-a="storage"]', body).onclick = async () => {
+            toast('正在刷新用量…');
+            try { const { refreshProfile } = await import('../auth.js'); const nu = await refreshProfile(); if (nu) toast('云存储：' + fmtBytes(nu.storageUsed || 0), 'ok'); } catch (e) { toast('刷新失败：' + e.message, 'err'); }
+          };
+          $('[data-a="modules"]', body).onclick = async () => {
+            const { BOARDS, PROFILE_BOARD } = await import('../boards.js');
+            openOverlay({
+              title: '模块介绍',
+              build: (b2) => {
+                const all = [...BOARDS, PROFILE_BOARD];
+                b2.innerHTML = `<div class="col gap8">${all.map((b) => `
+                  <div class="card" style="padding:12px">
+                    <div style="font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px">${icon(b.ico)}<span>${b.name}</span></div>
+                    <div class="muted" style="font-size:12.5px;margin-top:4px;line-height:1.7">${esc(b.desc || '')}</div>
+                  </div>`).join('')}</div>`;
+              },
+            });
+          };
+          $('[data-a="credits"]', body).onclick = () => {
+            const CREDITS = [
+              ['DeepSeek Harness', '本地算力内核：Agent 运行时、工具链与 MCP 客户端（MIT）', 'https://github.com/deepseek-ai/deepseek-harness'],
+              ['Supabase', '云端同步与实时能力（开源 PostgreSQL 后端，Apache-2.0）', 'https://supabase.com'],
+              ['LobeHub Icons', '厂商品牌图标库（MIT）', 'https://github.com/lobehub/lobe-icons'],
+              ['Simple Icons', '品牌图标（CC0）', 'https://simpleicons.org'],
+              ['Phosphor Icons', '界面图标（MIT）', 'https://phosphoricons.com'],
+              ['Cloudflare Pages', '全球 CDN 静态托管与边缘计算', 'https://pages.cloudflare.com'],
+              ['MCP 协议', '模型上下文协议（Model Context Protocol）', 'https://modelcontextprotocol.io'],
+            ];
+            openOverlay({
+              title: '开源致谢',
+              build: (b2) => {
+                b2.innerHTML = `<div class="col gap8">${CREDITS.map(([n, d, u]) => `
+                  <div class="card" style="padding:12px">
+                    <div style="font-size:14px;font-weight:700">${esc(n)}</div>
+                    <div class="muted" style="font-size:12px;line-height:1.6;margin-top:2px">${esc(d)}</div>
+                    ${u ? `<a href="${esc(u)}" target="_blank" rel="noopener" style="font-size:11.5px;color:var(--primary)">${esc(u)} ↗</a>` : ''}
+                  </div>`).join('')}</div>`;
+              },
+            });
+          };
+          $('[data-a="changelog"]', body).onclick = showChangelog;
+        },
       });
-    };
+    }
   }
 
   /* ================= 个性化设置（多端导航栏） ================= */

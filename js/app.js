@@ -1,5 +1,5 @@
 /* ===== ThirdHub app.js — 应用入口 / 路由 / 初始化 ===== */
-export const APP_VERSION = '5.3';
+export const APP_VERSION = '5.4';
 window.__TH_CSS_V = APP_VERSION; /* v2.7：CSS 按需加载的版本戳 */
 
 import { $, $$, icon, toast, loadCss } from './ui.js';
@@ -69,6 +69,7 @@ function buildChrome(tabIds) {
   $$('#tabbar .tab').forEach((b) => b.addEventListener('click', () => switchTab(b.dataset.tab)));
   $('#tab-collapse').onclick = toggleSidebarCollapsed;
   initTabIndicator();
+  initTabSorting(); /* v5.3：长按导航项可调整顺序（各端独立保存） */
   rendered.clear();
   currentTab = null;
 }
@@ -102,6 +103,65 @@ function applySidebarState() {
   tb.classList.toggle('collapsed', collapsed);
   const btn = $('#tab-collapse');
   if (btn) btn.innerHTML = collapsed ? icon('arrowR') : icon('back');
+}
+/* v5.3：长按导航项 → 排序面板（各端独立顺序，保存后重建导航） */
+let _tabPressTimer = null;
+function initTabSorting() {
+  const scroll = $('[data-role="tabscroll"]', $('#tabbar'));
+  if (!scroll) return;
+  const cancel = () => { clearTimeout(_tabPressTimer); _tabPressTimer = null; };
+  const press = (e) => {
+    const tab = e.target.closest && e.target.closest('.tab');
+    if (!tab || tab.dataset.tab === 'profile' || _tabPressTimer) return;
+    _tabPressTimer = setTimeout(() => { _tabPressTimer = null; openTabSort(); }, 600);
+  };
+  scroll.addEventListener('touchstart', press, { passive: true });
+  scroll.addEventListener('touchend', cancel, { passive: true });
+  scroll.addEventListener('touchmove', cancel, { passive: true });
+  scroll.addEventListener('mousedown', press);
+  scroll.addEventListener('mouseup', cancel);
+  scroll.addEventListener('mouseleave', cancel);
+}
+async function openTabSort() {
+  const dev = getDevice();
+  const key = dev === 'watch' ? 'nav:tabs-watch' : (dev === 'desktop' ? 'nav:tabs-desktop' : 'nav:tabs-mobile');
+  let order = await kvGet(key, null);
+  if (!Array.isArray(order) || !order.length) order = await kvGet('ui:tabs', ['ai', 'search', 'read']);
+  order = [...order];
+  const body = el('<div><div class="muted" style="font-size:12.5px;line-height:1.8;margin-bottom:10px">长按已结束：拖动下方按钮调整导航顺序（仅当前设备端生效），松手即保存。</div><div class="col gap8" data-role="rows"></div></div>');
+  const rows = $('[data-role="rows"]', body);
+  const render = () => {
+    rows.innerHTML = order.map((id, i) => {
+      const b = boardById(id);
+      if (!b) return '';
+      return `<div class="row gap8" style="align-items:center;background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:9px 12px">
+        <span class="list-ico">${icon(b.ico)}</span>
+        <span class="grow" style="font-size:14px;font-weight:600">${b.name}</span>
+        <button class="icon-btn" data-mv="-1" data-i="${i}" style="width:32px;height:32px" ${i === 0 ? 'disabled' : ''}>${icon('back')}</button>
+        <button class="icon-btn" data-mv="1" data-i="${i}" style="width:32px;height:32px" ${i === order.length - 1 ? 'disabled' : ''}>${icon('arrowR')}</button>
+      </div>`;
+    }).join('');
+    $$('[data-mv]', rows).forEach((btn) => btn.onclick = () => {
+      const i = +btn.dataset.i, mv = +btn.dataset.mv;
+      const j = i + mv;
+      if (j < 0 || j >= order.length) return;
+      [order[i], order[j]] = [order[j], order[i]];
+      render();
+    });
+  };
+  render();
+  const m = modal({
+    title: '导航顺序（' + ({ watch: '手表', desktop: '桌面', mobile: '移动' })[dev] + '端）', body,
+    footer: '<button class="btn grow" data-a="cancel">取消</button><button class="btn btn-primary grow" data-a="save">保存顺序</button>',
+  });
+  $('[data-a="cancel"]', m.mask).onclick = m.close;
+  $('[data-a="save"]', m.mask).onclick = async () => {
+    await kvSet(key, order);
+    m.close();
+    const onTab = document.querySelector('#tabbar .tab.on');
+    rebuildTabs(onTab ? onTab.dataset.tab : null);
+    toast('导航顺序已保存', 'ok');
+  };
 }
 export function refreshTabIndicator() {
   requestAnimationFrame(() => {

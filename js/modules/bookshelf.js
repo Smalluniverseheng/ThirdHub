@@ -225,6 +225,30 @@ export async function renderBookshelf(page) {
       b.addEventListener('touchstart', () => { pressTimer = setTimeout(() => { if (!selectMode) enterSelectMode(); selected.add(b.dataset.id); renderContent(); }, 550); }, { passive: true });
       b.addEventListener('touchend', () => clearTimeout(pressTimer));
       b.addEventListener('touchmove', () => clearTimeout(pressTimer));
+      /* v5.3：桌面端右键菜单（多选 / 删除 / 置顶） */
+      b.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        if (selectMode) return;
+        const id = b.dataset.id;
+        const storeName = activeTab === 'history' ? 'history' : activeTab === 'favorites' ? 'favorites' : 'shelf';
+        actionSheet('书架操作', [
+          { label: '多选管理', value: 'select', icon: 'check' },
+          { label: '删除此项', value: 'del', icon: 'trash' },
+          ...(activeTab === 'shelf' ? [{ label: '置顶 / 取消置顶', value: 'top', icon: 'pin' }] : []),
+        ]).then(async (v) => {
+          if (v === 'select') { enterSelectMode(); selected.add(id); renderContent(); }
+          else if (v === 'del') {
+            if (!(await confirmDialog('删除', '确定删除这一项吗？', '删除', true))) return;
+            await db.del(storeName, id);
+            if (id.startsWith('local:')) deleteLocalBook(id.slice(6)).catch(() => {});
+            renderContent(); toast('已删除', 'ok');
+          }
+          else if (v === 'top') {
+            const row = await db.get('shelf', id);
+            if (row) { row.top = !row.top; await db.put('shelf', row); renderContent(); }
+          }
+        });
+      });
     });
   }
 

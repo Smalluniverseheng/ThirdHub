@@ -195,10 +195,6 @@ export async function renderAIChat(page) {
       <div class="ai-messages" id="ai-messages"></div>
       <button class="ai-jump-btn" id="ai-jump-btn" hidden title="回到底部">${icon('arrowR')}</button>
       <div class="ai-inputbar">
-        <div class="ai-modebar" id="ai-modebar" hidden>
-          <button class="ai-mode-pill" data-a="runmode" title="切换运行模式">${icon('cpu')}<span data-role="mode-label">直连模式</span><span class="ai-mode-arrow">▾</span></button>
-          <span class="ai-mode-hint" data-role="mode-hint" hidden></span>
-        </div>
         <div class="ai-attach-strip" id="ai-attach-strip" hidden></div>
         <button class="ai-nokey-pill" id="ai-nokey" hidden><span>当前模型未配置 API Key</span><span class="ai-nokey-arrow">${icon('arrowR')}</span></button>
         <div class="ai-input-row" id="ai-input-row">
@@ -249,7 +245,6 @@ export async function renderAIChat(page) {
         <button class="ai-plus-cell" data-plus="file"><span class="ai-plus-ico">${icon('file')}</span><span class="ai-plus-label">本地文件</span></button>
         <button class="ai-plus-cell" data-plus="draw" data-cap="image"><span class="ai-plus-ico">${icon('brush')}</span><span class="ai-plus-label">AI绘画</span></button>
         <button class="ai-plus-cell" data-plus="video" data-cap="video"><span class="ai-plus-ico">${icon('film')}</span><span class="ai-plus-label">AI视频</span></button>
-        <button class="ai-plus-cell" data-plus="runmode"><span class="ai-plus-ico">${icon('cpu')}</span><span class="ai-plus-label">运行模式</span></button>
       </div>
       <div class="ai-plus-gen" id="ai-plus-gen" hidden></div>
       <div class="ai-plus-settings">
@@ -263,6 +258,10 @@ export async function renderAIChat(page) {
         </button>
         <button class="ai-plus-row" data-a="adv-settings">
           <div class="ai-plus-row-info"><div class="ai-plus-row-name">更多设置</div><div class="ai-plus-row-sub">偏好 · 语音 · 记忆 · 用量 · 工具 · 专用模型</div></div>
+          <span class="ai-drawer-arrow">${icon('arrowR')}</span>
+        </button>
+        <button class="ai-plus-row" data-a="runmode-row">
+          <div class="ai-plus-row-info"><div class="ai-plus-row-name">运行模式</div><div class="ai-plus-row-sub" id="ai-runmode-sub">直连模式 · 直接对接厂商接口</div></div>
           <span class="ai-drawer-arrow">${icon('arrowR')}</span>
         </button>
       </div>
@@ -419,59 +418,19 @@ export async function renderAIChat(page) {
 
   /* ----- 发送 / 语音 ----- */
   $('[data-a="send"]', page).onclick = () => sending ? confirmStop() : sendMessage(page);
-  /* v5.0：运行模式切换（直连 / 本地算力设备） */
-  (async () => {
-    const mb = $('#ai-modebar', page);
-    if (!mb) return;
-    const renderModeBar = async () => {
-      const { listDevices, getStatus } = await import('./compute.js');
-      const devs = listDevices();
-      const label = $('[data-role="mode-label"]', mb);
-      const hint = $('[data-role="mode-hint"]', mb);
-      if (localMode.on) {
-        const d = devs.find((x) => x.id === localMode.deviceId);
-        label.textContent = '本地模式 · ' + (d ? (d.name || d.host) : '设备');
-        label.parentElement.classList.add('on');
-        const st = getStatus(localMode.deviceId);
-        hint.hidden = false;
-        hint.textContent = st === 'online' ? '已连接算力设备' : (st === 'connecting' ? '连接中…' : '设备离线，点击上方切换');
-        hint.style.color = st === 'online' ? 'var(--primary)' : 'var(--accent, #e8452c)';
-      } else {
-        label.textContent = '直连模式';
-        label.parentElement.classList.remove('on');
-        hint.hidden = true;
-      }
-    };
-    mb.hidden = false;
-    $('[data-a="runmode"]', mb).onclick = async () => {
-      const { listDevices, getStatus } = await import('./compute.js');
-      const devs = listDevices();
-      const acts = [
-        { label: '直连模式（走厂商接口）', value: 'direct', icon: localMode.on ? undefined : 'check' },
-      ];
-      devs.forEach((d) => acts.push({
-        label: '本地模式 · ' + (d.name || d.host) + (getStatus(d.id) === 'online' ? ' 🟢' : ' ⚪'),
-        value: 'local:' + d.id,
-        icon: localMode.on && localMode.deviceId === d.id ? 'check' : undefined,
-      }));
-      if (!devs.length) acts.push({ label: '（暂无设备，去「算力」添加）', value: null });
-      const v = await actionSheet('运行模式', acts);
-      if (!v) return;
-      if (v === 'direct') { localMode = { on: false, deviceId: null }; }
-      else if (v.startsWith('local:')) {
-        const id = v.slice(6);
-        localMode = { on: true, deviceId: id };
-        const st = getStatus(id);
-        if (st !== 'online') {
-          const { connectDevice } = await import('./compute.js');
-          const r = await connectDevice(devs.find((d) => d.id === id), { silent: true });
-          if (!r.ok) toast(r.error, 'err');
-        }
-      }
-      await renderModeBar();
-    };
-    await renderModeBar();
-  })();
+  /* v5.3：运行模式入口（加号 → 运行模式行），状态副标题实时更新 */
+  const syncRunModeSub = async () => {
+    const sub = $('#ai-runmode-sub', page);
+    if (!sub) return;
+    if (!localMode.on || !localMode.deviceId) { sub.textContent = '直连模式 · 直接对接厂商接口'; return; }
+    const { listDevices, getStatus } = await import('./compute.js');
+    const d = listDevices().find((x) => x.id === localMode.deviceId);
+    sub.textContent = '本地模式 · ' + (d ? (d.name || d.host) : '设备') + (getStatus(localMode.deviceId) === 'online' ? '（在线）' : '（离线）');
+  };
+  const rmRow = $('[data-a="runmode-row"]', page);
+  if (rmRow) rmRow.onclick = () => openRunModePanel(page);
+  syncRunModeSub();
+  on('compute:status', () => syncRunModeSub());
   $('[data-a="voice"]', page).onclick = () => enterVoiceBar(page);
   $('[data-a="kb"]', page).onclick = () => exitVoiceBar(page);
   bindHoldToTalk(page);
@@ -1513,16 +1472,11 @@ async function openRunModePanel(page) {
           if (!r.ok) return toast(r.error, 'err');
         }
         localMode = { on: true, deviceId: id };
-        const mb = $('#ai-modebar', page);
-        if (mb) { const lbl = $('[data-role="mode-label"]', mb); if (lbl) lbl.textContent = '本地模式 · ' + (dev.name || dev.host); lbl && lbl.parentElement && lbl.parentElement.classList.add('on'); }
-        const hint = $('[data-role="mode-hint"]', mb); if (hint) { hint.hidden = false; hint.textContent = '已连接算力设备'; hint.style.color = 'var(--primary)'; }
         toast('已切换到本地模式：' + (dev.name || dev.host), 'ok');
         document.querySelectorAll('.overlay').forEach((x) => x.remove());
       });
       $('[data-a="direct"]', body).onclick = () => {
         localMode = { on: false, deviceId: null };
-        const mb = $('#ai-modebar', page);
-        if (mb) { const lbl = $('[data-role="mode-label"]', mb); if (lbl) lbl.textContent = '直连模式'; lbl && lbl.parentElement && lbl.parentElement.classList.remove('on'); const hint = $('[data-role="mode-hint"]', mb); if (hint) hint.hidden = true; }
         toast('已切换到直连模式', 'ok');
         document.querySelectorAll('.overlay').forEach((x) => x.remove());
       };
@@ -2084,6 +2038,61 @@ export async function showModelsPage(page = null, focus = null) {
 }
 
 /* ================= 模型排行榜（雷达图仅综合榜 · 六维 · TOP3 叠加；其余榜单为普通排名） ================= */
+/* v5.3：模型详情页（排行榜点击 → 先看详情再使用） */
+async function openModelDetail(rank, page, ref) {
+  const { priceOf, fmtUsd } = await import('../ai/ai-pricing.js');
+  const prov = PROVIDERS.find((x) => x.id === rank.p) || {};
+  const allM = [...(prov.models || []), ...(prov.image || []), ...(prov.video || []), ...(prov.deprecated || [])];
+  const modelId = allM.find((m) => String(m).toLowerCase() === String(rank.m).toLowerCase()) || String(rank.m).toLowerCase();
+  const price = priceOf(rank.p, modelId);
+  const hasDims = Array.isArray(rank.dims) && rank.dims.length === RADAR_DIMS.length;
+  const caps = [];
+  if ((prov.models || []).some((m) => String(m).toLowerCase() === String(rank.m).toLowerCase())) caps.push('对话');
+  if ((prov.image || []).some((m) => String(m).toLowerCase() === String(rank.m).toLowerCase())) caps.push('绘画');
+  if ((prov.video || []).some((m) => String(m).toLowerCase() === String(rank.m).toLowerCase())) caps.push('视频');
+  if (!caps.length) caps.push('对话');
+  const radarHtml = hasDims ? `<div style="max-width:220px;margin:6px auto"><canvas data-role="detail-radar"></canvas></div>` : '';
+  const body = el(`<div style="font-size:13.5px;line-height:1.9">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+      <span style="width:44px;height:44px;flex:none">${vendorIcon(rank.p)}</span>
+      <div style="min-width:0"><div style="font-size:17px;font-weight:800">${esc(rank.m)}</div>
+      <div class="muted" style="font-size:12px">${esc(prov.name || rank.p)} · 综合分 ${rank.s}</div></div>
+    </div>
+    ${radarHtml}
+    <div class="card" style="padding:12px;margin-bottom:8px">
+      <div class="muted" style="font-size:11.5px;margin-bottom:4px">能力</div>
+      ${caps.map((c) => `<span class="tag tag-blue" style="margin-right:6px">${c}</span>`).join('')}
+    </div>
+    <div class="card" style="padding:12px;margin-bottom:8px">
+      <div class="muted" style="font-size:11.5px;margin-bottom:4px">接口与计费（每 1M tokens）</div>
+      <div>厂商接口：<span class="muted">${esc(prov.base || '自定义 / 需配置')}</span></div>
+      <div>模型 ID：<span class="muted">${esc(modelId)}</span></div>
+      <div>输入：<b>${price ? fmtUsd(price.in) : '—'}</b> · 输出：<b>${price ? fmtUsd(price.out) : '—'}</b>${price && price.cache != null ? ` · 缓存命中：<b>${fmtUsd(price.cache)}</b>` : ''}</div>
+      <div class="muted" style="font-size:11.5px;margin-top:4px">上下文窗口与更多参数以厂商官方文档为准；API Key 在「更多设置 → 提供商与模型管理」中配置。</div>
+    </div>
+  </div>`);
+  const m = modal({
+    title: '模型详情', body,
+    footer: '<button class="btn grow" data-a="close">关闭</button><button class="btn btn-primary grow" data-a="use">使用此模型对话</button>',
+  });
+  $('[data-a="close"]', m.mask).onclick = m.close;
+  $('[data-a="use"]', m.mask).onclick = () => {
+    currentModel = { providerId: rank.p, model: modelId };
+    kvSet('ai:last-model', currentModel);
+    if (currentMode !== 'single') { currentMode = 'single'; kvSet('ai:last-mode', 'single'); }
+    m.close();
+    if (ref && ref.close) ref.close();
+    if (page) { setWorkspace(page, 'chat'); renderMessages(page); updateTopbar(page); }
+    toast('已切换到 ' + rank.m, 'ok');
+  };
+  if (hasDims) {
+    requestAnimationFrame(() => {
+      const cv = $('[data-role="detail-radar"]', m.bodyEl);
+      if (cv && typeof drawRadar === 'function') drawRadar(cv, [{ m: rank.m, p: rank.p, s: rank.s, dims: rank.dims }], null);
+    });
+  }
+}
+
 export function showRankingsPage(page = null) {
   let curCat = RANK_CATEGORIES[0].id;
   const ref = openOverlay({
@@ -2119,14 +2128,8 @@ export function showRankingsPage(page = null) {
         $$('.rank-row-item', list).forEach(b => b.onclick = async () => {
           const r = data[+b.dataset.i];
           if (!r) return;
-          const ok = await confirmDialog('使用此模型对话？', `${r.m} · ${(PROVIDERS.find(p => p.id === r.p) || {}).name || r.p}`, '开始对话', false);
-          if (!ok) return;
-          currentModel = { providerId: r.p, model: r.m };
-          await kvSet('ai:last-model', currentModel);
-          if (currentMode !== 'single') { currentMode = 'single'; kvSet('ai:last-mode', 'single'); }
-          ref.close();
-          if (page) { setWorkspace(page, 'chat'); renderMessages(page); updateTopbar(page); }
-          toast('已切换到 ' + r.m, 'ok');
+          /* v5.3：先看模型详情，再决定是否使用 */
+          openModelDetail(r, page, ref);
         });
       };
       $$('.rank-cat', body).forEach(x => x.onclick = () => { curCat = x.dataset.c; renderCat(); });

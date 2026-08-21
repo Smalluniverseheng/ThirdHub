@@ -1157,3 +1157,6 @@ button.rank-row-item:active { background: var(--bg-input); }
   cursor: pointer; vertical-align: middle; margin-left: 4px;
 }
 .ai-help-dot:hover { background: var(--primary); color: #fff; }
+/* v5.3：图标加载完成隐藏兜底字母（杜绝图层重叠） */
+.vendor-ico.brand.loaded .brand-letter { display: none; }
+.vendor-ico.brand.loaded { background: transparent !important; box-shadow: none; }

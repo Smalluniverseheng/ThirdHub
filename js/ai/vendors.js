@@ -68,7 +68,7 @@ export function vendorIcon(id, opts = {}) {
   if (b.emb && PATHS[b.emb]) urls.push(embDataUri(id, b));
   if (urls.length) {
     const inner = '<span class="brand-letter" style="color:' + (raw ? b.color : '#fff') + '">' + b.letter + '</span>'
-      + '<img src="' + urls[0] + '" data-fb="' + encodeURIComponent(urls.slice(1).join('|')) + '" onerror="__thBrandErr(this)" loading="lazy" alt="">';
+      + '<img src="' + urls[0] + '" data-fb="' + encodeURIComponent(urls.slice(1).join('|')) + '" onerror="__thBrandErr(this)" onload="this.parentElement.classList.add(\'loaded\')" loading="lazy" alt="">';
     const cb = !raw ? ' data-cb="' + (EMB_DARK[id] || b.color) + '"' : '';
     const bg = raw ? '' : '';
     return '<span class="vendor-ico brand has-img self-bg' + (raw ? ' raw' : '') + '"' + bg + cb + '>' + inner + '</span>';
@@ -92,7 +92,7 @@ export function vendorIconLocal(id, opts = {}) {
   if (b.emb && PATHS[b.emb]) {
     const src = embDataUri(id, b);
     const cb = EMB_DARK[id] || b.color;
-    return '<span class="vendor-ico brand self-bg has-img" data-cb="' + cb + '"><img src="' + src + '" alt="" style="width:100%;height:100%"></span>';
+    return '<span class="vendor-ico brand self-bg has-img" data-cb="' + cb + '"><img src="' + src + '" alt="" style="width:100%;height:100%" onload="this.parentElement.classList.add(\'loaded\')"></span>';
   }
   if (raw) return '<span class="vendor-ico brand raw"><span class="brand-letter" style="color:' + b.color + '">' + b.letter + '</span></span>';
   return '<span class="vendor-ico brand" style="background:' + b.color + '"><span class="brand-letter" style="color:#fff">' + b.letter + '</span></span>';

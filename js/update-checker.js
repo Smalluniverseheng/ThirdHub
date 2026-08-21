@@ -4,6 +4,7 @@ import { kvGet, kvSet } from './store.js';
 import { modal, icon, toast } from './ui.js';
 
 /* 远程版本信息来源优先级：
+   0. 站点云端接口 /api/v1/version（Pages Worker，发版即更新）
    1. 云端 Supabase app_updates 表（管理后台推送）
    2. 站点根目录 version.json（部署时更新） */
 
@@ -33,6 +34,14 @@ export async function checkUpdate(manual = false) {
       const { data } = await getSupabase().from('th_app_updates')
         .select('*').order('created_at', { ascending: false }).limit(1).maybeSingle();
       if (data) info = { version: data.version, type: data.type, title: data.title, content: data.content, downloadUrl: data.download_url };
+    }
+  } catch (e) {}
+  /* v5.3：优先查站点云端版本接口（Pages Worker 维护，最准确） */
+  try {
+    const vr = await fetch('/api/v1/version?t=' + Date.now(), { cache: 'no-store' });
+    if (vr.ok) {
+      const vj = await vr.json();
+      if (vj && vj.version) info = { version: vj.version, type: 'update', title: vj.name ? vj.name + ' 更新' : 'ThirdHub 更新', content: vj.note || '', url: vj.update_url || '' };
     }
   } catch (e) {}
   // 2. version.json

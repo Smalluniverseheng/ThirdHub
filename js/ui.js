@@ -48,8 +48,12 @@ export function toast(msg, type = '') {
 /* ---------- Modal ---------- */
 export function modal({ title = '', body = '', footer = '', center = false, onClose = null }) {
   const root = $('#modal-root');
+  /* v5.6：防叠层——同名弹窗重复打开时先关掉旧的 */
+  if (title) {
+    $$('#modal-root .modal-mask').forEach((old) => { if (old.dataset.title === title) old.remove(); });
+  }
   const mask = el(`
-    <div class="modal-mask ${center ? 'center' : ''}">
+    <div class="modal-mask ${center ? 'center' : ''}" data-title="${esc(title)}">
       <div class="modal">
         <div class="modal-head">
           <div class="modal-title">${esc(title)}</div>
@@ -100,6 +104,9 @@ export function actionSheet(title, actions) {
 /* ---------- 全屏覆盖层 ---------- */
 export function openOverlay({ title = '', build, onClose = null, headExtra = '' }) {
   const root = $('#overlay-root');
+  if (title) {
+    $$('#overlay-root .overlay').forEach((old) => { const t2 = old.querySelector('.overlay-title'); if (t2 && t2.textContent === title) old.remove(); });
+  }
   const ov = el(`
     <div class="overlay">
       <div class="overlay-head">

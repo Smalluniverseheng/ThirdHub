@@ -97,9 +97,10 @@ export async function showChatSettings(page, session, onChange) {
         ${formRow('系统提示（System Prompt）', `<textarea class="input" rows="4" data-f="system" placeholder="例如：你是一名资深前端工程师，回答简洁专业">${esc(s.system || '')}</textarea>`)}
         ${secTitle('生成')}
         <div data-v="ctx"></div><div data-v="temp"></div><div data-v="topp"></div><div data-v="maxtok"></div>
+        <div data-v="reason"></div>
         ${secTitle('外观')}
         <div class="set-row">
-          <div class="set-row-info"><div class="set-row-name">对话背景图片</div><div class="set-row-sub">上传后作为消息区背景</div></div>
+          <div class="set-row-info"><div class="set-row-name">对话背景</div><div class="set-row-sub">官方内置或上传图片作为消息区背景</div></div>
           <div class="row gap8">
             <button class="btn btn-sm" data-a="bg">${bgImage ? '更换' : '上传'}</button>
             ${bgImage ? '<button class="btn btn-sm btn-danger" data-a="bgclear">清除</button>' : ''}
@@ -113,6 +114,10 @@ export async function showChatSettings(page, session, onChange) {
         </div>
       </div>`;
 
+      /* v5.6：思考强度滑条（快速 ↔ 深度思考，模型支持时生效） */
+      const REASON_LEVELS = [['off', '不思考'], ['low', '快速'], ['high', '平衡'], ['max', '深度思考']];
+      const reasonRow = el(`<div class="set-row"><div class="set-row-info"><div class="set-row-name">思考强度</div><div class="set-row-sub">左侧快速回复 · 右侧深度思考（部分模型如 DeepSeek / GLM / Kimi 支持）</div></div><div style="width:100%"><input type="range" data-f="reason" min="0" max="3" step="1" value="${['off','low','high','max'].indexOf(s.reasoning || 'high') < 0 ? 2 : ['off','low','high','max'].indexOf(s.reasoning || 'high')}" style="width:100%"><div class="row" style="justify-content:space-between;font-size:11px;color:var(--text-tertiary)"><span>快速</span><span>深度思考</span></div></div></div>`);
+      $('[data-v="reason"]', body).appendChild(reasonRow);
       const ctxS = numRow('上下文消息数量上限', '每次请求携带的最大历史消息数（长文本场景可调至数千甚至更高）', { min: 1, max: null, step: 1, val: s.ctxLimit || 20, unit: '条' });
       const tempS = numRow('温度 Temperature', '越高越发散，越低越严谨（常见 0 ~ 2）', { min: 0, max: 5, step: 0.01, val: s.temperature != null ? s.temperature : 0.7 });
       const topPS = numRow('Top P', '核采样比例（0 ~ 1）', { min: 0, max: 1, step: 0.01, val: s.topP != null ? s.topP : 0.9 });
@@ -128,6 +133,20 @@ export async function showChatSettings(page, session, onChange) {
       topPS.row.style.display = s.topP != null ? '' : 'none';
       $('[data-v="maxtok"]', body).appendChild(maxS.row);
 
+      /* v5.6：官方内置背景（3 款渐变） */
+      const BUILTIN_BGS = [
+        { id: 'aurora', label: '极光', css: 'linear-gradient(135deg,#1a1a3e 0%,#2d2d6b 40%,#4a1d6e 100%)' },
+        { id: 'sunset', label: '暮色', css: 'linear-gradient(160deg,#3e1d1d 0%,#6b2d2d 45%,#1d3e3e 100%)' },
+        { id: 'forest', label: '林雾', css: 'linear-gradient(150deg,#12261d 0%,#1e3a2a 55%,#0f1f18 100%)' },
+      ];
+      const bgRow = $('[data-a="bg"]', body).closest('.set-row');
+      if (bgRow) {
+        const wrap = el(`<div class="row gap8" style="margin-top:8px;flex-wrap:wrap">${BUILTIN_BGS.map((b) => `<button class="btn btn-sm" data-bg="${b.id}" style="background:${b.css};color:#fff;border:none">${b.label}</button>`).join('')}</div>`);
+        bgRow.appendChild(wrap);
+        BUILTIN_BGS.forEach((b) => {
+          $(`[data-bg="${b.id}"]`, wrap).onclick = () => { bgImage = b.css; toast('已选择「' + b.label + '」背景，保存后生效', 'ok'); };
+        });
+      }
       $('[data-a="bg"]', body).onclick = () => $('[data-f="bgfile"]', body).click();
       $('[data-f="bgfile"]', body).onchange = (e) => {
         const f = e.target.files[0];
@@ -155,6 +174,7 @@ export async function showChatSettings(page, session, onChange) {
       $('[data-a="save"]', body).onclick = async () => {
         const ns = {
           system: $('[data-f="system"]', body).value.trim(),
+          reasoning: REASON_LEVELS[+($('[data-f="reason"]', body).value || 2)][0],
           ctxLimit: toggles[0].classList.contains('on') ? ctxS.get() : null,
           temperature: toggles[1].classList.contains('on') ? tempS.get() : null,
           topP: toggles[2].classList.contains('on') ? topPS.get() : null,

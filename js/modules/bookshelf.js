@@ -223,6 +223,10 @@ export async function renderBookshelf(page) {
       };
       let pressTimer;
       b.addEventListener('touchstart', () => { pressTimer = setTimeout(() => { if (!selectMode) enterSelectMode(); selected.add(b.dataset.id); renderContent(); }, 550); }, { passive: true });
+      /* v5.6：桌面鼠标长按进入编辑（多选/删除） */
+      b.addEventListener('mousedown', () => { pressTimer = setTimeout(() => { if (!selectMode) enterSelectMode(); selected.add(b.dataset.id); renderContent(); }, 600); });
+      b.addEventListener('mouseup', () => clearTimeout(pressTimer));
+      b.addEventListener('mouseleave', () => clearTimeout(pressTimer));
       b.addEventListener('touchend', () => clearTimeout(pressTimer));
       b.addEventListener('touchmove', () => clearTimeout(pressTimer));
       /* v5.3：桌面端右键菜单（多选 / 删除 / 置顶） */

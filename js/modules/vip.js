@@ -93,6 +93,14 @@ export async function showVipCenter() {
           <button class="btn btn-sm" id="vip-redeem">${icon('key')} 卡密激活</button>
         </div>`;
 
+      /* v5.6：顶部用户卡（头像 + 名称 + 当前等级） */
+      body.insertAdjacentHTML('afterbegin', `<div class="vip-user-mini">
+        ${u && u.avatar ? `<img src="${esc(u.avatar)}">` : `<img src="icons/brand.jpg">`}
+        <div class="grow" style="min-width:0">
+          <div style="font-weight:700;font-size:15px" class="ellipsis">${esc((u && (u.nickname || u.email)) || '未登录')}</div>
+          <div class="vip-lv">${esc(curLevel.name)} · ${lv.storage === Infinity ? '无限存储' : '云存储 ' + fmtBytes(lv.storage)}</div>
+        </div>
+      </div>`);
       const slider = $('#vip-slider', body);
       const dots = $('#vip-dots', body);
       $('#vip-orders', body).onclick = async () => (await import('./pay.js')).showMyOrders();
@@ -104,7 +112,7 @@ export async function showVipCenter() {
         plans.forEach((p, i) => {
           const price = cycle === 'monthly' ? p.monthly : p.yearly;
           const mine = curLevel === p.level;
-          const card = el(`<div class="vip-card ${i === 1 ? 'vip-hot' : ''}">
+          const card = el(`<div class="vip-card ${i === 1 ? 'vip-hot' : ''}" style="position:relative">
             ${i === 1 ? '<div class="vip-hot-badge">最受欢迎</div>' : ''}
             <div class="vip-card-name">${esc(p.name)}</div>
             <div class="vip-card-tagline">${esc(p.tagline || '')}</div>

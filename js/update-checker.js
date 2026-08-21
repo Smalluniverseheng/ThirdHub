@@ -36,15 +36,7 @@ export async function checkUpdate(manual = false) {
       if (data) info = { version: data.version, type: data.type, title: data.title, content: data.content, downloadUrl: data.download_url };
     }
   } catch (e) {}
-  /* v5.3：优先查站点云端版本接口（Pages Worker 维护，最准确） */
-  try {
-    const vr = await fetch('/api/v1/version?t=' + Date.now(), { cache: 'no-store' });
-    if (vr.ok) {
-      const vj = await vr.json();
-      if (vj && vj.version) info = { version: vj.version, type: 'update', title: vj.name ? vj.name + ' 更新' : 'ThirdHub 更新', content: vj.note || '', url: vj.update_url || '' };
-    }
-  } catch (e) {}
-  // 2. version.json
+  // 2. version.json（v5.6：直接优先，最快最稳）
   if (!info) {
     try {
       const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });

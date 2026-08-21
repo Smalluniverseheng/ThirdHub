@@ -623,6 +623,21 @@ function showAvatarPicker(body, u) {
             });
           };
           $('[data-a="checkupd"]', body).onclick = () => checkUpdate(true);
+          /* v5.6：进入关于页自动对比版本并显示状态 */
+          (async () => {
+            const cv = $('[data-role="curver"]', body);
+            if (!cv) return;
+            try {
+              const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
+              if (r.ok) {
+                const vj = await r.json();
+                if (vj && vj.version && vj.version !== '${APP_VERSION}') {
+                  cv.innerHTML = '发现新版本 v' + esc(vj.version) + '！点击查看更新';
+                  cv.style.color = 'var(--primary)';
+                } else cv.textContent = '当前已是最新版本 v${APP_VERSION}';
+              }
+            } catch (e) {}
+          })();
           $('[data-a="version"]', body).onclick = () => {
             openOverlay({
               title: '版本与更新设置',
@@ -691,15 +706,35 @@ function showAvatarPicker(body, u) {
     });
   }
 
-  /* ================= 阅读设置（小说 + 漫画） ================= */
+  /* ================= 阅读设置（v5.6：小说 / 漫画分设 + 连接器管理 + 更多） ================= */
   async function showReaderSettings() {
-    const keys = ['readerFlip', 'readerFont', 'readerFontSize', 'readerLineHeight', 'readerTheme',
-      'readerIllust', 'readerTapFlip', 'readerVolumeFlip', 'readerInfoBar', 'readerAutoScroll',
-      'comicLayout', 'comicDir', 'comicFit', 'comicGap', 'comicBrightness', 'comicCropBorder', 'comicPreload'];
-    const S = {};
-    for (const k of keys) S[k] = await getSetting(k);
     openOverlay({
       title: '阅读设置',
+      build: (body) => {
+        body.innerHTML = `<div class="col gap8">
+          <button class="list-item" style="width:100%" data-a="novel">
+            <span class="list-ico">${icon('book')}</span>
+            <div class="grow" style="text-align:left;min-width:0"><div style="font-size:14px;font-weight:600">小说设置</div><div class="muted">翻页 / 字体 / 主题 / 连接器管理 / 历史记录</div></div>
+            <span class="list-arrow">${icon('arrowR')}</span>
+          </button>
+          <button class="list-item" style="width:100%" data-a="comic">
+            <span class="list-ico">${icon('comic')}</span>
+            <div class="grow" style="text-align:left;min-width:0"><div style="font-size:14px;font-weight:600">漫画设置</div><div class="muted">布局 / 翻向 / 适配 / 留白</div></div>
+            <span class="list-arrow">${icon('arrowR')}</span>
+          </button>
+        </div>`;
+        $('[data-a="novel"]', body).onclick = () => showNovelSettings();
+        $('[data-a="comic"]', body).onclick = () => showComicSettings();
+      },
+    });
+  }
+  async function showNovelSettings() {
+    const keys = ['readerFlip', 'readerFont', 'readerFontSize', 'readerLineHeight', 'readerTheme', 'readerIllust', 'readerTapFlip', 'readerVolumeFlip', 'readerInfoBar', 'readerAutoScroll'];
+    const S = {};
+    for (const k of keys) S[k] = await getSetting(k);
+    const histMax = await kvGet('history:max', 100);
+    openOverlay({
+      title: '小说设置',
       build: (body) => {
         const chipRow = (label, key, opts) => `
           <div class="muted mb8">${label}</div>
@@ -709,7 +744,7 @@ function showAvatarPicker(body, u) {
         const tog = (label, key) => `
           <div class="nr-set-row"><span>${label}</span><button class="ai-toggle ${S[key] ? 'on' : ''}" data-tog="${key}"></button></div>`;
         body.innerHTML = `
-          <div class="section-title">小说阅读</div>
+          <div class="section-title">阅读</div>
           ${chipRow('默认翻页方式', 'readerFlip', [['scroll', '滚动'], ['slide', '左右滑动'], ['cover', '覆盖'], ['sim', '仿真'], ['none', '无动画']])}
           ${chipRow('字体', 'readerFont', [['system', '系统默认'], ['serif', '衬线'], ['sans', '无衬线'], ['kai', '楷体']])}
           ${chipRow('背景主题', 'readerTheme', [['day', '白天'], ['night', '夜间'], ['eye', '护眼'], ['paper', '羊皮纸'], ['blue', '浅蓝'], ['green', '竹绿']])}
@@ -717,27 +752,59 @@ function showAvatarPicker(body, u) {
           ${tog('点按翻页', 'readerTapFlip')}
           ${tog('音量键翻页', 'readerVolumeFlip')}
           ${tog('底部信息栏', 'readerInfoBar')}
-          <div class="muted" style="font-size:12px;margin:6px 0 16px">字号 / 行距 / 段距 / 边距 / 亮度 / 自动滚动等细项可在阅读器内「设置」中实时调整。</div>
-          <div class="section-title">漫画阅读</div>
+          <div class="muted" style="font-size:12px;margin:6px 0 8px">字号 / 行距 / 段距 / 边距 / 亮度 / 自动滚动等细项可在阅读器内「设置」中实时调整。</div>
+          <div class="section-title">数据</div>
+          <button class="list-item" style="width:100%;margin-bottom:8px" data-a="conn">
+            <span class="list-ico">${icon('plug')}</span>
+            <div class="grow" style="text-align:left"><div style="font-size:14px;font-weight:600">连接器管理</div><div class="muted">导入 / 管理小说等连接器</div></div>
+            <span class="list-arrow">${icon('arrowR')}</span>
+          </button>
+          <div class="nr-set-row"><span>历史记录最多保存</span><span class="row gap8">${[50, 100, 200, 500].map((v) => `<button class="ai-chip ${histMax === v ? 'on' : ''}" data-hist="${v}">${v} 条</button>`).join('')}</span></div>
+        `;
+        $$('[data-g]', body).forEach((g) => {
+          const key = g.dataset.g;
+          $$('.ai-chip', g).forEach((b) => b.onclick = async () => { S[key] = b.dataset.v; await setSetting(key, S[key]); $$('.ai-chip', g).forEach((x) => x.classList.toggle('on', x === b)); });
+        });
+        $$('[data-tog]', body).forEach((t2) => t2.onclick = async () => { const key = t2.dataset.tog; S[key] = !S[key]; t2.classList.toggle('on', S[key]); await setSetting(key, S[key]); });
+        $('[data-a="conn"]', body).onclick = async () => {
+          const { renderCategory } = await import('./category.js');
+          openOverlay({ title: '连接器管理', build: async (b2) => { b2.style.overflowY = 'auto'; await renderCategory(b2); const h = b2.querySelector('.page-head'); if (h) h.remove(); } });
+        };
+        $$('[data-hist]', body).forEach((b) => b.onclick = async () => {
+          await kvSet('history:max', +b.dataset.hist);
+          $$('[data-hist]', body).forEach((x) => x.classList.toggle('on', x === b));
+          toast('历史记录上限已设为 ' + b.dataset.hist + ' 条', 'ok');
+        });
+      },
+    });
+  }
+  async function showComicSettings() {
+    const keys = ['comicLayout', 'comicDir', 'comicFit', 'comicGap', 'comicBrightness', 'comicCropBorder', 'comicPreload'];
+    const S = {};
+    for (const k of keys) S[k] = await getSetting(k);
+    openOverlay({
+      title: '漫画设置',
+      build: (body) => {
+        const chipRow = (label, key, opts) => `
+          <div class="muted mb8">${label}</div>
+          <div class="nr-chip-row mb16" data-g="${key}">
+            ${opts.map(([v, name]) => `<button class="ai-chip ${String(S[key]) === String(v) ? 'on' : ''}" data-v="${v}">${name}</button>`).join('')}
+          </div>`;
+        const tog = (label, key) => `
+          <div class="nr-set-row"><span>${label}</span><button class="ai-toggle ${S[key] ? 'on' : ''}" data-tog="${key}"></button></div>`;
+        body.innerHTML = `
           ${chipRow('默认布局', 'comicLayout', [['paged', '单页'], ['double', '双页'], ['webtoon', '条漫（上下滚动）']])}
           ${chipRow('翻页方向', 'comicDir', [['ltr', '左翻（国漫）'], ['rtl', '右翻（日漫）']])}
           ${chipRow('图片适配', 'comicFit', [['width', '适应宽度'], ['height', '适应高度'], ['original', '原始大小']])}
           ${tog('页间留白', 'comicGap')}
-          ${tog('切除白边', 'comicCropBorder')}`;
+          ${tog('切除白边', 'comicCropBorder')}
+          ${chipRow('预加载页数', 'comicPreload', [[1, '1 页'], [3, '3 页'], [5, '5 页'], [10, '10 页']])}
+        `;
         $$('[data-g]', body).forEach((g) => {
           const key = g.dataset.g;
-          $$('.ai-chip', g).forEach((b) => b.onclick = async () => {
-            S[key] = b.dataset.v;
-            await setSetting(key, S[key]);
-            $$('.ai-chip', g).forEach((x) => x.classList.toggle('on', x === b));
-          });
+          $$('.ai-chip', g).forEach((b) => b.onclick = async () => { S[key] = b.dataset.v; await setSetting(key, S[key]); $$('.ai-chip', g).forEach((x) => x.classList.toggle('on', x === b)); });
         });
-        $$('[data-tog]', body).forEach((t) => t.onclick = async () => {
-          const key = t.dataset.tog;
-          S[key] = !S[key];
-          t.classList.toggle('on', S[key]);
-          await setSetting(key, S[key]);
-        });
+        $$('[data-tog]', body).forEach((t2) => t2.onclick = async () => { const key = t2.dataset.tog; S[key] = !S[key]; t2.classList.toggle('on', S[key]); await setSetting(key, S[key]); });
       },
     });
   }

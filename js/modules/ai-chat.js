@@ -379,6 +379,22 @@ export async function renderAIChat(page) {
     }
     $('#ai-web-toggle', page).classList.toggle('disabled', !hasSvc && !modelSide);
   }
+  /* v5.6：点击联网搜索行（非开关区域）→ 未配置打开配置页 / 已配置弹出切换服务商 */
+  const webRow = $('#ai-web-toggle', page) ? $('#ai-web-toggle', page).closest('.ai-plus-row') : null;
+  if (webRow) webRow.onclick = async (e) => {
+    if (e.target.closest('.ai-toggle')) return; /* 开关单独处理 */
+    const cfg = await getSearchConfig();
+    const hasSvc2 = !!(cfg.service && (cfg.key || (cfg.service === 'searxng' && cfg.url)));
+    if (!hasSvc2) { const { showSearchServiceDialog } = await import('./ai-chat.js'); showSearchServiceDialog(); return; }
+    /* 已配置：切换服务商 */
+    const { SEARCH_SERVICES, getSearchConfig: g2 } = await import('../ai/web-search.js');
+    const cur = await g2();
+    const acts = SEARCH_SERVICES.filter((s) => !s.needUrl || cur.url).map((s) => ({ label: s.name + (cur.service === s.id ? ' ✓' : ''), value: s.id }));
+    acts.push({ label: '配置更多服务…', value: '__cfg__' });
+    const v = await actionSheet('切换搜索服务', acts);
+    if (v === '__cfg__') { const { showSearchServiceDialog } = await import('./ai-chat.js'); showSearchServiceDialog(); }
+    else if (v) { await setSearchConfig({ service: v, key: cur.key, url: cur.url }); syncWebRow(); toast('已切换到 ' + v, 'ok'); }
+  };
   $('#ai-web-toggle', page).onclick = async () => {
     if (!(await webAvail())) { toast('请先配置联网搜索服务，或切换支持联网的模型'); return; }
     const t = $('#ai-web-toggle', page);
@@ -2311,6 +2327,7 @@ async function editProviderKey(p, onChange) {
     </div>
     ${formRow('自定义接口地址（可选，留空用官方）', `<input class="input" data-f="base" value="${esc(base)}" placeholder="${esc(p.base || 'https://...')}">`)}
     ${kv.keyModeRowHtml(keyMode)}
+    ${site && site.create ? `<div style="margin-bottom:10px"><a class="btn" href="${esc(site.create)}" target="_blank" rel="noopener" style="text-decoration:none;width:100%;justify-content:center">还没有 Key？去创建 ↗</a></div>` : ''}
     <p class="muted" style="margin-bottom:10px">🔐 加密上传使用「我的 → 全局设置 → 二级密码」进行本地加密，丢失二级密码将无法解密。</p>
     <div data-v="result" style="margin-bottom:10px"></div>
   </div>`);
@@ -2338,7 +2355,7 @@ async function editProviderKey(p, onChange) {
   const result = $('[data-v="result"]', body);
   const m = modal({
     title: '配置 ' + p.name, body,
-    footer: `<button class="btn grow" data-a="cancel">取消</button>${key ? '<button class="btn grow btn-danger" data-a="del">删除</button>' : ''}<button class="btn grow" data-a="sync">同步模型</button><button class="btn grow" data-a="save">保存</button><button class="btn btn-primary grow" data-a="verify">对话验证并保存</button>${site && site.create ? `<a class="btn" href="${esc(site.create)}" target="_blank" rel="noopener" style="text-decoration:none">去创建 ↗</a>` : ''}`,
+    footer: `<button class="btn grow" data-a="cancel">取消</button>${key ? '<button class="btn grow btn-danger" data-a="del">删除</button>' : ''}<button class="btn grow" data-a="sync">同步模型</button><button class="btn grow" data-a="save">保存</button><button class="btn btn-primary grow" data-a="verify">对话验证并保存</button>`,
   });
   $('[data-a="cancel"]', m.mask).onclick = m.close;
   const delBtn = $('[data-a="del"]', m.mask);
@@ -2495,7 +2512,7 @@ async function showSearchServiceDialog() {
       const on = sel === s.id;
       const b = el(`<div class="search-svc ${on ? 'sel' : ''}" style="padding:12px">
         <div style="display:flex;align-items:center;gap:10px">
-          <span class="search-svc-radio" style="flex:none">${on ? icon('check') : ''}</span>
+          <span class="search-svc-radio" data-v="radio" style="flex:none;cursor:pointer">${on ? icon('check') : ''}</span>
           <div class="grow" style="text-align:left;min-width:0;cursor:pointer" data-v="pick">
             <div style="font-size:14px;font-weight:600">${esc(s.name)} ${cfg.service === s.id && (cfg.key || cfg.url) ? '<span class="tag tag-green">已配置</span>' : ''}</div>
             <div class="muted">${esc(s.desc)}</div>
@@ -2503,7 +2520,11 @@ async function showSearchServiceDialog() {
           ${s.createUrl ? `<a class="btn btn-sm" href="${esc(s.createUrl)}" target="_blank" rel="noopener" style="flex:none;text-decoration:none" data-v="create">去创建 Key ↗</a>` : ''}
         </div>
       </div>`);
-      $('[data-v="pick"]', b).onclick = () => { sel = s.id; renderList(); renderForm(); };
+      $('[data-v="pick"]', b).onclick = (e) => {
+        /* v5.6：点圆圈只切换；点名称/介绍区域进入该服务独立子页面 */
+        if (e.target.closest('[data-v="radio"]')) { sel = s.id; renderList(); renderForm(); return; }
+        editSearchService(s);
+      };
       listEl.appendChild(b);
     });
   }
@@ -2546,6 +2567,84 @@ async function showSearchServiceDialog() {
   };
   $('[data-a="save"]', m.mask).onclick = async () => { const v = collect(); if (v.err) return toast(v.err); await save(v, false); };
   $('[data-a="verify"]', m.mask).onclick = async () => { const v = collect(); if (v.err) return toast(v.err); await save(v, true); };
+}
+
+/* v5.6：搜索服务独立子页面（多 Key 管理 + 自定义接口 + 简介） */
+async function editSearchService(s) {
+  const { setSearchConfig, getSearchConfig, searchWeb } = await import('../ai/web-search.js');
+  const cfg = await getSearchConfig();
+  const KEY_STORE = 'websearch:keys:' + s.id;
+  let keys = (await kvGet(KEY_STORE, [])) || [];
+  if (!keys.length && cfg.service === s.id && cfg.key) keys = [{ name: '默认', key: cfg.key }];
+  const body = el(`<div>
+    ${s.site ? `<div class="card" style="padding:10px 12px;margin-bottom:12px"><div class="muted" style="font-size:12px;line-height:1.7">📌 ${esc(s.desc)}${s.site ? ` <a href="${esc(s.site)}" target="_blank" rel="noopener" style="color:var(--primary)">官网 ↗</a>` : ''}</div></div>` : ''}
+    <div style="font-size:13px;font-weight:700;margin-bottom:8px">API Key（可保存多个）</div>
+    <div class="col gap8" data-role="keys"></div>
+    <button class="btn btn-sm" data-a="addkey" style="margin:8px 0 10px">＋ 添加 Key</button>
+    <div data-v="editor" style="display:none;margin-bottom:10px">
+      ${formRow('Key 名称', '<input class="input" data-f="kname" placeholder="如：主力">')}
+      ${formRow('API Key', '<input class="input" data-f="key" type="password" placeholder="' + esc(s.keyHint || 'Key') + '" autocomplete="off">')}
+    </div>
+    ${s.needUrl ? formRow('实例地址', `<input class="input" data-f="url" value="${esc(cfg.service === s.id ? cfg.url || '' : '')}" placeholder="https://searx.example.com">`) : ''}
+    ${!s.needUrl ? formRow('自定义接口地址（可选）', `<input class="input" data-f="api" placeholder="留空用官方接口">`) : ''}
+    <div data-v="result" style="margin-bottom:10px"></div>
+  </div>`);
+  const keysBox = $('[data-role="keys"]', body);
+  const editor = $('[data-v="editor"]', body);
+  const result = $('[data-v="result"]', body);
+  const maskKey = (k) => { const x = String(k || ''); if (x.length <= 8) return '****'; return x.slice(0, 3) + '...' + x.slice(-4); };
+  const renderKeys = () => {
+    keysBox.innerHTML = keys.length ? keys.map((k2, i) => `
+      <div class="row gap8" style="align-items:center;padding:8px 10px;background:var(--bg-card);border:1px solid var(--border);border-radius:10px">
+        <span class="search-svc-radio" style="flex:none;cursor:pointer" data-rid="${i}">${cfg.service === s.id && cfg.key === k2.key ? icon('check') : ''}</span>
+        <div class="grow" style="min-width:0">
+          <div style="font-size:13px;font-weight:600" class="ellipsis">${esc(k2.name || '未命名')} ${cfg.service === s.id && cfg.key === k2.key ? '<span class="tag tag-green" style="font-size:10px">当前</span>' : ''}</div>
+          <div class="muted" style="font-size:11px">${esc(maskKey(k2.key))}</div>
+        </div>
+        <span style="cursor:pointer;color:var(--danger)" data-del="${i}">×</span>
+      </div>`).join('') : '<div class="muted" style="font-size:12px;padding:4px 2px">还没有 Key，点「＋ 添加 Key」</div>';
+    $$('[data-rid]', keysBox).forEach((r2) => r2.onclick = async () => {
+      const k2 = keys[+r2.dataset.rid];
+      if (k2) await setSearchConfig({ service: s.id, key: k2.key, url: ($('[data-f="url"]', body) || {}).value || '' });
+      renderKeys(); toast('已切换为当前 Key', 'ok');
+    });
+    $$('[data-del]', keysBox).forEach((d2) => d2.onclick = async () => {
+      keys.splice(+d2.dataset.del, 1);
+      await kvSet(KEY_STORE, keys);
+      renderKeys();
+    });
+  };
+  renderKeys();
+  $('[data-a="addkey"]', body).onclick = () => { editor.style.display = 'block'; $('[data-f="kname"]', body).value = ''; $('[data-f="key"]', body).value = ''; $('[data-f="key"]', body).focus(); };
+  const m = modal({
+    title: '配置 ' + s.name, body,
+    footer: `<button class="btn grow" data-a="cancel">取消</button><button class="btn grow" data-a="save">保存</button><button class="btn btn-primary grow" data-a="verify">保存并验证</button>${s.createUrl ? `<a class="btn" href="${esc(s.createUrl)}" target="_blank" rel="noopener" style="text-decoration:none">去创建 ↗</a>` : ''}`,
+  });
+  $('[data-a="cancel"]', m.mask).onclick = m.close;
+  const doSave = async (verify) => {
+    const kname = ($('[data-f="kname"]', body) || {}).value || '默认';
+    const k = ($('[data-f="key"]', body) || {}).value || '';
+    const url = ($('[data-f="url"]', body) || {}).value || '';
+    if (s.needUrl && !url.trim()) return toast('请填写实例地址');
+    if (!s.needUrl && !k.trim() && s.id !== 'jina') return toast('请填写 API Key');
+    if (k.trim()) {
+      keys.push({ name: kname, key: k.trim() });
+      await kvSet(KEY_STORE, keys);
+    }
+    await setSearchConfig({ service: s.id, key: (keys[keys.length - 1] || {}).key || k.trim(), url });
+    if (!verify) { m.close(); toast('已保存（未验证）', 'ok'); return; }
+    const btn = $('[data-a="verify"]', m.mask); btn.disabled = true; btn.textContent = '验证中…';
+    try {
+      const items = await searchWeb('ThirdHub', 3);
+      result.innerHTML = `<div style="color:var(--primary)">验证通过：返回 ${(items || []).length} 条结果，已保存</div>`;
+      setTimeout(() => { m.close(); toast('验证通过，已保存', 'ok'); }, 500);
+    } catch (e) {
+      result.innerHTML = `<div style="color:var(--danger)">验证失败：${esc(e.message)}</div>`;
+      btn.disabled = false; btn.textContent = '保存并验证';
+    }
+  };
+  $('[data-a="save"]', m.mask).onclick = () => doSave(false);
+  $('[data-a="verify"]', m.mask).onclick = () => doSave(true);
 }
 
 /* ================= MCP 添加弹窗 ================= */

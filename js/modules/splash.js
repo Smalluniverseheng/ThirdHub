@@ -32,5 +32,11 @@ export async function maybeSplash() {
     setTimeout(() => sp.remove(), 450);
   };
   sp.onclick = close;
-  setTimeout(close, 2000);
+  /* v5.6：真实加载等待——前端 boot 完成（__TH_READY）后才结束动画，最长 6 秒兜底 */
+  const pollReady = () => {
+    if (window.__TH_READY) return close();
+    setTimeout(pollReady, 120);
+  };
+  pollReady();
+  setTimeout(close, 6000);
 }

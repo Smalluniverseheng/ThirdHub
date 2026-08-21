@@ -1,6 +1,15 @@
 /* ===== ThirdHub changelog.js — 版本更新日志（发版时在末尾追加） ===== */
 export const CHANGELOG = [
   {
+    version: '6.1',
+    date: '2026-08-22',
+    items: [
+      '官方仓库扩容：一键取用 899 个云端书源（868 个阅读APP书源 + 32 个 Venera 漫画图源 + 番茄小说连接器），覆盖小说/漫画/有声/视频/音乐',
+      '书源适配：Venera 图源禁漫天堂修复封面防盗链（onThumbnailLoad）；新增本地图片中转代理脚本（backend/proxy-server.js）供防盗链图源使用',
+      '云端激活：Supabase 表与 RPC 全量就绪（社区/设备日志/限时免费模型/官方仓库/后台登录）',
+    ],
+  },
+  {
     version: '1.0',
     date: '2026-08-06',
     items: [

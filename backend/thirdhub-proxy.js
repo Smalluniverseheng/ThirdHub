@@ -156,6 +156,12 @@ async function handleProxy(request) {
     'Referer': targetUrl.origin + '/',
   };
 
+  /* 支持 GET 的 ?headers=<JSON>（防盗链图源：JM 等需要 Referer/UA/X-Requested-With） */
+  try {
+    const hq = reqUrl.searchParams.get('headers');
+    if (hq) Object.assign(headers, JSON.parse(hq));
+  } catch (e) {}
+
   if (request.method === 'POST') {
     try {
       const payload = await request.json();

@@ -427,62 +427,6 @@ function showAvatarPicker(body, u) {
       st.showStorageManagement();
     };
 
-    $('[data-a="cloud"]', box).onclick = async () => {
-      const url = await kvGet('cloud:url', '');
-      const key = await kvGet('cloud:key', '');
-      const body = el(`<div>
-        ${formRow('Supabase URL', `<input class="input" data-f="url" value="${esc(url)}" placeholder="https://xxx.supabase.co">`)}
-        ${formRow('Anon Key', `<input class="input" data-f="key" value="${esc(key)}" placeholder="eyJ...">`)}
-        <div class="muted">配置后重启应用生效。留空则保持纯本地模式。</div>
-      </div>`);
-      const m = modal({
-        title: '云端同步配置', body,
-        footer: '<button class="btn grow" data-a="cancel">取消</button><button class="btn btn-primary grow" data-a="save">保存</button>',
-      });
-      $('[data-a="cancel"]', m.mask).onclick = m.close;
-      $('[data-a="save"]', m.mask).onclick = async () => {
-        await kvSet('cloud:url', $('[data-f="url"]', body).value.trim());
-        await kvSet('cloud:key', $('[data-f="key"]', body).value.trim());
-        m.close();
-        toast('已保存，即将刷新', 'ok');
-        setTimeout(() => location.reload(), 800);
-      };
-    };
-
-    $('[data-a="backup"]', box).onclick = async () => {
-      const v = await actionSheet('本地备份 / 恢复', [
-        { label: '导出备份（JSON）', value: 'export', icon: 'download' },
-        { label: '从备份恢复', value: 'import', icon: 'import' },
-      ]);
-      if (v === 'export') {
-        const data = {};
-        for (const store of ['kv', 'sources', 'shelf', 'history', 'favorites', 'chats']) {
-          data[store] = await db.all(store);
-        }
-        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = `thirdhub-backup-${new Date().toISOString().slice(0, 10)}.json`;
-        a.click();
-        toast('备份已导出', 'ok');
-      } else if (v === 'import') {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = '.json';
-        input.onchange = async () => {
-          try {
-            const data = JSON.parse(await input.files[0].text());
-            for (const [store, rows] of Object.entries(data)) {
-              if (!['kv', 'sources', 'shelf', 'history', 'favorites', 'chats'].includes(store)) continue;
-              for (const row of rows) await db.put(store, row);
-            }
-            toast('恢复完成，即将刷新', 'ok');
-            setTimeout(() => location.reload(), 800);
-          } catch (e) { toast('备份文件无效', 'err'); }
-        };
-        input.click();
-      }
-    };
 
     $('[data-a="cache"]', box).onclick = async () => {
       if (await confirmDialog('清理缓存', '将清空所有章节内容缓存（不影响书架和进度），确定吗？', '清理', true)) {

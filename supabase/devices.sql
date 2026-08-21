@@ -12,6 +12,7 @@ create table if not exists th_devices (
   owner uuid,                            -- 绑定用户
   secret_hash text,                      -- Agent 心跳/配对校验
   version text,
+  relay text,                            -- 公网中继 wss 地址(cloudflared quick tunnel)
   last_seen timestamptz default now(),
   created_at timestamptz default now()
 );
@@ -48,16 +49,16 @@ do $$ begin
 end $$;
 
 -- Agent 注册/心跳（校验 secret）
-create or replace function device_ping(p_device_id text, p_secret_hash text, p_name text, p_lan_ips jsonb, p_public_ip text, p_version text)
+create or replace function device_ping(p_device_id text, p_secret_hash text, p_name text, p_lan_ips jsonb, p_public_ip text, p_version text, p_relay text default null)
 returns jsonb language plpgsql security definer as $$
 declare v_status text; v_owner uuid;
 begin
   if p_device_id is null or p_secret_hash is null then return jsonb_build_object('ok', false, 'reason', 'bad args'); end if;
-  insert into th_devices (device_id, name, secret_hash, lan_ips, public_ip, version, last_seen)
-  values (p_device_id, coalesce(p_name, ''), p_secret_hash, coalesce(p_lan_ips, '[]'::jsonb), coalesce(p_public_ip, ''), coalesce(p_version, ''), now())
+  insert into th_devices (device_id, name, secret_hash, lan_ips, public_ip, version, relay, last_seen)
+  values (p_device_id, coalesce(p_name, ''), p_secret_hash, coalesce(p_lan_ips, '[]'::jsonb), coalesce(p_public_ip, ''), coalesce(p_version, ''), coalesce(p_relay, ''), now())
   on conflict (device_id) do update
     set name = excluded.name, lan_ips = excluded.lan_ips, public_ip = excluded.public_ip,
-        version = excluded.version, last_seen = now(),
+        version = excluded.version, relay = coalesce(excluded.relay, th_devices.relay), last_seen = now(),
         secret_hash = case when th_devices.status = 'unbound' then excluded.secret_hash else th_devices.secret_hash end;
   select status, owner into v_status, v_owner from th_devices where device_id = p_device_id;
   return jsonb_build_object('ok', true, 'status', v_status, 'owner', v_owner);
@@ -86,5 +87,6 @@ begin
 end; $$;
 
 grant execute on function device_ping(text, text, text, jsonb, text, text) to anon, authenticated, service_role;
+grant execute on function device_ping(text, text, text, jsonb, text, text, text) to anon, authenticated, service_role;
 grant execute on function device_pair_claim(text, text) to anon, authenticated, service_role;
 grant execute on function device_unbind(text, text) to anon, authenticated, service_role;

@@ -509,7 +509,7 @@ create table if not exists th_prompts (
   id bigint generated always as identity primary key,
   title text not null,
   category text default '✍️ 写作文案',
-  desc text,
+  "desc" text,
   prompt text not null,
   active boolean default true,
   sort int default 0,
@@ -525,11 +525,11 @@ returns jsonb language plpgsql security definer as $$
 begin
   if not admin_check(p_pwd) then raise exception 'unauthorized'; end if;
   if p_id is null then
-    insert into th_prompts (title, category, desc, prompt, active, sort)
+    insert into th_prompts (title, category, "desc", prompt, active, sort)
     values (coalesce(p_title, ''), coalesce(p_category, '✍️ 写作文案'), coalesce(p_desc, ''), coalesce(p_prompt, ''), coalesce(p_active, true), coalesce(p_sort, 0));
   else
     update th_prompts set title = coalesce(p_title, title), category = coalesce(p_category, category),
-      desc = coalesce(p_desc, desc), prompt = coalesce(p_prompt, prompt),
+      "desc" = coalesce(p_desc, "desc"), prompt = coalesce(p_prompt, prompt),
       active = coalesce(p_active, active), sort = coalesce(p_sort, sort)
     where id = p_id;
   end if;

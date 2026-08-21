@@ -7,16 +7,30 @@ const PUBLIC_PROXIES = [
   (u) => 'https://corsproxy.io/?url=' + encodeURIComponent(u),
 ];
 
-/* v2.7：默认中转改为本站同源 /api/proxy（Pages Worker 纯转发中继，无跨域问题）；
-   旧版 workers.dev 独立中转已下线，存量配置自动迁移 */
-const DEFAULT_BACKEND = '/api/proxy';
-const LEGACY_BACKENDS = ['https://thirdhub-proxy.1829487897.workers.dev/', 'https://thirdhub-proxy.1829487897.workers.dev'];
+/* v6.1：默认无后端；优先自动探测本机中转（backend/proxy-server.js，防盗链图源用），
+   探测不到再回退用户配置。旧版 /api/proxy 与 workers.dev 中转均已下线。 */
+const DEFAULT_BACKEND = '';
+const LEGACY_BACKENDS = ['https://thirdhub-proxy.1829487897.workers.dev/', 'https://thirdhub-proxy.1829487897.workers.dev', '/api/proxy'];
+const LOCAL_PROXY = 'http://127.0.0.1:8700';
+let _localProbe = null;
+async function probeLocalProxy() {
+  const now = Date.now();
+  if (_localProbe && now - _localProbe.ts < 30000) return _localProbe.url;
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 700);
+    const r = await fetch(LOCAL_PROXY + '/', { signal: ctrl.signal });
+    clearTimeout(t);
+    if (r.ok) { _localProbe = { ts: now, url: LOCAL_PROXY }; return LOCAL_PROXY; }
+  } catch (e) {}
+  _localProbe = { ts: now, url: null };
+  return null;
+}
 export async function getBackendProxy() {
+  const local = await probeLocalProxy();
+  if (local) return local;
   let v = await kvGet('proxy:backend', DEFAULT_BACKEND);
-  if (!v || LEGACY_BACKENDS.includes(v)) {
-    v = DEFAULT_BACKEND;
-    await kvSet('proxy:backend', v);
-  }
+  if (LEGACY_BACKENDS.includes(v)) { v = DEFAULT_BACKEND; await kvSet('proxy:backend', v); }
   return v;
 }
 export async function setBackendProxy(url) { await kvSet('proxy:backend', (url || '').trim()); }

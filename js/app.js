@@ -1,5 +1,5 @@
 /* ===== ThirdHub app.js — 应用入口 / 路由 / 初始化 ===== */
-export const APP_VERSION = '4.8';
+export const APP_VERSION = '4.9';
 window.__TH_CSS_V = APP_VERSION; /* v2.7：CSS 按需加载的版本戳 */
 
 import { $, $$, icon, toast, loadCss } from './ui.js';
@@ -258,6 +258,10 @@ async function boot() {
 
   /* v1.7：应用锁门禁（开启后需先解锁才能进入，本地判定、快速） */
   try { const { gateIfLocked } = await timedImport('./modules/applock.js'); await gateIfLocked(); } catch (e) {}
+
+  /* v4.9：引导页前先初始化云端 —— 引导页登录表单依赖 hasCloud() 判断，
+     原顺序在首屏后才 initCloud，导致新用户登录页永远显示「云端未配置」 */
+  try { await initCloud(); } catch (e) { console.warn('cloud 初始化失败', e); }
 
   /* 首次进入：介绍 → 登录（可跳过）→ 新用户使用目的 */
   const { maybeOnboard } = await timedImport('./modules/onboarding.js');

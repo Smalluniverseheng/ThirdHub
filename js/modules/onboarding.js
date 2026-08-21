@@ -8,7 +8,7 @@ import { kvGet, kvSet } from '../store.js';
 import { signIn } from '../auth.js';
 import { hasCloud } from '../supabase.js';
 import { BOARDS, MAX_TABS } from '../boards.js';
-import { vendorIcon } from '../ai/vendors.js';
+import { vendorIconLocal } from '../ai/vendors.js'; /* v4.9：首屏用本地图标，避免 CDN 加载慢/错位 */
 import { PROVIDERS } from '../ai/ai-models.js';
 import { showRegisterPage } from './register-page.js';
 
@@ -63,7 +63,7 @@ export async function maybeOnboard() {
       const ring = (vendors, r, dur, rev) => `
         <div class="obl-ring" style="--r:${r}px;--dur:${dur}s">
           ${vendors.map((v, i) => `
-            <span class="obl-badge ${rev ? 'rev' : ''}" style="--a0:${(360 / vendors.length) * i}deg;--r:${r}px;--dur:${dur}s">${vendorIcon(v)}</span>`).join('')}
+            <span class="obl-badge ${rev ? 'rev' : ''}" style="--a0:${(360 / vendors.length) * i}deg;--r:${r}px;--dur:${dur}s">${vendorIconLocal(v)}</span>`).join('')}
         </div>`;
       // 跑马灯内容（模型名，双份无缝循环）
       const marqueeModels = [];
@@ -129,7 +129,7 @@ export async function maybeOnboard() {
             <div class="obl-lib">
               ${libVendors.map((p) => `
                 <div class="obl-lib-row">
-                  <div class="obl-lib-v">${vendorIcon(p.id)}<span class="obl-lib-name">${esc(p.name)}</span><span class="obl-lib-count">${(p.models || []).length + (p.image || []).length + (p.video || []).length}</span></div>
+                  <div class="obl-lib-v">${vendorIconLocal(p.id)}<span class="obl-lib-name">${esc(p.name)}</span><span class="obl-lib-count">${(p.models || []).length + (p.image || []).length + (p.video || []).length}</span></div>
                   <div class="obl-lib-models">${[...(p.models || []), ...(p.image || []), ...(p.video || [])].slice(0, 6).map((m) => `<span class="obl-chip sm">${esc(m)}</span>`).join('')}</div>
                 </div>`).join('')}
             </div>
@@ -171,13 +171,16 @@ export async function maybeOnboard() {
     }
 
     /* ---------- ② 登录页（可跳过） ---------- */
-    function stepAuth() {
+    async function stepAuth() {
+      /* v4.9：进入登录页时再补一次云端初始化（配置已就绪则直接可用，弱网失败仍可游客进入） */
+      try { const { initCloud } = await import('../supabase.js'); await initCloud(); } catch (e) {}
+      const cloudOk = hasCloud();
       ov.innerHTML = `
         <div class="ob-inner">
           <div class="ob-logo">${icon('rocket')}</div>
           <div class="ob-title">登录 ThirdHub</div>
           <div class="ob-desc">登录后可使用云端同步、会员存储与多设备互通。<br>也可以跳过，先以游客身份体验。</div>
-          ${hasCloud() ? `
+          ${cloudOk ? `
           <div class="ob-form">
             <input class="input" type="email" data-f="email" placeholder="邮箱">
             <input class="input" type="password" data-f="pwd" placeholder="密码（至少 6 位）">

@@ -80,4 +80,22 @@ export function vendorIcon(id, opts = {}) {
 
 export function vendorIconRaw(id) { return vendorIcon(id, { raw: true }); }
 
+/* v4.9：本地图标（零网络请求）——内嵌字形 data URI 优先，无字形则品牌色字母徽标。
+   供 onboarding 等首屏场景使用：外网 CDN 图标加载慢且失败要逐级回退，会导致图标闪烁、错位。 */
+export function vendorIconLocal(id, opts = {}) {
+  const raw = !!(opts && opts.raw);
+  const custom = CUSTOM_ICONS[id];
+  if (custom) {
+    return '<span class="vendor-ico brand has-img custom-icon self-bg"><img src="' + escAttr(custom) + '" alt=""></span>';
+  }
+  const b = BRANDS[id] || BRANDS.custom;
+  if (b.emb && PATHS[b.emb]) {
+    const src = embDataUri(id, b);
+    const cb = EMB_DARK[id] || b.color;
+    return '<span class="vendor-ico brand self-bg has-img" data-cb="' + cb + '"><img src="' + src + '" alt="" style="width:100%;height:100%"></span>';
+  }
+  if (raw) return '<span class="vendor-ico brand raw"><span class="brand-letter" style="color:' + b.color + '">' + b.letter + '</span></span>';
+  return '<span class="vendor-ico brand" style="background:' + b.color + '"><span class="brand-letter" style="color:#fff">' + b.letter + '</span></span>';
+}
+
 export const VENDOR_ICONS = {};

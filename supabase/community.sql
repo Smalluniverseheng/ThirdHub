@@ -668,3 +668,79 @@ end; $$;
 
 -- 刷新 PostgREST 缓存（让新签名立即生效）
 select pg_notify('pgrst', 'reload schema');
+
+
+-- ============================================================
+-- v6.0 官方仓库统一修复（并行会话改动导致的断联修复）
+--   1. 用户端 repo_* 函数重建：参数名统一为 pwd（与前端 category.js 调用一致，
+--      此前线上只有 repo_upsert(p_pwd,p_items) 导致前端分享 404）
+--   2. 密码统一存 th_kv.repo_pwd（sha256）；th_repo_meta.pass_md5 同步保留（兼容旧新机制）
+--   3. 管理员（th_profiles.role='admin'）免密取用/分享/改密
+--   4. 数据表统一为 th_official_repo（管理端 admin_repo_* 与用户端 repo_* 共用）
+--   说明：如已有旧数据在 th_repo 表，请先执行：
+--     insert into th_official_repo (id,name,fmt,category,data,updated_at)
+--     select id,name,fmt,category,data,updated_at from th_repo
+--     on conflict (id) do nothing;
+-- ============================================================
+drop function if exists repo_check(text);
+drop function if exists repo_list(text);
+drop function if exists repo_upsert(text, jsonb);
+drop function if exists repo_set_password(text, text);
+
+create or replace function repo_check(pwd text)
+returns boolean language plpgsql security definer as $$
+declare v_uid uuid;
+begin
+  -- 管理员免密
+  v_uid := nullif(current_setting('request.jwt.claim.sub', true), '')::uuid;
+  if exists (select 1 from th_profiles p where p.id = v_uid and p.role = 'admin') then
+    return true;
+  end if;
+  return exists (select 1 from th_kv where key = 'repo_pwd' and value = encode(sha256(convert_to(coalesce(pwd, ''), 'utf8')), 'hex'));
+end; $$;
+
+create or replace function repo_list(pwd text)
+returns jsonb language plpgsql security definer as $$
+declare v_rows jsonb;
+begin
+  if not repo_check(pwd) then raise exception '密码错误'; end if;
+  select coalesce(jsonb_agg(row_to_json(x)::jsonb), '[]'::jsonb) into v_rows
+  from (select id, name, fmt, category, data, updated_at from th_official_repo order by updated_at desc) x;
+  return v_rows;
+end; $$;
+
+create or replace function repo_upsert(pwd text, items jsonb)
+returns int language plpgsql security definer as $$
+declare v_cnt int := 0; it jsonb;
+begin
+  if not repo_check(pwd) then raise exception '密码错误'; end if;
+  for it in select * from jsonb_array_elements(coalesce(items, '[]'::jsonb)) loop
+    insert into th_official_repo (id, name, fmt, category, data, updated_at)
+    values (it->>'id', it->>'name', it->>'fmt', it->>'category', it->'data', now())
+    on conflict (id) do update
+      set name = excluded.name, fmt = excluded.fmt, category = excluded.category,
+          data = excluded.data, updated_at = now();
+    v_cnt := v_cnt + 1;
+  end loop;
+  return v_cnt;
+end; $$;
+
+create or replace function repo_set_password(pwd text, new_pwd text)
+returns boolean language plpgsql security definer as $$
+begin
+  if not repo_check(pwd) then raise exception '密码错误'; end if;
+  if new_pwd is null or length(new_pwd) < 4 then raise exception '密码至少4位'; end if;
+  insert into th_kv (key, value) values ('repo_pwd', encode(sha256(convert_to(new_pwd, 'utf8')), 'hex'))
+  on conflict (key) do update set value = excluded.value;
+  insert into th_repo_meta (id, pass_md5) values ('main', md5(new_pwd))
+  on conflict (id) do update set pass_md5 = excluded.pass_md5;
+  return true;
+end; $$;
+
+grant execute on function repo_check(text) to anon, authenticated;
+grant execute on function repo_list(text) to anon, authenticated;
+grant execute on function repo_upsert(text, jsonb) to anon, authenticated;
+grant execute on function repo_set_password(text, text) to anon, authenticated;
+
+-- 刷新 PostgREST 缓存（让新签名立即生效）
+select pg_notify('pgrst', 'reload schema');

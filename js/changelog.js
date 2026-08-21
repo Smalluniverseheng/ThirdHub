@@ -1,6 +1,14 @@
 /* ===== ThirdHub changelog.js — 版本更新日志（发版时在末尾追加） ===== */
 export const CHANGELOG = [
   {
+    version: '6.5',
+    date: '2026-08-22',
+    items: [
+      '运行模式重构：直连 / 后端两模式一键切换；切换到后端模式时自动把前端已配置的全部厂商 Key 同步到设备（DSH 支持 OpenAI 兼容端点，不再局限于 DeepSeek）；切换模型时设备同步联动',
+      '修复一批运行时报错：欢迎卡片渲染、云端同步 kvGet、个人页空节点、社区帖子详情时序、Supabase 多客户端实例',
+    ],
+  },
+  {
     version: '6.4',
     date: '2026-08-22',
     items: [

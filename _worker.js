@@ -14,7 +14,7 @@ const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 
 const MEMBER_LEVELS = ['planet', 'star', 'galaxy', 'universe'];
 const VERSION = '0.1.0';
-const APP_LATEST = '6.4'; /* v5.3：最新版号（发版时同步此处），供前端「检查更新」对比 */
+const APP_LATEST = '6.5'; /* v5.3：最新版号（发版时同步此处），供前端「检查更新」对比 */
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',

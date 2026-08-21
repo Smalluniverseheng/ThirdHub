@@ -519,7 +519,7 @@ export async function renderAIChat(page) {
   const rmRow = $('[data-a="runmode-row"]', page);
   if (rmRow) rmRow.onclick = () => openRunModePanel(page);
   syncRunModeSub();
-  on('compute:status', () => syncRunModeSub());
+  on('compute:status', (s) => { if (s && s.status === 'online') flushPendingLocal(); syncRunModeSub(); });
   $('[data-a="voice"]', page).onclick = () => enterVoiceBar(page);
   $('[data-a="kb"]', page).onclick = () => exitVoiceBar(page);
   bindHoldToTalk(page);
@@ -1707,6 +1707,31 @@ async function syncAllProviderKeys(deviceId) {
 }
 
 
+/* v6.9：断联自动排队 + 重连后自动补发（衔接对话，无需手动操作） */
+async function queueLocalMessage(page, text) {
+  const list = (await kvGet('ai:pending-local', [])) || [];
+  list.push({ text, ts: Date.now() });
+  await kvSet('ai:pending-local', list);
+  try {
+    appendMessage(page, { role: 'user', content: text, ts: Date.now() }, -1);
+    const am = appendMessage(page, { role: 'assistant', content: '', ts: Date.now() }, -2);
+    am.bubble.innerHTML = '<div class="muted" style="font-size:12px;padding:10px 12px">⏳ 设备暂离，消息已自动排队；重连后自动发送并衔接对话</div>';
+    scrollBottom(page);
+  } catch (e) {}
+  toast('设备暂离，消息已排队，重连后自动发送', 'ok');
+}
+async function flushPendingLocal() {
+  const list = (await kvGet('ai:pending-local', [])) || [];
+  if (!list.length || !localMode.on || !localMode.deviceId) return;
+  const { getStatus } = await import('./compute.js');
+  if (getStatus(localMode.deviceId) !== 'online') return;
+  await kvSet('ai:pending-local', []);
+  toast('设备已重连，自动补发 ' + list.length + ' 条排队消息', 'ok');
+  for (const item of list) {
+    if (lastPage) { try { sendLocalMessage(lastPage, item.text); } catch (e) {} }
+  }
+}
+
 /* v5.0：本地算力模式 —— 消息经 WebSocket 发到设备端 DSH，流式渲染 */
 async function sendLocalMessage(page, text) {
   const { getStatus, sendToDevice, listDevices, connectDevice } = await import('./compute.js');
@@ -1714,8 +1739,9 @@ async function sendLocalMessage(page, text) {
     const dev = (listDevices() || []).find((d) => d.id === localMode.deviceId);
     if (dev && (dev.auto || dev.paired)) {
       const rr = await connectDevice(dev, { silent: true });
-      if (!rr.ok) { toast('后端设备离线：' + (rr.error || '连接失败'), 'err'); return; }
-    } else { toast('后端设备离线，请先在「后端」页连接', 'err'); return; }
+      if (rr.ok) { /* 重连成功,继续发送 */ }
+      else { queueLocalMessage(page, text); return; }
+    } else { queueLocalMessage(page, text); return; }
   }
   const clean = text.trim();
   if (!clean) return;

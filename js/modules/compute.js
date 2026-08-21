@@ -31,16 +31,47 @@ export function sendToDevice(deviceId, msg) {
   return true;
 }
 
+/* v6.9：DSH 工作台 —— 通过 WS 转发 DSH Web API(client-request 信封) */
+export function dshCall(deviceId, path, payload = {}) {
+  const c = wsPool.get(deviceId);
+  if (!c || c.status !== 'online' || !c.ws || c.ws.readyState !== 1) return Promise.reject(new Error('设备离线'));
+  return new Promise((resolve, reject) => {
+    const id = 'dsh-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    const timer = setTimeout(() => reject(new Error('DSH 请求超时')), 30000);
+    const off = onAgentMessage((msg, did) => {
+      if (did !== deviceId || msg.id !== id) return;
+      clearTimeout(timer); off();
+      if (msg.type === 'dsh_result') resolve(msg.payload);
+      else if (msg.type === 'error') reject(new Error((msg.payload && msg.payload.message) || 'DSH 错误'));
+    });
+    c.ws.send(JSON.stringify({ type: 'dsh', id, payload: { path, method: 'POST', payload } }));
+  });
+}
+export function dshGet(deviceId, path) {
+  const c = wsPool.get(deviceId);
+  if (!c || c.status !== 'online' || !c.ws || c.ws.readyState !== 1) return Promise.reject(new Error('设备离线'));
+  return new Promise((resolve, reject) => {
+    const id = 'dsh-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    const timer = setTimeout(() => reject(new Error('DSH 请求超时')), 30000);
+    const off = onAgentMessage((msg, did) => {
+      if (did !== deviceId || msg.id !== id) return;
+      clearTimeout(timer); off();
+      if (msg.type === 'dsh_result') resolve(msg.payload);
+      else if (msg.type === 'error') reject(new Error((msg.payload && msg.payload.message) || 'DSH 错误'));
+    });
+    c.ws.send(JSON.stringify({ type: 'dsh', id, payload: { path, method: 'GET' } }));
+  });
+}
+
 /* 连接设备：返回 Promise<{ok, info?}> */
-export async function connectDevice(dev, { silent = false } = {}) {
+function tryConnect(dev, timeoutMs) {
+  const url = dev.relay ? String(dev.relay).trim() : ('ws://' + dev.host + ':' + dev.port);
   const old = wsPool.get(dev.id);
   if (old && old.ws) { try { old.ws.close(); } catch (e) {} }
-  const url = dev.relay ? String(dev.relay).trim() : ('ws://' + dev.host + ':' + dev.port);
   const ws = new WebSocket(url);
   const c = { ws, status: 'connecting', info: null };
   wsPool.set(dev.id, c);
-
-  const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('连接超时（请确认后端已启动、地址正确）')), 8000));
+  const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('连接超时（请确认后端已启动、地址正确）')), timeoutMs));
   const authResult = new Promise((resolve, reject) => {
     ws.onopen = () => {
       ws.send(JSON.stringify({ type: 'auth', action: 'login', id: 'auth-' + Date.now(), payload: { password: dev.password || '' } }));
@@ -62,19 +93,34 @@ export async function connectDevice(dev, { silent = false } = {}) {
       emit('compute:status', { id: dev.id, status: 'offline' });
     };
   });
-  try {
-    const info = await Promise.race([authResult, timeout]);
+  return Promise.race([authResult, timeout]).then((info) => {
     c.status = 'online';
     c.info = info;
     emit('compute:status', { id: dev.id, status: 'online', info });
-    if (!silent) toast('已连接 ' + (dev.name || dev.host));
     return { ok: true, info };
-  } catch (e) {
+  }).catch((e) => {
     c.status = 'error';
     try { ws.close(); } catch (err) {}
     emit('compute:status', { id: dev.id, status: 'error' });
     return { ok: false, error: e.message };
+  });
+}
+
+/* v6.9：局域网优先 —— 有公网中继时先试局域网(短超时),失败自动切公网,节省中转额度 */
+export async function connectDevice(dev, { silent = false } = {}) {
+  const preferLan = dev.relay && dev.host && !String(dev.relay).startsWith('ws://');
+  if (preferLan) {
+    const lanDev = Object.assign({}, dev, { relay: '' });
+    const r1 = await tryConnect(lanDev, 5000);
+    if (r1.ok) { if (!silent) toast('已连接 ' + (dev.name || dev.host) + '（局域网）'); return r1; }
+    if (!silent) toast('局域网直连失败，自动切换公网中继…');
+    const r2 = await tryConnect(dev, 8000);
+    if (r2.ok && !silent) toast('已通过公网中继连接 ' + (dev.name || dev.host));
+    return r2;
   }
+  const r = await tryConnect(dev, 8000);
+  if (r.ok && !silent) toast('已连接 ' + (dev.name || dev.host));
+  return r;
 }
 
 export function disconnectDevice(deviceId) {
@@ -249,6 +295,7 @@ export async function renderCompute(page) {
       </div>
       <div class="cp-actions">
         ${st === 'online' ? `<button class="btn btn-sm" data-a="disc">断开</button>` : `<button class="btn btn-sm btn-primary" data-a="conn">连接</button>`}
+        ${st === 'online' ? '<button class="btn btn-sm btn-primary" data-a="dsh">🖥️ DSH 工作台</button>' : ''}
         <button class="btn btn-sm" data-a="edit">编辑</button>
         <button class="btn btn-sm" data-a="del">删除</button>
       </div>
@@ -294,6 +341,12 @@ export async function renderCompute(page) {
     $$('[data-a="disc"]', page).forEach((b) => b.onclick = () => {
       const dev = devices.find((d) => d.id === b.closest('[data-dev]').dataset.dev);
       disconnectDevice(dev.id); render();
+    });
+    $$('[data-a="dsh"]', page).forEach((b) => b.onclick = async () => {
+      const dev = devices.find((d) => d.id === b.closest('[data-dev]').dataset.dev);
+      if (!dev) return;
+      const { renderDshConsole } = await import('./dsh-console.js');
+      renderDshConsole(page, dev.id);
     });
     $$('[data-a="del"]', page).forEach((b) => b.onclick = async () => {
       const dev = devices.find((d) => d.id === b.closest('[data-dev]').dataset.dev);

@@ -1,0 +1,49 @@
+-- ============================================================
+-- ThirdHub 社区模块数据库（v4.9）
+-- 执行方式：Supabase Dashboard → SQL Editor → 粘贴运行（全选执行）
+-- 或：Supabase PAT（Personal Access Token）→ 通过 Management API 执行
+-- ============================================================
+
+-- 帖子表
+create table if not exists community_posts (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid not null,
+  nickname text,
+  category text default 'share',            -- share 分享 | help 求助
+  content text not null,
+  related_type text,                        -- 'book' | 'ai_session' | null
+  related_id text,
+  related_title text,
+  likes int default 0,
+  created_at timestamptz default now()
+);
+
+-- 评论表
+create table if not exists community_comments (
+  id uuid default gen_random_uuid() primary key,
+  post_id uuid references community_posts on delete cascade,
+  user_id uuid not null,
+  nickname text,
+  content text not null,
+  created_at timestamptz default now()
+);
+
+create index if not exists idx_community_posts_created on community_posts (created_at desc);
+create index if not exists idx_community_comments_post on community_comments (post_id, created_at asc);
+
+-- 行级安全（RLS）：公开可读、仅本人可写
+alter table community_posts enable row level security;
+alter table community_comments enable row level security;
+
+create policy "community_posts 公开可读" on community_posts for select using (true);
+create policy "community_posts 本人可发" on community_posts for insert with check (auth.uid() = user_id);
+create policy "community_posts 本人可改" on community_posts for update using (auth.uid() = user_id);
+create policy "community_posts 本人可删" on community_posts for delete using (auth.uid() = user_id);
+
+create policy "community_comments 公开可读" on community_comments for select using (true);
+create policy "community_comments 本人可评" on community_comments for insert with check (auth.uid() = user_id);
+create policy "community_comments 本人可删" on community_comments for delete using (auth.uid() = user_id);
+
+-- 开启 Realtime（实时评论）
+alter publication supabase_realtime add table community_posts;
+alter publication supabase_realtime add table community_comments;

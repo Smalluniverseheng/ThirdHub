@@ -103,6 +103,12 @@ const NON_CHAT_RE = /embed|whisper|tts|transcri|speech|audio|dall-e|image|imagen
 export function isChatModel(m) { return !NON_CHAT_RE.test(m || ''); }
 
 let session = null;
+
+/* ---------- v5.0 本地模式（DSH 算力设备） ---------- */
+let localMode = { on: false, deviceId: null };
+const localStreams = new Map(); // msgId -> { bubble, acc, done }
+let localSubscribed = false;
+
 let currentModel = null;
 let imageModel = null;
 let videoModel = null;
@@ -120,6 +126,31 @@ let userPinned = false; // 流式期间用户上拉钉住
 const attachTexts = new Map(); // 文本附件内容（chip ref -> {name,text}）
 
 /* ================= 主渲染 ================= */
+
+/* v5.0：订阅算力设备消息（模块级，一次注册） */
+function ensureLocalSubscription() {
+  if (localSubscribed) return;
+  localSubscribed = true;
+  import('./compute.js').then(({ onAgentMessage }) => {
+    onAgentMessage((msg) => {
+      const s = localStreams.get(msg.id);
+      if (!s || s.done) return;
+      if (msg.type === 'stream_token') {
+        s.acc += msg.payload.token || '';
+        s.bubble.innerHTML = renderMarkdown(s.acc);
+        scrollBottom(document.getElementById('page-ai'));
+      } else if (msg.type === 'stream_done') {
+        s.done = true;
+        s.bubble.innerHTML = renderMarkdown(msg.payload.full_text || s.acc);
+        s.acc = msg.payload.full_text || s.acc;
+        toast('本地算力回复完成', 'ok');
+      } else if (msg.type === 'error') {
+        s.done = true;
+        s.bubble.innerHTML = '<div class="muted">⚠️ ' + esc((msg.payload && msg.payload.message) || '请求失败') + '</div>';
+      }
+    });
+  });
+}
 
 /* v4.8：全局搜索唤起 —— 在已渲染的 AI 板块中打开指定历史会话 */
 export async function openChatById(id, page) {
@@ -150,6 +181,7 @@ export async function renderAIChat(page) {
   bindPreviewCode();
 
   page.classList.add('ai-page');
+  ensureLocalSubscription();
   page.innerHTML = `
     <div class="ai-wrap" id="ai-wrap">
       <div class="ai-topbar">
@@ -163,6 +195,10 @@ export async function renderAIChat(page) {
       <div class="ai-messages" id="ai-messages"></div>
       <button class="ai-jump-btn" id="ai-jump-btn" hidden title="回到底部">${icon('arrowR')}</button>
       <div class="ai-inputbar">
+        <div class="ai-modebar" id="ai-modebar" hidden>
+          <button class="ai-mode-pill" data-a="runmode" title="切换运行模式">${icon('cpu')}<span data-role="mode-label">直连模式</span><span class="ai-mode-arrow">▾</span></button>
+          <span class="ai-mode-hint" data-role="mode-hint" hidden></span>
+        </div>
         <div class="ai-attach-strip" id="ai-attach-strip" hidden></div>
         <button class="ai-nokey-pill" id="ai-nokey" hidden><span>当前模型未配置 API Key</span><span class="ai-nokey-arrow">${icon('arrowR')}</span></button>
         <div class="ai-input-row" id="ai-input-row">
@@ -381,6 +417,59 @@ export async function renderAIChat(page) {
 
   /* ----- 发送 / 语音 ----- */
   $('[data-a="send"]', page).onclick = () => sending ? confirmStop() : sendMessage(page);
+  /* v5.0：运行模式切换（直连 / 本地算力设备） */
+  (async () => {
+    const mb = $('#ai-modebar', page);
+    if (!mb) return;
+    const renderModeBar = async () => {
+      const { listDevices, getStatus } = await import('./compute.js');
+      const devs = listDevices();
+      const label = $('[data-role="mode-label"]', mb);
+      const hint = $('[data-role="mode-hint"]', mb);
+      if (localMode.on) {
+        const d = devs.find((x) => x.id === localMode.deviceId);
+        label.textContent = '本地模式 · ' + (d ? (d.name || d.host) : '设备');
+        label.parentElement.classList.add('on');
+        const st = getStatus(localMode.deviceId);
+        hint.hidden = false;
+        hint.textContent = st === 'online' ? '已连接算力设备' : (st === 'connecting' ? '连接中…' : '设备离线，点击上方切换');
+        hint.style.color = st === 'online' ? 'var(--primary)' : 'var(--accent, #e8452c)';
+      } else {
+        label.textContent = '直连模式';
+        label.parentElement.classList.remove('on');
+        hint.hidden = true;
+      }
+    };
+    mb.hidden = false;
+    $('[data-a="runmode"]', mb).onclick = async () => {
+      const { listDevices, getStatus } = await import('./compute.js');
+      const devs = listDevices();
+      const acts = [
+        { label: '直连模式（走厂商接口）', value: 'direct', icon: localMode.on ? undefined : 'check' },
+      ];
+      devs.forEach((d) => acts.push({
+        label: '本地模式 · ' + (d.name || d.host) + (getStatus(d.id) === 'online' ? ' 🟢' : ' ⚪'),
+        value: 'local:' + d.id,
+        icon: localMode.on && localMode.deviceId === d.id ? 'check' : undefined,
+      }));
+      if (!devs.length) acts.push({ label: '（暂无设备，去「算力」添加）', value: null });
+      const v = await actionSheet('运行模式', acts);
+      if (!v) return;
+      if (v === 'direct') { localMode = { on: false, deviceId: null }; }
+      else if (v.startsWith('local:')) {
+        const id = v.slice(6);
+        localMode = { on: true, deviceId: id };
+        const st = getStatus(id);
+        if (st !== 'online') {
+          const { connectDevice } = await import('./compute.js');
+          const r = await connectDevice(devs.find((d) => d.id === id), { silent: true });
+          if (!r.ok) toast(r.error, 'err');
+        }
+      }
+      await renderModeBar();
+    };
+    await renderModeBar();
+  })();
   $('[data-a="voice"]', page).onclick = () => enterVoiceBar(page);
   $('[data-a="kb"]', page).onclick = () => exitVoiceBar(page);
   bindHoldToTalk(page);
@@ -1378,10 +1467,59 @@ function scrollBottom(page, force = false) {
 }
 
 /* ================= 发送 ================= */
+/* v5.0：本地算力模式 —— 消息经 WebSocket 发到设备端 DSH，流式渲染 */
+async function sendLocalMessage(page, text) {
+  const { getStatus, sendToDevice } = await import('./compute.js');
+  if (getStatus(localMode.deviceId) !== 'online') {
+    toast('算力设备离线，请先在「算力」页连接', 'err');
+    return;
+  }
+  const clean = text.trim();
+  if (!clean) return;
+  const ta = $('.ai-textarea', page);
+  ta.value = ''; ta.style.height = 'auto';
+  sending = true;
+  updateInputBar(page);
+
+  const msgId = 'loc-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  appendMessage(page, { role: 'user', content: clean, ts: Date.now() }, -1);
+  userPinned = false; const jb = $('#ai-jump-btn', page); if (jb) jb.hidden = true;
+
+  const am = appendMessage(page, { role: 'assistant', content: '' }, -2);
+  localStreams.set(msgId, { bubble: am.bubble, acc: '', done: false });
+  scrollBottom(page);
+
+  const ok = sendToDevice(localMode.deviceId, { type: 'chat', id: msgId, payload: { text: clean } });
+  if (!ok) {
+    sending = false;
+    localStreams.delete(msgId);
+    am.bubble.innerHTML = '<div class="muted">⚠️ 发送失败：设备连接已断开</div>';
+    toast('发送失败：设备连接已断开', 'err');
+    updateInputBar(page);
+    return;
+  }
+  /* 轮询等待完成（流式回调在模块级订阅里更新气泡） */
+  const poll = setInterval(() => {
+    const s = localStreams.get(msgId);
+    if (!s || s.done) {
+      clearInterval(poll);
+      sending = false;
+      updateInputBar(page);
+    }
+  }, 600);
+  /* 兜底超时 */
+  setTimeout(() => {
+    const s = localStreams.get(msgId);
+    if (s && !s.done) { s.done = true; clearInterval(poll); sending = false; updateInputBar(page); toast('本地算力响应超时', 'err'); }
+  }, 120000);
+}
+
 async function sendMessage(page) {
   const ta = $('.ai-textarea', page);
   let text = ta.value.trim();
   if (sending) return;
+  /* v5.0：本地算力模式分流 */
+  if (localMode.on && localMode.deviceId) return sendLocalMessage(page, text);
   const chips = $$('.ai-attach-chip', page);
   if (!text && !chips.length) return;
   if (!text) text = chips.some((c) => c.dataset.kind === 'text') ? '请阅读附件内容并回应' : '请描述这张图片';

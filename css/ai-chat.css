@@ -161,6 +161,17 @@
 .compare-head .vendor-ico { width: 20px; height: 20px; }
 
 /* 输入栏 */
+/* v5.0：运行模式条（直连 / 本地算力） */
+.ai-modebar { display: flex; align-items: center; gap: 8px; padding: 4px 2px 6px; }
+.ai-mode-pill {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 600;
+  background: var(--bg-input); color: var(--text-secondary); border: 1px solid var(--border); cursor: pointer;
+}
+.ai-mode-pill svg { width: 14px; height: 14px; }
+.ai-mode-pill.on { background: rgba(59,91,253,.12); color: var(--primary); border-color: var(--primary); }
+.ai-mode-arrow { font-size: 10px; opacity: .7; }
+.ai-mode-hint { font-size: 11.5px; }
 .ai-inputbar {
   flex-shrink: 0; padding: 8px 12px calc(10px + env(safe-area-inset-bottom));
   background: var(--bg-page);

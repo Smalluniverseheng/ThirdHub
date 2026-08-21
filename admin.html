@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#0f1117">
-<title>ThirdHub 管理后台 v1.1</title>
+<title>ThirdHub 管理后台 v1.3</title>
 <link rel="icon" href="icons/icon-192.png">
 <style>
   :root {
@@ -79,6 +79,39 @@
     .adm-head img { width: 38px; height: 38px; }
     .adm-stat-num { font-size: 17px; }
   }
+  /* ===== v1.3 侧边栏布局 / 表格 / 弹层 ===== */
+  .adm-layout { display: flex; gap: 16px; max-width: 1120px; margin: 0 auto; padding: 18px 16px 90px; }
+  .adm-side { width: 190px; flex: 0 0 auto; position: sticky; top: 18px; align-self: flex-start; }
+  .adm-side-head { display: flex; align-items: center; gap: 10px; padding: 6px 6px 14px; }
+  .adm-side-head img { width: 40px; height: 40px; border-radius: 11px; }
+  .adm-side-title { font-size: 15px; font-weight: 800; line-height: 1.3; }
+  .adm-side-nav { display: flex; flex-direction: column; gap: 3px; }
+  .adm-side-nav .adm-tab { display: flex; align-items: center; gap: 9px; width: 100%; text-align: left; padding: 9px 12px; font-size: 13px; border-radius: 10px; }
+  .adm-side-nav .adm-tab .adm-tab-ico { font-size: 15px; width: 20px; text-align: center; flex: 0 0 auto; }
+  .adm-side-foot { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); display: flex; gap: 8px; flex-wrap: wrap; }
+  .adm-main { flex: 1; min-width: 0; }
+  @media (max-width: 900px) {
+    .adm-layout { flex-direction: column; padding: 12px 10px 80px; gap: 10px; }
+    .adm-side { width: 100%; position: static; }
+    .adm-side-head { display: none; }
+    .adm-side-nav { flex-direction: row; overflow-x: auto; padding-bottom: 4px; }
+    .adm-side-nav::-webkit-scrollbar { display: none; }
+    .adm-side-nav .adm-tab { flex: 0 0 auto; width: auto; }
+    .adm-side-foot { margin-top: 0; border-top: none; }
+  }
+  .adm-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .adm-table th { text-align: left; color: var(--muted); font-size: 12px; font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  .adm-table td { padding: 6px 8px; border-bottom: 1px solid #22262f; vertical-align: middle; }
+  .adm-table .adm-input { margin-bottom: 0; padding: 6px 9px; font-size: 13px; }
+  .adm-overlay { position: fixed; inset: 0; background: rgba(5,7,12,.66); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .adm-sheet { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 18px; width: 100%; max-width: 420px; max-height: 84vh; overflow: auto; }
+  .adm-sheet-title { font-size: 16px; font-weight: 800; margin-bottom: 12px; }
+  .adm-level-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+  .adm-level-opt { border: 1px solid var(--border); background: #0d0f14; color: var(--text); border-radius: 12px; padding: 12px; cursor: pointer; text-align: left; display: flex; flex-direction: column; gap: 2px; }
+  .adm-level-opt b { font-size: 14px; color: var(--lc); }
+  .adm-level-opt span { font-size: 11px; color: var(--muted); }
+  .adm-level-opt.on { border-color: var(--lc); box-shadow: 0 0 0 1px var(--lc) inset; }
+  .adm-nick-row { display: flex; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
 </style>
 </head>
 <body>

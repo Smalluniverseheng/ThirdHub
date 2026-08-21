@@ -1,8 +1,8 @@
-/* ===== ThirdHub js/admin.js — 管理后台（v1.2） =====
+/* ===== ThirdHub js/admin.js — 管理后台（v1.3） =====
    入口 admin.html · 账号 admin · 密码由管理员在云端配置（不在此展示）
-   仪表盘 / 用户管理（等级分组·关注星标）/ 用户数据（书源·API 密钥）/ 订单管理 / 发票管理 / 会员定价 /
-   模型定价（花费估算价目·支持文件导入）/ 排行榜（综合榜云端维护）/ 系统设置（限时免费模型·历史版本）/ 意见反馈 / 收款设置
-   所有写操作经 Supabase RPC 口令校验，无需暴露 service key */
+   侧边栏导航 / 仪表盘 / 用户管理（等级弹层选择·昵称编辑与恢复·多管理员·关注星标）/ 用户数据（书源·API 密钥）/
+   订单 / 发票 / 会员定价 / 模型定价 / 排行榜（表格批量编辑）/ 限时免费模型（独立入口）/ 官方仓库 / 反馈 / 收款设置 / 历史版本
+   所有写操作经 Supabase RPC 口令校验，敏感操作需再次输入管理员密码，无需暴露 service key */
 (function () {
 'use strict';
 
@@ -12,26 +12,27 @@ var CLOUD = {
 };
 
 var LEVELS = [
-  { id: 'guest', name: '游客', color: '#9aa3b2' },
-  { id: 'satellite', name: '卫星', color: '#60a5fa' },
-  { id: 'planet', name: '行星', color: '#34d399' },
-  { id: 'star', name: '恒星', color: '#fbbf24' },
-  { id: 'galaxy', name: '星系', color: '#f472b6' },
-  { id: 'universe', name: '宇宙', color: '#a78bfa' },
+  { id: 'guest', name: '游客', color: '#9aa3b2', note: '本地为主' },
+  { id: 'satellite', name: '卫星', color: '#60a5fa', note: '入门会员' },
+  { id: 'planet', name: '行星', color: '#34d399', note: '进阶会员' },
+  { id: 'star', name: '恒星', color: '#fbbf24', note: '高级会员' },
+  { id: 'galaxy', name: '星系', color: '#f472b6', note: '尊享会员' },
+  { id: 'universe', name: '宇宙', color: '#a78bfa', note: '顶级会员' },
 ];
 var TABS = [
-  { id: 'dashboard', name: '仪表盘' },
-  { id: 'users', name: '用户管理' },
-  { id: 'userdata', name: '用户数据' },
-  { id: 'orders', name: '订单管理' },
-  { id: 'invoices', name: '发票管理' },
-  { id: 'plans', name: '会员定价' },
-  { id: 'prices', name: '模型定价' },
-  { id: 'rank', name: '排行榜' },
-  { id: 'repo', name: '官方仓库' },
-  { id: 'system', name: '系统设置' },
-  { id: 'feedback', name: '意见反馈' },
-  { id: 'paycfg', name: '收款设置' },
+  { id: 'dashboard', name: '仪表盘', icon: '📊' },
+  { id: 'users', name: '用户管理', icon: '👥' },
+  { id: 'userdata', name: '用户数据', icon: '🗂️' },
+  { id: 'orders', name: '订单管理', icon: '🧾' },
+  { id: 'invoices', name: '发票管理', icon: '🧧' },
+  { id: 'plans', name: '会员定价', icon: '💎' },
+  { id: 'prices', name: '模型定价', icon: '🏷️' },
+  { id: 'rank', name: '排行榜', icon: '🏆' },
+  { id: 'freemodels', name: '限时免费模型', icon: '🎁' },
+  { id: 'repo', name: '官方仓库', icon: '📦' },
+  { id: 'feedback', name: '意见反馈', icon: '💬' },
+  { id: 'paycfg', name: '收款设置', icon: '💰' },
+  { id: 'system', name: '系统设置', icon: '⚙️' },
 ];
 
 function $(s, el) { return (el || document).querySelector(s); }
@@ -71,6 +72,14 @@ function toggleFollow(uid) {
   var i = f.indexOf(uid);
   if (i >= 0) f.splice(i, 1); else f.push(uid);
   setFollowed(f);
+}
+
+/* 昵称原始值缓存（用于误改后一键恢复） */
+function getNickOrig(uid) { try { return JSON.parse(localStorage.getItem('th_admin_nick_orig') || '{}')[uid] || ''; } catch (e) { return ''; } }
+function setNickOrig(uid, val) {
+  var m = {}; try { m = JSON.parse(localStorage.getItem('th_admin_nick_orig') || '{}'); } catch (e) { m = {}; }
+  if (val) m[uid] = val; else delete m[uid];
+  localStorage.setItem('th_admin_nick_orig', JSON.stringify(m));
 }
 
 function loadSb() {
@@ -126,23 +135,26 @@ function renderGate() {
   $('#g-pwd').addEventListener('keydown', function (e) { if (e.key === 'Enter') doLogin(); });
 }
 
-/* ---------- 主框架 ---------- */
+/* ---------- 主框架（v1.3 左侧竖排导航） ---------- */
 function renderHome() {
-  var html = '<div class="adm-wrap">' +
-    '<div class="adm-head">' +
-      '<img src="icons/brand.jpg" alt="">' +
-      '<div style="flex:1;min-width:0">' +
-        '<div style="font-size:18px;font-weight:800">ThirdHub 管理后台</div>' +
-        '<div class="adm-muted">第三方科技 · 运营管理端</div>' +
+  var html = '<div class="adm-layout">' +
+    '<aside class="adm-side">' +
+      '<div class="adm-side-head">' +
+        '<img src="icons/brand.jpg" alt="">' +
+        '<div class="adm-side-title">ThirdHub<br>管理后台</div>' +
       '</div>' +
-      '<button class="adm-btn adm-btn-sm" data-act="logout">退出</button>' +
-    '</div>' +
-    '<div class="adm-tabs">' +
-      TABS.map(function (t) {
-        return '<button class="adm-tab' + (state.tab === t.id ? ' on' : '') + '" data-act="tab" data-t="' + t.id + '">' + t.name + '</button>';
-      }).join('') +
-    '</div>' +
-    '<div id="adm-body"></div>' +
+      '<nav class="adm-side-nav">' +
+        TABS.map(function (t) {
+          return '<button class="adm-tab' + (state.tab === t.id ? ' on' : '') + '" data-act="tab" data-t="' + t.id + '">' +
+            '<span class="adm-tab-ico">' + (t.icon || '•') + '</span>' + t.name + '</button>';
+        }).join('') +
+      '</nav>' +
+      '<div class="adm-side-foot">' +
+        '<button class="adm-btn adm-btn-sm" data-act="logout">🚪 退出</button>' +
+        '<span class="adm-muted" style="font-size:11px;line-height:2">v1.3 · 第三方科技</span>' +
+      '</div>' +
+    '</aside>' +
+    '<main class="adm-main"><div id="adm-body"></div></main>' +
   '</div>';
   $('#app').innerHTML = html;
   renderBody();
@@ -159,6 +171,7 @@ function renderBody() {
   else if (state.tab === 'plans') renderPlans(body);
   else if (state.tab === 'prices') renderPrices(body);
   else if (state.tab === 'rank') renderRank(body);
+  else if (state.tab === 'freemodels') renderFreeModels(body);
   else if (state.tab === 'repo') renderRepo(body);
   else if (state.tab === 'feedback') renderFeedback(body);
   else if (state.tab === 'paycfg') renderPayCfg(body);
@@ -197,13 +210,13 @@ function renderDashboard(body) {
     var openFb = fb.filter(function (f) { var d = f.data || {}; return d.status !== 'done'; }).length;
     body.innerHTML =
       '<div class="adm-stat-grid">' +
-        '<div class="adm-card adm-stat" data-act="go" data-t="users"><div class="adm-stat-num">' + users.length + '</div><div class="adm-muted">注册用户</div></div>' +
-        '<div class="adm-card adm-stat" data-act="go" data-t="orders"><div class="adm-stat-num" style="color:#fbbf24">' + pending + '</div><div class="adm-muted">待确认订单</div></div>' +
-        '<div class="adm-card adm-stat" data-act="go" data-t="orders"><div class="adm-stat-num" style="color:#34d399">¥' + paidSum.toFixed(0) + '</div><div class="adm-muted">已收款金额</div></div>' +
-        '<div class="adm-card adm-stat" data-act="go" data-t="feedback"><div class="adm-stat-num" style="color:#60a5fa">' + openFb + '</div><div class="adm-muted">待处理反馈</div></div>' +
+        '<div class="adm-card adm-stat" data-act="go" data-t="users"><div style="font-size:20px">👥</div><div class="adm-stat-num">' + users.length + '</div><div class="adm-muted">注册用户</div></div>' +
+        '<div class="adm-card adm-stat" data-act="go" data-t="orders"><div style="font-size:20px">⏳</div><div class="adm-stat-num" style="color:#fbbf24">' + pending + '</div><div class="adm-muted">待确认订单</div></div>' +
+        '<div class="adm-card adm-stat" data-act="go" data-t="orders"><div style="font-size:20px">💰</div><div class="adm-stat-num" style="color:#34d399">¥' + paidSum.toFixed(0) + '</div><div class="adm-muted">已收款金额</div></div>' +
+        '<div class="adm-card adm-stat" data-act="go" data-t="feedback"><div style="font-size:20px">💬</div><div class="adm-stat-num" style="color:#60a5fa">' + openFb + '</div><div class="adm-muted">待处理反馈</div></div>' +
       '</div>' +
       '<div class="adm-card" style="margin-top:14px">' +
-        '<div style="font-weight:700;margin-bottom:12px">会员等级分布</div>' +
+        '<div style="font-weight:700;margin-bottom:12px">📈 会员等级分布</div>' +
         LEVELS.map(function (l) {
           var n = byLevel[l.id] || 0;
           var w = Math.round(n / maxLv * 100);
@@ -231,7 +244,7 @@ function renderUsers(body) {
       tabs.map(function (t) {
         return '<button class="adm-tab adm-tab-sm' + (state.userTab === t.id ? ' on' : '') + '" data-act="usertab" data-t="' + t.id + '">' + t.name + '</button>';
       }).join('') + '</div>' +
-      '<input class="adm-input" id="u-search" placeholder="搜索昵称 / 邮箱…" value="' + esc(state.userSearch) + '" style="margin-bottom:12px">' +
+      '<input class="adm-input" id="u-search" placeholder="🔍 搜索昵称 / 邮箱…" value="' + esc(state.userSearch) + '" style="margin-bottom:12px">' +
       '<div id="u-list"></div>';
     body.innerHTML = html;
     $('#u-search').addEventListener('input', function () {
@@ -271,36 +284,181 @@ function renderUserList(allUsers) {
       '</div>' +
       '<div style="text-align:right">' +
         '<span class="adm-badge" style="background:' + levelColor(lv) + '22;color:' + levelColor(lv) + '">' + levelName(lv) + '</span>' +
-        '<div style="margin-top:6px"><button class="adm-btn adm-btn-sm" data-act="setlevel" data-uid="' + u.id + '">调整等级</button></div>' +
+        (u.role === 'admin' ? ' <span class="adm-badge" style="background:#ef444422;color:#ef4444">管理员</span>' : '') +
+        '<div class="adm-nick-row" style="justify-content:flex-end">' +
+          '<button class="adm-btn adm-btn-sm" data-act="setlevel" data-uid="' + u.id + '">🎚️ 等级</button>' +
+          '<button class="adm-btn adm-btn-sm" data-act="editnick" data-uid="' + u.id + '">✏️ 昵称</button>' +
+          (getNickOrig(u.id) && getNickOrig(u.id) !== (u.nickname || '')
+            ? '<button class="adm-btn adm-btn-sm" data-act="restorenick" data-uid="' + u.id + '" style="color:#fbbf24">↩️ 恢复昵称</button>'
+            : '') +
+          (u.role === 'admin'
+            ? '<button class="adm-btn adm-btn-sm" data-act="setrole" data-uid="' + u.id + '" data-role="user" style="color:#f472b6">👑 取消管理员</button>'
+            : '<button class="adm-btn adm-btn-sm" data-act="setrole" data-uid="' + u.id + '" data-role="admin" style="color:#34d399">👑 设为管理员</button>') +
+        '</div>' +
       '</div>' +
     '</div>';
   }).join('');
 }
 
+/* ---------- 通用弹层（v1.3） ---------- */
+function openSheet(html) {
+  var ov = document.createElement('div');
+  ov.className = 'adm-overlay';
+  ov.innerHTML = '<div class="adm-sheet">' + html + '</div>';
+  document.body.appendChild(ov);
+  ov.addEventListener('click', function (e) { if (e.target === ov) { ov.remove(); } });
+  return ov;
+}
+function closeSheet(ov) { if (ov) ov.remove(); }
+
+/* ---------- 会员等级：弹层点击选择（不再手动输入） ---------- */
 function setUserLevel(uid) {
   var u = (state.users || []).find(function (x) { return x.id === uid; });
   if (!u) return;
-  var opts = LEVELS.map(function (l) { return l.id + '（' + l.name + '）'; }).join('\n');
-  var lv = prompt('设置用户「' + (u.nickname || u.email) + '」的会员等级，输入等级 ID：\n' + opts, u.level || 'guest');
-  if (!lv) return;
-  lv = lv.trim();
-  if (!LEVELS.find(function (l) { return l.id === lv; })) { toast('等级 ID 无效', false); return; }
-  var days = 0;
-  if (lv !== 'guest') {
-    var d = prompt('会员有效期天数（0 = 永久，30/365 常用）', '365');
-    if (d === null) return;
-    days = parseInt(d, 10) || 0;
+  var cur = u.level || 'guest';
+  var ov = openSheet(
+    '<div class="adm-sheet-title">设置会员等级</div>' +
+    '<div class="adm-muted" style="margin-bottom:12px">用户：' + esc(u.nickname || '未命名') + (u.email ? ' · ' + esc(u.email) : '') + '（当前 ' + levelName(cur) + '）</div>' +
+    '<div class="adm-level-grid">' +
+      LEVELS.map(function (l) {
+        return '<button class="adm-level-opt' + (cur === l.id ? ' on' : '') + '" data-lv="' + l.id + '" style="--lc:' + l.color + '">' +
+          '<b>' + l.name + '</b>' + (l.note ? '<span>' + esc(l.note) + '</span>' : '') + '</button>';
+      }).join('') +
+    '</div>' +
+    '<div data-v="expire" style="display:none;margin-bottom:12px">' +
+      '<label class="adm-muted">会员有效期</label>' +
+      '<select class="adm-input" data-f="expire">' +
+        '<option value="0">永久有效</option>' +
+        '<option value="30">30 天</option>' +
+        '<option value="90">90 天</option>' +
+        '<option value="365" selected>365 天</option>' +
+        '<option value="730">两年（730 天）</option>' +
+      '</select>' +
+    '</div>' +
+    '<button class="adm-btn adm-btn-primary adm-btn-block" data-a="lv-ok">确认设置</button>'
+  );
+  var sel = cur;
+  function mark() {
+    $$('.adm-level-opt', ov).forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-lv') === sel); });
+    $('[data-v="expire"]', ov).style.display = sel === 'guest' ? 'none' : 'block';
   }
-  var expire = null;
-  if (lv !== 'guest' && days > 0) expire = new Date(Date.now() + days * 864e5).toISOString();
-  loadSb().then(function (cli) {
-    return cli.rpc('admin_set_user_level', { pwd: PWD, uid: uid, p_level: lv, p_expire: expire });
-  }).then(function (r) {
-    if (r.error) throw r.error;
-    toast('已更新等级');
-    state.users = null;
-    renderBody();
-  }).catch(function (e) { toast('失败：' + e.message, false); });
+  $$('.adm-level-opt', ov).forEach(function (b) {
+    b.onclick = function () { sel = b.getAttribute('data-lv'); mark(); };
+  });
+  mark();
+  $('[data-a="lv-ok"]', ov).onclick = function () {
+    if (sel === 'guest' && cur !== 'guest') {
+      if (!confirm('将用户降级为「游客」？游客不享受云存储与云端同步。')) return;
+    }
+    var days = parseInt($('[data-f="expire"]', ov).value, 10) || 0;
+    var expire = (sel !== 'guest' && days > 0) ? new Date(Date.now() + days * 864e5).toISOString() : null;
+    var btn = $('[data-a="lv-ok"]', ov); btn.disabled = true; btn.textContent = '保存中…';
+    loadSb().then(function (cli) {
+      return cli.rpc('admin_set_user_level', { pwd: PWD, uid: uid, p_level: sel, p_expire: expire });
+    }).then(function (r) {
+      if (r.error) throw r.error;
+      toast('已更新等级为「' + levelName(sel) + '」');
+      closeSheet(ov);
+      state.users = null;
+      renderBody();
+    }).catch(function (e) { toast('失败：' + e.message, false); btn.disabled = false; btn.textContent = '确认设置'; });
+  };
+}
+
+/* ---------- 昵称编辑（需再次输入管理员密码；改错可一键恢复） ---------- */
+function editUserNickname(uid) {
+  var u = (state.users || []).find(function (x) { return x.id === uid; });
+  if (!u) return;
+  if (!getNickOrig(uid)) setNickOrig(uid, u.nickname || '');
+  var ov = openSheet(
+    '<div class="adm-sheet-title">✏️ 编辑昵称</div>' +
+    '<div class="adm-muted" style="margin-bottom:10px">用户：' + esc(u.nickname || '未命名') + (u.email ? ' · ' + esc(u.email) : '') + '</div>' +
+    '<input class="adm-input" data-f="nn" placeholder="新昵称" value="' + esc(u.nickname || '') + '" style="margin-bottom:8px">' +
+    '<input class="adm-input" type="password" data-f="pwd" placeholder="管理员密码（确认操作）" style="margin-bottom:12px">' +
+    '<div class="adm-muted" style="margin-bottom:10px">保存后如需撤销，可在用户卡片点「↩️ 恢复昵称」回到修改前。恢复操作同样需要管理员密码。</div>' +
+    '<button class="adm-btn adm-btn-primary adm-btn-block" data-a="nn-ok">保存昵称</button>'
+  );
+  $('[data-a="nn-ok"]', ov).onclick = function () {
+    var nn = $('[data-f="nn"]', ov).value.trim();
+    var pwd = $('[data-f="pwd"]', ov).value;
+    if (!nn) { toast('昵称不能为空', false); return; }
+    if (!pwd) { toast('请输入管理员密码', false); return; }
+    var btn = $('[data-a="nn-ok"]', ov); btn.disabled = true; btn.textContent = '保存中…';
+    loadSb().then(function (cli) {
+      return cli.rpc('admin_set_user_nickname', { pwd: pwd, uid: uid, nickname: nn });
+    }).then(function (r) {
+      if (r.error) throw r.error;
+      toast('昵称已更新为「' + nn + '」，可随时恢复');
+      closeSheet(ov);
+      state.users = null;
+      renderBody();
+    }).catch(function (e) {
+      toast('保存失败：' + (String(e.message || '').indexOf('unauthorized') >= 0 ? '管理员密码不正确' : e.message), false);
+      btn.disabled = false; btn.textContent = '保存昵称';
+    });
+  };
+}
+
+/* ---------- 恢复原昵称 ---------- */
+function restoreUserNickname(uid) {
+  var orig = getNickOrig(uid);
+  if (!orig) { toast('没有可恢复的原始昵称', false); return; }
+  var u = (state.users || []).find(function (x) { return x.id === uid; });
+  var ov = openSheet(
+    '<div class="adm-sheet-title">↩️ 恢复昵称</div>' +
+    '<div class="adm-muted" style="margin-bottom:10px">' + (u ? esc(u.nickname || '') : '') + ' → ' + esc(orig) + '</div>' +
+    '<input class="adm-input" type="password" data-f="pwd" placeholder="管理员密码（确认操作）" style="margin-bottom:12px">' +
+    '<button class="adm-btn adm-btn-primary adm-btn-block" data-a="nn-ok">确认恢复</button>'
+  );
+  $('[data-a="nn-ok"]', ov).onclick = function () {
+    var pwd = $('[data-f="pwd"]', ov).value;
+    if (!pwd) { toast('请输入管理员密码', false); return; }
+    var btn = $('[data-a="nn-ok"]', ov); btn.disabled = true; btn.textContent = '恢复中…';
+    loadSb().then(function (cli) {
+      return cli.rpc('admin_set_user_nickname', { pwd: pwd, uid: uid, nickname: orig });
+    }).then(function (r) {
+      if (r.error) throw r.error;
+      toast('已恢复原昵称');
+      setNickOrig(uid, '');
+      closeSheet(ov);
+      state.users = null;
+      renderBody();
+    }).catch(function (e) {
+      toast('恢复失败：' + (String(e.message || '').indexOf('unauthorized') >= 0 ? '管理员密码不正确' : e.message), false);
+      btn.disabled = false; btn.textContent = '确认恢复';
+    });
+  };
+}
+
+/* ---------- 设置 / 取消管理员（管理员可有多个） ---------- */
+function toggleUserRole(uid, role) {
+  var u = (state.users || []).find(function (x) { return x.id === uid; });
+  if (!u) return;
+  var toAdmin = role === 'admin';
+  var ov = openSheet(
+    '<div class="adm-sheet-title">' + (toAdmin ? '👑 设为管理员' : '👑 取消管理员') + '</div>' +
+    '<div class="adm-muted" style="margin-bottom:10px">用户：' + esc(u.nickname || u.email || uid) +
+      (toAdmin ? '<br>设为管理员后拥有全部后台权限（可同时存在多位管理员）。' : '<br>取消后该用户不再拥有后台权限。') + '</div>' +
+    '<input class="adm-input" type="password" data-f="pwd" placeholder="管理员密码（确认操作）" style="margin-bottom:12px">' +
+    '<button class="adm-btn adm-btn-primary adm-btn-block" data-a="nn-ok">' + (toAdmin ? '确认设为管理员' : '确认取消管理员') + '</button>'
+  );
+  $('[data-a="nn-ok"]', ov).onclick = function () {
+    var pwd = $('[data-f="pwd"]', ov).value;
+    if (!pwd) { toast('请输入管理员密码', false); return; }
+    var btn = $('[data-a="nn-ok"]', ov); btn.disabled = true; btn.textContent = '提交中…';
+    loadSb().then(function (cli) {
+      return cli.rpc('admin_set_user_role', { pwd: pwd, uid: uid, role: role });
+    }).then(function (r) {
+      if (r.error) throw r.error;
+      toast(toAdmin ? '已设为管理员' : '已取消管理员');
+      closeSheet(ov);
+      state.users = null;
+      renderBody();
+    }).catch(function (e) {
+      toast('操作失败：' + (String(e.message || '').indexOf('unauthorized') >= 0 ? '管理员密码不正确' : e.message), false);
+      btn.disabled = false; btn.textContent = toAdmin ? '确认设为管理员' : '确认取消管理员';
+    });
+  };
 }
 
 /* ---------- 用户数据（书源 / API 密钥） ---------- */
@@ -487,7 +645,7 @@ function importPrices(rows, doneMsg) {
   next();
 }
 
-/* ---------- 排行榜（云端综合榜） ---------- */
+/* ---------- 排行榜（云端综合榜 · v1.3 表格批量编辑） ---------- */
 function renderRank(body) {
   body.innerHTML = '<p class="adm-muted">加载中…</p>';
   loadSb().then(function (cli) { return cli.from('th_leaderboard').select('*').order('rank'); })
@@ -495,34 +653,71 @@ function renderRank(body) {
       if (r.error) throw r.error;
       var rows = r.data || [];
       body.innerHTML =
-        '<p class="adm-muted" style="margin-bottom:12px">这里维护 App「模型排行榜 → 综合榜」的展示数据。云端有数据时覆盖内置榜单；其余分类榜仍用内置快照。厂商 ID 用于显示图标（openai / anthropic / google / xai / moonshot / deepseek / aliyun / zhipu / minimax / bytedance / xiaomi / tencent / mistral…）。</p>' +
-        '<div class="adm-card" style="margin-bottom:12px">' +
-          '<b>' + (state.rankEdit != null ? '编辑名次 ' + state.rankEdit : '新增名次') + '</b>' +
-          '<div class="adm-form-grid" style="margin-top:8px">' +
-            '<label class="adm-muted">名次<input class="adm-input" type="number" min="1" data-f="r-rank" value="' + (state.rankEdit != null ? state.rankEdit : (rows.length + 1)) + '"></label>' +
-            '<label class="adm-muted">模型名<input class="adm-input" data-f="r-model" value="' + esc(state.rankModel || '') + '" placeholder="GPT-5.1"></label>' +
-            '<label class="adm-muted">厂商 ID<input class="adm-input" data-f="r-org" value="' + esc(state.rankOrg || '') + '" placeholder="openai"></label>' +
-            '<label class="adm-muted">综合分（0-100）<input class="adm-input" type="number" step="0.5" min="0" max="100" data-f="r-score" value="' + (state.rankScore || '') + '"></label>' +
+        '<p class="adm-muted" style="margin-bottom:12px">🏆 维护 App「模型排行榜 → 综合榜」。直接在表格里改名次 / 模型 / 厂商 / 分数，改完点「保存全部改动」一次生效；「➕ 添加名次」可在任意位置插入一行，名次可拖后整体调整。</p>' +
+        '<div class="adm-card">' +
+          '<table class="adm-table"><thead><tr>' +
+            '<th style="width:70px">名次</th><th>模型名</th><th style="width:120px">厂商 ID</th><th style="width:90px">综合分</th><th style="width:60px"></th>' +
+          '</tr></thead><tbody data-v="rank-tb">' +
+          (rows.length ? rows.map(function (x) {
+            return rankRowHtml(x.rank, x.model, x.org, x.score);
+          }).join('') : '') +
+          '</tbody></table>' +
+          '<div class="adm-row" style="margin-top:12px;flex-wrap:wrap">' +
+            '<button class="adm-btn adm-btn-sm" data-act="rank-add">➕ 添加名次</button>' +
+            '<button class="adm-btn adm-btn-sm" data-act="rank-import">📥 导入内置综合榜</button>' +
+            '<button class="adm-btn adm-btn-primary adm-btn-sm" data-act="rank-saveall">💾 保存全部改动</button>' +
           '</div>' +
-          '<div class="adm-row" style="margin-top:10px;flex-wrap:wrap">' +
-            '<button class="adm-btn adm-btn-primary adm-btn-sm" data-act="save-rank">保存</button>' +
-            '<button class="adm-btn adm-btn-sm" data-act="import-rank">导入内置综合榜</button>' +
-          '</div>' +
-        '</div>' +
-        (rows.length ?
-          rows.map(function (x) {
-            return '<div class="adm-card" style="margin-bottom:8px" data-rank="' + x.rank + '">' +
-              '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
-                '<b style="width:28px">#' + x.rank + '</b>' +
-                '<b style="flex:1;font-size:14px">' + esc(x.model) + '</b>' +
-                '<span class="adm-badge" style="background:#3b5bfd22;color:#7da2ff">' + esc(x.org || '-') + ' · ' + Number(x.score) + ' 分</span>' +
-                '<button class="adm-btn adm-btn-sm" data-act="edit-rank">编辑</button>' +
-                '<button class="adm-btn adm-btn-sm" data-act="del-rank">删除</button>' +
-              '</div>' +
-            '</div>';
-          }).join('')
-          : '<p class="adm-muted" style="text-align:center;padding:16px 0">云端还没有排行榜数据（App 暂用内置榜单）</p>');
+        '</div>';
     }).catch(function (e) { body.innerHTML = '<p class="adm-muted">加载失败：' + esc(e.message) + '</p>'; });
+}
+function rankRowHtml(rank, model, org, score) {
+  return '<tr data-v="rk">' +
+    '<td><input class="adm-input" type="number" min="1" data-rk="rank" value="' + esc(rank) + '"></td>' +
+    '<td><input class="adm-input" data-rk="model" value="' + esc(model || '') + '" placeholder="GPT-5.1"></td>' +
+    '<td><input class="adm-input" data-rk="org" value="' + esc(org || '') + '" placeholder="openai"></td>' +
+    '<td><input class="adm-input" type="number" step="0.5" min="0" max="100" data-rk="score" value="' + esc(score != null ? score : '') + '"></td>' +
+    '<td><button class="adm-btn adm-btn-sm" data-act="rank-delrow" title="删除此行">🗑️</button></td>' +
+  '</tr>';
+}
+function rankCollectRows() {
+  return $$('[data-v="rk"]').map(function (tr) {
+    return {
+      rank: parseInt($('[data-rk="rank"]', tr).value, 10),
+      model: $('[data-rk="model"]', tr).value.trim(),
+      org: $('[data-rk="org"]', tr).value.trim(),
+      score: parseFloat($('[data-rk="score"]', tr).value),
+      del: tr.classList.contains('del'),
+    };
+  }).filter(function (x) { return x.rank > 0 && x.model; });
+}
+function rankSaveAll(btn) {
+  var rows = rankCollectRows();
+  var dels = $$('[data-v="rk"].del').map(function (tr) { return parseInt($('[data-rk="rank"]', tr).value, 10); }).filter(function (n) { return n > 0; });
+  if (!rows.length && !dels.length) { toast('没有可保存的内容', false); return; }
+  btn.disabled = true; btn.textContent = '保存中…';
+  var i = 0, fail = 0;
+  function next() {
+    if (i >= rows.length) {
+      if (dels.length && fail === 0) { /* 删除标记行 */ }
+      toast('排行榜已保存' + (fail ? '（失败 ' + fail + ' 行）' : ''));
+      btn.disabled = false; btn.textContent = '💾 保存全部改动';
+      renderBody();
+      return;
+    }
+    var x = rows[i++];
+    loadSb().then(function (cli) {
+      return cli.rpc('admin_upsert_leaderboard', { pwd: PWD, p_rank: x.rank, p_model: x.model, p_org: x.org, p_score: isNaN(x.score) ? 0 : x.score, p_note: '' });
+    }).then(function (r) { if (r.error) fail++; next(); }).catch(function () { fail++; next(); });
+  }
+  if (dels.length) {
+    var di = 0, dfail = 0;
+    (function delNext() {
+      if (di >= dels.length) { next(); return; }
+      var d = dels[di++];
+      loadSb().then(function (cli) { return cli.rpc('admin_delete_leaderboard', { pwd: PWD, p_rank: d }); })
+        .then(function (r) { if (r.error) dfail++; delNext(); }).catch(function () { dfail++; delNext(); });
+    })();
+  } else next();
 }
 
 /* ---------- 会员定价 ---------- */
@@ -750,22 +945,23 @@ function repoDoSave(btn) {
 }
 
 
-/* ================= v1.1 系统设置：历史版本 / 限时免费模型 ================= */
+/* ================= 系统设置（v1.3：限时免费模型已独立成标签） ================= */
 function renderSystem(body) {
   body.innerHTML =
-    '<div class="adm-card" style="margin-bottom:12px;cursor:pointer" data-a="fm">' +
-      '<b>限时免费模型</b>' +
-      '<p class="adm-muted" style="margin-top:6px">添加 / 管理限时免费模型：全体或仅指定用户 · 限时 / 限量 / 限时+限量（需云端表与 RPC，见 supabase/community.sql 附录）</p>' +
-    '</div>' +
     '<div class="adm-card" style="margin-bottom:12px;cursor:pointer" data-a="hist">' +
-      '<b>历史版本</b>' +
+      '<b>📜 历史版本</b>' +
       '<p class="adm-muted" style="margin-top:6px">管理后台更新日志</p>' +
+    '</div>' +
+    '<div class="adm-card" style="margin-bottom:12px;cursor:pointer" data-a="fm">' +
+      '<b>🎁 限时免费模型</b>' +
+      '<p class="adm-muted" style="margin-top:6px">已独立为左侧导航「限时免费模型」标签，点击前往</p>' +
     '</div>';
-  $('[data-a="fm"]', body).onclick = function () { renderFreeModels(body); };
+  $('[data-a="fm"]', body).onclick = function () { state.tab = 'freemodels'; renderBody(); };
   $('[data-a="hist"]', body).onclick = function () { renderAdminChangelog(body); };
 }
 
 var ADMIN_CHANGELOG = [
+  { v: '1.3', d: '2026-08-21', items: ['界面大改：左侧竖排导航（旧版同款布局）、导航与按钮全面图标化', '会员等级改为弹层点选（不再手动输入），可选有效期', '用户昵称可在后台直接修改，敏感操作需再次输入管理员密码，改错可一键恢复原昵称', '支持设置 / 取消管理员（管理员可有多位）', '排行榜改为表格批量编辑：一行一条、可插入行、整体改名次、一次性保存', '限时免费模型独立为左侧标签，不再混在系统设置里'] },
   { v: '1.2', d: '2026-08-21', items: ['限时免费模型升级：仅指定用户可用（按 uid 分配，不只全员开放）、限时窗口（时间窗内无限用）、限量额度（次数 / Token，用完即止）、限时+限量组合；支持编辑与用量展示'] },
   { v: '1.1', d: '2026-08-21', items: ['系统设置上线：限时免费模型管理（多模型 / 分等级 Token 配额 / 可用模型范围）、历史版本页'] },
   { v: '1.0', d: '2026-08-21', items: ['管理后台初始化：仪表盘 / 用户管理 / 订单 / 会员定价 / 模型定价 / 排行榜 / 官方仓库'] },
@@ -838,8 +1034,7 @@ function renderFreeModels(body) {
         '<button class="adm-btn" data-a="cancel" style="display:none">取消编辑</button>' +
       '</div>' +
     '</div>' +
-    '<div class="adm-card"><b>当前免费模型</b><div data-v="list" style="margin-top:10px"><p class="adm-muted">加载中…</p></div></div>' +
-    '<button class="adm-btn" style="margin-top:12px" data-a="back">返回</button>';
+    '<div class="adm-card"><b>当前免费模型</b><div data-v="list" style="margin-top:10px"><p class="adm-muted">加载中…</p></div></div>';
   var listBox = $('[data-v="list"]', body);
   var uidsBox = $('[data-f="uids"]', body);
   function scopeVal() { var r = $('input[name="fm-scope"]:checked', body); return r ? r.value : 'all'; }
@@ -974,7 +1169,6 @@ function renderFreeModels(body) {
       .finally(function () { btn.disabled = false; btn.textContent = FM_EDIT_ID ? '保存修改' : '添加'; });
   };
   $('[data-a="cancel"]', body).onclick = resetForm;
-  $('[data-a="back"]', body).onclick = function () { renderSystem(body); };
   toggleUids();
   load();
 }
@@ -1160,37 +1354,25 @@ document.addEventListener('click', function (e) {
       });
       importPrices(rows);
     }).catch(function (e) { toast('读取内置价目失败：' + e.message, false); });
-  } else if (act === 'save-rank') {
-    var rr = parseInt($('[data-f="r-rank"]').value, 10);
-    var rm = $('[data-f="r-model"]').value.trim();
-    var ro = $('[data-f="r-org"]').value.trim();
-    var rs = parseFloat($('[data-f="r-score"]').value);
-    if (!rr || !rm) { toast('请填写名次和模型名', false); return; }
-    t.disabled = true;
-    loadSb().then(function (cli) { return cli.rpc('admin_upsert_leaderboard', { pwd: PWD, p_rank: rr, p_model: rm, p_org: ro, p_score: isNaN(rs) ? 0 : rs, p_note: '' }); })
-      .then(function (r) {
-        if (r.error) throw r.error;
-        state.rankEdit = null; state.rankModel = ''; state.rankOrg = ''; state.rankScore = '';
-        toast('排行榜已保存，用户端下次启动生效');
-        renderBody();
-      }).catch(function (err) { toast('保存失败：' + err.message, false); t.disabled = false; });
-  } else if (act === 'edit-rank') {
-    var rCard = t.closest('[data-rank]');
-    state.rankEdit = parseInt(rCard.getAttribute('data-rank'), 10);
-    state.rankModel = rCard.querySelectorAll('b')[1].textContent;
-    var badge = rCard.querySelector('.adm-badge').textContent;
-    var mm = badge.match(/^(.*) · ([\d.]+) 分$/);
-    state.rankOrg = mm ? mm[1].trim() : '';
-    state.rankScore = mm ? mm[2] : '';
-    renderBody();
-  } else if (act === 'del-rank') {
-    var dr = parseInt(t.closest('[data-rank]').getAttribute('data-rank'), 10);
-    if (!confirm('删除名次 #' + dr + '？')) return;
-    loadSb().then(function (cli) { return cli.rpc('admin_delete_leaderboard', { pwd: PWD, p_rank: dr }); })
-      .then(function (r) {
-        if (r.error) throw r.error;
-        toast('已删除'); renderBody();
-      }).catch(function (err) { toast('删除失败：' + err.message, false); });
+  } else if (act === 'rank-add') {
+    var tb = $('[data-v="rank-tb"]');
+    if (!tb) return;
+    var last = $$('[data-v="rk"]', tb).pop();
+    var nextRank = last ? (parseInt($('[data-rk="rank"]', last).value, 10) || 0) + 1 : 1;
+    tb.insertAdjacentHTML('beforeend', rankRowHtml(nextRank, '', '', ''));
+  } else if (act === 'rank-delrow') {
+    var tr = t.closest('[data-v="rk"]');
+    if (!tr) return;
+    if (tr.classList.contains('del')) { tr.classList.remove('del'); t.style.opacity = ''; }
+    else { tr.classList.add('del'); t.style.opacity = '.5'; tr.style.opacity = '.45'; }
+  } else if (act === 'rank-saveall') {
+    rankSaveAll(t);
+  } else if (act === 'editnick') {
+    editUserNickname(t.getAttribute('data-uid'));
+  } else if (act === 'restorenick') {
+    restoreUserNickname(t.getAttribute('data-uid'));
+  } else if (act === 'setrole') {
+    toggleUserRole(t.getAttribute('data-uid'), t.getAttribute('data-role'));
   } else if (act === 'import-rank') {
     if (!confirm('把 App 内置综合榜导入云端？导入后覆盖 App 内置榜单，可随时再编辑。')) return;
     import('./js/ai/ai-rankings.js').then(function (mod) {

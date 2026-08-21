@@ -325,3 +325,28 @@ begin
   end if;
   return jsonb_build_object('ok', false, 'remaining', 0);
 end; $$;
+
+-- ============================================================
+-- v1.3 用户编辑：昵称修改（带密码确认）+ 角色管理（多管理员）
+-- ============================================================
+
+-- 修改用户昵称（昵称置空 = 不改）
+create or replace function admin_set_user_nickname(p_pwd text, p_uid uuid, p_nickname text)
+returns jsonb language plpgsql security definer as $$
+begin
+  if not admin_check(p_pwd) then raise exception 'unauthorized'; end if;
+  update th_profiles set nickname = trim(p_nickname) where id = p_uid and length(trim(coalesce(p_nickname,''))) > 0;
+  return jsonb_build_object('ok', true);
+end; $$;
+
+-- 设置 / 取消管理员角色（role: 'admin' 或 'user'，管理员可有多个）
+create or replace function admin_set_user_role(p_pwd text, p_uid uuid, p_role text)
+returns jsonb language plpgsql security definer as $$
+begin
+  if not admin_check(p_pwd) then raise exception 'unauthorized'; end if;
+  if coalesce(p_role, '') not in ('admin', 'user', 'agent') then
+    raise exception 'invalid role';
+  end if;
+  update th_profiles set role = p_role where id = p_uid;
+  return jsonb_build_object('ok', true);
+end; $$;

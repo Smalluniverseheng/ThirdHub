@@ -249,6 +249,7 @@ export async function renderAIChat(page) {
         <button class="ai-plus-cell" data-plus="file"><span class="ai-plus-ico">${icon('file')}</span><span class="ai-plus-label">本地文件</span></button>
         <button class="ai-plus-cell" data-plus="draw" data-cap="image"><span class="ai-plus-ico">${icon('brush')}</span><span class="ai-plus-label">AI绘画</span></button>
         <button class="ai-plus-cell" data-plus="video" data-cap="video"><span class="ai-plus-ico">${icon('film')}</span><span class="ai-plus-label">AI视频</span></button>
+        <button class="ai-plus-cell" data-plus="runmode"><span class="ai-plus-ico">${icon('cpu')}</span><span class="ai-plus-label">运行模式</span></button>
       </div>
       <div class="ai-plus-gen" id="ai-plus-gen" hidden></div>
       <div class="ai-plus-settings">
@@ -413,6 +414,7 @@ export async function renderAIChat(page) {
     else if (act === 'file') $('#ai-file-input', page).click();
     else if (act === 'draw') { closePlus(); setWorkspace(page, 'image'); }
     else if (act === 'video') { closePlus(); setWorkspace(page, 'video'); }
+    else if (act === 'runmode') { closePlus(); openRunModePanel(page); }
   });
 
   /* ----- 发送 / 语音 ----- */
@@ -1467,6 +1469,67 @@ function scrollBottom(page, force = false) {
 }
 
 /* ================= 发送 ================= */
+/* v5.3：运行模式面板（加号 → 运行模式）：直连 / 本地算力设备 + 灰色问号说明 */
+async function openRunModePanel(page) {
+  const { listDevices, getStatus, connectDevice } = await import('./compute.js');
+  const devs = listDevices();
+  openOverlay({
+    title: '运行模式',
+    build: (body) => {
+      body.innerHTML = `<div class="set-wrap">
+        <div class="ai-mode-desc">
+          <b>直连模式</b>：请求由当前设备（浏览器 / 前端）直接发送到模型厂商接口，响应快、无需额外部署；适合日常对话。
+          <span class="ai-help-dot" data-a="help" title="说明">?</span>
+        </div>
+        <div class="section-title" style="margin-top:16px">后端算力设备（可运行 Python / 插件 / MCP）</div>
+        <div class="col gap8" data-role="devs">
+          ${devs.length ? devs.map((d) => `
+            <button class="list-item" style="width:100%" data-dev="${d.id}">
+              <span class="list-ico">${icon('cpu')}</span>
+              <div class="grow" style="text-align:left;min-width:0">
+                <div style="font-size:14px;font-weight:600">${d.name || d.host} <span class="muted" style="font-size:11px">${getStatus(d.id) === 'online' ? '🟢 在线' : '⚪ 离线'}</span></div>
+                <div class="muted" style="font-size:11.5px">${d.host}:${d.port}</div>
+              </div>
+              <span class="list-arrow">${localMode.on && localMode.deviceId === d.id ? '✓' : ''}</span>
+            </button>`).join('') : '<div class="muted" style="font-size:12.5px">还没有算力设备，去「算力」板块添加。</div>'}
+        </div>
+        <button class="btn" style="width:100%;margin-top:12px" data-a="direct">${!localMode.on ? '✓ ' : ''}切换到直连模式</button>
+      </div>`;
+      $('[data-a="help"]', body).onclick = () => modal({
+        title: '直连 vs 后端说明',
+        body: el(`<div style="font-size:13.5px;line-height:1.9;color:var(--text-secondary)">
+          <p><b>直连模式</b>：请求直接从当前页面发往各厂商接口。优点：零部署、Key 只在本机；限制：<b>网页环境无法运行 Python 代码、无法连接本地 MCP 服务、无法读写本地文件</b>。</p>
+          <p style="margin-top:10px"><b>后端算力模式</b>：消息发送到你电脑 / 手机上的 ThirdHub-Agent（基于 DeepSeek Harness），由后端调用模型并执行工具——<b>支持 Python / Shell 代码执行、本地文件读写、MCP 插件、多步骤任务</b>，能力与桌面 Agent 一致。</p>
+          <p style="margin-top:10px" class="muted">常用模型厂商的接口均可通过直连使用；需要完整工具链时建议切换到后端算力设备。</p>
+        </div>`),
+        footer: '<button class="btn grow" data-a="ok">知道了</button>',
+      }).then((m) => { $('[data-a="ok"]', m.mask).onclick = m.close; });
+      $$('[data-dev]', body).forEach((b) => b.onclick = async () => {
+        const id = b.dataset.dev;
+        const dev = devs.find((x) => x.id === id);
+        if (!dev) return;
+        if (getStatus(id) !== 'online') {
+          const r = await connectDevice(dev, { silent: true });
+          if (!r.ok) return toast(r.error, 'err');
+        }
+        localMode = { on: true, deviceId: id };
+        const mb = $('#ai-modebar', page);
+        if (mb) { const lbl = $('[data-role="mode-label"]', mb); if (lbl) lbl.textContent = '本地模式 · ' + (dev.name || dev.host); lbl && lbl.parentElement && lbl.parentElement.classList.add('on'); }
+        const hint = $('[data-role="mode-hint"]', mb); if (hint) { hint.hidden = false; hint.textContent = '已连接算力设备'; hint.style.color = 'var(--primary)'; }
+        toast('已切换到本地模式：' + (dev.name || dev.host), 'ok');
+        document.querySelectorAll('.overlay').forEach((x) => x.remove());
+      });
+      $('[data-a="direct"]', body).onclick = () => {
+        localMode = { on: false, deviceId: null };
+        const mb = $('#ai-modebar', page);
+        if (mb) { const lbl = $('[data-role="mode-label"]', mb); if (lbl) lbl.textContent = '直连模式'; lbl && lbl.parentElement && lbl.parentElement.classList.remove('on'); const hint = $('[data-role="mode-hint"]', mb); if (hint) hint.hidden = true; }
+        toast('已切换到直连模式', 'ok');
+        document.querySelectorAll('.overlay').forEach((x) => x.remove());
+      };
+    },
+  });
+}
+
 /* v5.0：本地算力模式 —— 消息经 WebSocket 发到设备端 DSH，流式渲染 */
 async function sendLocalMessage(page, text) {
   const { getStatus, sendToDevice } = await import('./compute.js');

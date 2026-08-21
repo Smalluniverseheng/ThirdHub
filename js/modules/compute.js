@@ -108,6 +108,7 @@ export async function renderCompute(page) {
           <span class="cp-chip">${esc(info.device_id || '')}</span>
           ${info.active_model ? `<span class="cp-chip">模型：${esc(info.active_model.name || info.active_model.modelId)}</span>` : ''}
           ${(info.capabilities || []).map((c) => `<span class="cp-chip">${esc(c)}</span>`).join('')}
+          ${info.workspace ? `<span class="cp-chip">${esc(info.workspace.label || '工作区')} · ${info.workspace.mode === 'full' ? '全权限' : '隔离容器'}</span>` : ''}
         ` : '<span class="cp-chip">未连接</span>'}
       </div>
       <div class="cp-actions">

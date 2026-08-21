@@ -1,5 +1,5 @@
 /* ===== ThirdHub js/admin.js — 管理后台（v1.9） =====
-   入口 admin.html · 账号 admin · 密码 123456
+   入口 admin.html · 账号 admin · 密码由管理员在云端配置（不在此展示）
    仪表盘 / 用户管理（等级分组·关注星标）/ 用户数据（书源·API 密钥）/ 订单管理 / 发票管理 / 会员定价 /
    模型定价（花费估算价目·支持文件导入）/ 排行榜（综合榜云端维护）/ 意见反馈 / 收款设置
    所有写操作经 Supabase RPC 口令校验，无需暴露 service key */
@@ -656,7 +656,7 @@ function repoParseText(text) {
 
 function renderRepo(body) {
   body.innerHTML =
-    '<p class="adm-muted" style="margin-bottom:14px">官方仓库是<b>你自己专用</b>的云端源仓库：用户端「分类 → 官方仓库」输入密码后取用（初始密码 123456）。把书源 JSON / TVbox 配置 / Venera 图源 JS 粘贴到下面或选择文件上传，系统会自动识别格式并分类，确认后上传。</p>' +
+    '<p class="adm-muted" style="margin-bottom:14px">官方仓库是<b>管理员私人</b>的云端源仓库：供管理员自用与向用户分发。用户端「分类 → 官方仓库」输入仓库密码后取用；用户导入的源通过验证后也可自动分享上来（自动分类）。把书源 / 影视源配置 / 图源 JS 粘贴到下面或选择文件上传，系统会自动识别格式并分类，确认后上传。</p>' +
     '<div class="adm-card" style="margin-bottom:12px"><b>上传源（自动分类）</b>' +
       '<textarea class="adm-input" rows="6" data-f="repo-text" style="margin-top:8px" placeholder=\'粘贴书源 JSON（单条或数组）、TVbox 配置、或 Venera 图源 JS 代码…\'></textarea>' +
       '<div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;align-items:center">' +
@@ -670,7 +670,7 @@ function renderRepo(body) {
         '<input class="adm-input" data-f="repo-newpwd" type="text" placeholder="新密码（至少 4 位）" style="max-width:220px">' +
         '<button class="adm-btn" data-act="repo-setpwd">修改仓库密码</button>' +
       '</div>' +
-      '<p class="adm-muted" style="margin-top:8px">这是用户端取用官方仓库时要输入的密码，与后台登录密码独立。当前初始密码为 123456，建议尽快修改。</p>' +
+      '<p class="adm-muted" style="margin-top:8px">这是用户端取用 / 分享官方仓库时要输入的密码，与后台登录密码独立。密码不会明文展示，请妥善保管并定期修改。</p>' +
     '</div>' +
     '<div class="adm-card"><b>仓库现有源</b><div data-v="repo-list" style="margin-top:8px"><p class="adm-muted">加载中…</p></div></div>';
   /* 文件选择后读入文本框 */

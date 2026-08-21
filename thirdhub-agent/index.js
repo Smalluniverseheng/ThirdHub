@@ -248,6 +248,8 @@ wss.on('connection', (ws, req) => {
         payload: {
           success: true, token: client.token,
           device_id: (os.hostname() || 'agent') + '-' + createHash('sha1').update(os.hostname()).digest('hex').slice(0, 6),
+          /* v0.2：工作区与权限（管理员=full 全权限；分享用户=container 隔离容器，由 DSH 沙箱提供隔离） */
+          workspace: { id: 'main', mode: 'full', label: '本机工作区' },
           capabilities: ['deepseek', 'tools', 'files', 'python'],
           active_model: conf ? { id: conf.id, name: conf.name, modelId: conf.modelId } : null,
           models: (config.models || []).map((m) => ({ id: m.id, name: m.name, apiKeyMasked: m.apiKeyMask || '' })),

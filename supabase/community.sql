@@ -65,3 +65,42 @@ alter table device_logs enable row level security;
 create policy "device_logs 本人可写" on device_logs for insert with check (auth.uid() = user_id);
 create policy "device_logs 本人可读" on device_logs for select using (auth.uid() = user_id);
 create policy "device_logs 管理员可读" on device_logs for select using (exists (select 1 from th_profiles p where p.id = auth.uid() and p.role = 'admin'));
+
+
+-- ============================================================
+-- v5.3 用户端分享源到官方仓库（自动分类，需管理员执行此函数）
+-- ============================================================
+create or replace function repo_upsert(p_pwd text, p_items jsonb)
+returns int
+language plpgsql security definer
+as $$
+declare
+  v_cnt int := 0;
+  v_pwd_hash text;
+  it jsonb;
+  v_id text;
+  v_name text;
+  v_fmt text;
+  v_cat text;
+  v_data jsonb;
+begin
+  select value into v_pwd_hash from th_kv where key = 'repo_pwd';
+  if v_pwd_hash is null or v_pwd_hash <> encode(sha256(convert_to(p_pwd, 'utf8')), 'hex') then
+    raise exception '密码错误';
+  end if;
+  for it in select * from jsonb_array_elements(p_items) loop
+    v_id := it->>'id';
+    v_name := it->>'name';
+    v_fmt := it->>'fmt';
+    v_cat := it->>'category';
+    v_data := it->'data';
+    insert into th_repo (id, name, fmt, category, data, updated_at)
+    values (v_id, v_name, v_fmt, v_cat, v_data, now())
+    on conflict (id) do update
+      set name = excluded.name, fmt = excluded.fmt, category = excluded.category,
+          data = excluded.data, updated_at = now();
+    v_cnt := v_cnt + 1;
+  end loop;
+  return v_cnt;
+end;
+$$;

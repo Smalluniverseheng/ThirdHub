@@ -1149,3 +1149,11 @@ button.rank-row-item:active { background: var(--bg-input); }
 
 /* v3.6：历史模型置灰禁用 */
 .model-row.dep { opacity: .55; cursor: not-allowed; }
+/* v5.3：运行模式面板 */
+.ai-mode-desc { font-size: 13px; line-height: 1.8; color: var(--text-secondary); position: relative; padding-right: 30px; }
+.ai-help-dot {
+  display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%;
+  background: rgba(128,128,128,.18); color: var(--text-tertiary); font-size: 12px; font-weight: 700;
+  cursor: pointer; vertical-align: middle; margin-left: 4px;
+}
+.ai-help-dot:hover { background: var(--primary); color: #fff; }

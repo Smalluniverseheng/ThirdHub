@@ -61,10 +61,28 @@
     .adm-stat-grid { grid-template-columns: 1fr 1fr; }
     .adm-form-grid { grid-template-columns: 1fr; }
   }
+  /* v5.3 管理后台多端适配：统一控件尺寸 / 长内容换行 / 小屏紧凑 */
+  .adm-btn, .adm-input { box-sizing: border-box; }
+  .adm-card { word-break: break-word; }
+  .adm-row { align-items: center; }
+  .adm-card pre, .adm-mono { max-width: 100%; overflow-x: auto; }
+  .adm-list-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  @media (max-width: 768px) {
+    .adm-wrap { padding: 14px 10px 80px; }
+    .adm-card { padding: 12px; }
+    .adm-btn { padding: 8px 12px; font-size: 12.5px; }
+    .adm-sec-title { font-size: 14px; }
+    .adm-stat-num { font-size: 19px; }
+  }
+  @media (max-width: 420px) {
+    .adm-tab { padding: 7px 11px; font-size: 12px; }
+    .adm-head img { width: 38px; height: 38px; }
+    .adm-stat-num { font-size: 17px; }
+  }
 </style>
 </head>
 <body>
 <div id="app"></div>
-<script src="js/admin.js?v=4.6"></script>
+<script src="js/admin.js?v=5.3"></script>
 </body>
 </html>

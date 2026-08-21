@@ -417,7 +417,7 @@ export async function renderCategory(page) {
     const body = el(`<div>
       ${formRow('仓库密码', `<input class="input" data-f="pwd" type="password" placeholder="请输入仓库密码" value="${esc(pwd)}">`)}
       <label class="row gap8" style="padding:4px 2px;font-size:13px;cursor:pointer"><input type="checkbox" data-f="remember" ${pwd ? 'checked' : ''}> 在本机记住密码</label>
-      <div class="muted" style="font-size:12px;padding-top:6px">官方仓库是你私人的源仓库，源保存在云端，凭密码取用。初始密码 123456，进入后可修改。</div>
+      <div class="muted" style="font-size:12px;padding-top:6px">官方仓库是管理员设立的云端源仓库：凭密码取用；你也可以把自己验证可用的源分享上去（自动分类）。</div>
     </div>`);
     const m = modal({
       title: '官方仓库', body,
@@ -463,14 +463,78 @@ export async function renderCategory(page) {
     }
   }
 
+  /* v5.3：把本机已验证可用的源分享到官方仓库（自动分类；需云端 repo_upsert 支持） */
+  async function shareMySources(pwd) {
+    const { listSources, validateSource } = await import('../engine/source-service.js');
+    const all = await listSources();
+    if (!all.length) { toast('本机还没有可分享的源', 'err'); return; }
+    const CAT_MAP = { novel: '小说', comic: '漫画', video: '视频', audio: '有声', music: '音乐' };
+    const sel = new Set();
+    const body = el(`<div>
+      <div class="muted" style="font-size:12px;line-height:1.8;margin-bottom:10px">选择要分享的源（会先在本机验证可用性，通过后自动上传并按类型分类）：</div>
+      <div data-role="list" style="max-height:340px;overflow-y:auto"></div>
+    </div>`);
+    const box = $('[data-role="list"]', body);
+    const render = () => {
+      box.innerHTML = all.map((s) => `
+        <label class="row gap8" style="padding:8px 4px;border-top:1px solid var(--line);cursor:pointer">
+          <input type="checkbox" data-sel="${esc(s.id)}" ${sel.has(s.id) ? 'checked' : ''}>
+          <div class="grow" style="min-width:0">
+            <div style="font-size:13.5px;font-weight:600" class="ellipsis">${esc(s.name)}</div>
+            <div class="muted" style="font-size:11.5px">${esc(CAT_MAP[s.type] || s.type)} · ${esc(s.version || '')}</div>
+          </div>
+        </label>`).join('')
+        || '<div class="muted" style="padding:20px;text-align:center">本机还没有源</div>';
+      $$('[data-sel]', box).forEach((c) => c.onchange = () => { if (c.checked) sel.add(c.dataset.sel); else sel.delete(c.dataset.sel); });
+    };
+    render();
+    const m = modal({
+      title: '分享我的源', body,
+      footer: '<button class="btn grow" data-a="cancel">取消</button><button class="btn btn-primary grow" data-a="ok">验证并分享</button>',
+    });
+    $('[data-a="cancel"]', m.mask).onclick = m.close;
+    $('[data-a="ok"]', m.mask).onclick = async () => {
+      const picked = all.filter((s) => sel.has(s.id));
+      if (!picked.length) return toast('请先勾选要分享的源', 'err');
+      const okBtn = $('[data-a="ok"]', m.mask);
+      okBtn.disabled = true; okBtn.textContent = '验证中…';
+      /* 1) 本机验证：结构校验 + 真实搜索测试 */
+      const items = [];
+      for (let i = 0; i < picked.length; i++) {
+        const s = picked[i];
+        okBtn.textContent = `验证 ${i + 1}/${picked.length}：${s.name}`;
+        try {
+          validateSource(s.code);
+          const { searchAll } = await import('../engine/source-service.js');
+          const res = await searchAll('测试', { only: s.id, types: [s.type] });
+          if (!res.length) throw new Error('搜索无结果（可能需特定关键词或站点维护中）');
+          items.push({ id: s.id, name: s.name, fmt: 'venera', category: CAT_MAP[s.type] || '其他', data: { code: s.code, name: s.name } });
+        } catch (e) { toast(`「${s.name}」验证未通过：${e.message}`, 'err'); }
+      }
+      if (!items.length) { okBtn.disabled = false; okBtn.textContent = '验证并分享'; return; }
+      /* 2) 上传官方仓库 */
+      okBtn.textContent = '上传中…';
+      try {
+        const { data, error } = await getSupabase().rpc('repo_upsert', { pwd, items });
+        if (error) throw new Error(error.message || '云端错误');
+        toast(`已分享 ${data || items.length} 个源到官方仓库`, 'ok');
+        m.close();
+      } catch (e) {
+        toast('分享失败：' + e.message + '（若提示函数不存在，请管理员在云端开启分享功能）', 'err');
+        okBtn.disabled = false; okBtn.textContent = '验证并分享';
+      }
+    };
+  }
+
   function openOfficialRepo(pwd, rows) {
     const groups = {};
     (rows || []).forEach((r) => { const c = r.category || '其他'; (groups[c] = groups[c] || []).push(r); });
     const cats = Object.keys(groups).sort();
     const body = el(`<div>
-      <div class="row gap8" style="padding:0 0 10px">
+      <div class="row gap8" style="padding:0 0 10px;flex-wrap:wrap">
         <button class="btn btn-primary btn-sm grow" data-a="importall">全部导入（${(rows || []).length}）</button>
         <button class="btn btn-sm" data-a="changepwd">修改密码</button>
+        <button class="btn btn-sm" data-a="share">分享我的源</button>
       </div>
       <div data-role="list"></div>
     </div>`);
@@ -485,7 +549,7 @@ export async function renderCategory(page) {
           <div class="row gap8" style="padding:8px 4px;border-top:1px solid var(--line)">
             <div class="grow" style="min-width:0">
               <div style="font-size:14px;font-weight:600" class="ellipsis">${esc(r.name)}</div>
-              <div class="muted" style="font-size:12px">${r.fmt === 'tvbox' ? 'TVbox 视频源' : r.fmt === 'venera' ? 'Venera 图源' : '阅读APP书源'} · ${fmtDate(r.updated_at)}</div>
+              <div class="muted" style="font-size:12px">${r.fmt === 'tvbox' ? '视频源' : r.fmt === 'venera' ? '图源' : '书源'} · ${fmtDate(r.updated_at)}</div>
             </div>
             <button class="btn btn-primary" style="flex:none;padding:6px 14px" data-add="${esc(r.id)}">添加</button>
           </div>`).join('')}`).join('')
@@ -503,6 +567,8 @@ export async function renderCategory(page) {
       footer: '<button class="btn grow" data-a="close">关闭</button>',
     });
     $('[data-a="close"]', m.mask).onclick = m.close;
+    /* v5.3：分享我的源（本机验证可用后上传官方仓库，自动分类） */
+    $('[data-a="share"]', body).onclick = () => shareMySources(pwd);
     $('[data-a="importall"]', body).onclick = async (ev) => {
       const btn = ev.currentTarget; btn.disabled = true;
       let ok = 0, exist = 0, fail = 0;

@@ -1,6 +1,14 @@
 /* ===== ThirdHub changelog.js — 版本更新日志（发版时在末尾追加） ===== */
 export const CHANGELOG = [
   {
+    version: '6.6',
+    date: '2026-08-23',
+    items: [
+      '新增 OpenCode Zen 厂商：9 个免费模型（Ox Alpha Free 等），带隐私分级（安全/注意/风险）标签与风险提示；Ox Alpha Free 作为限时免费模型置顶展示（剩 N 天/次数），后台可随时调整限时免费名单',
+      '新增「中转密钥」：第三方中转站通用 Key 一键粘贴，自动并行探测 OpenAI / DeepSeek / 智谱多品牌，匹配成功即自动配置到所有支持厂商，无需逐个填写',
+    ],
+  },
+  {
     version: '6.5',
     date: '2026-08-22',
     items: [

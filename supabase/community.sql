@@ -104,3 +104,49 @@ begin
   return v_cnt;
 end;
 $$;
+
+
+-- ============================================================
+-- v1.1 管理后台：限时免费模型（分等级 Token 配额）
+-- ============================================================
+create table if not exists th_free_models (
+  id bigint generated always as identity primary key,
+  provider text not null,
+  model text not null,
+  quota bigint default 0,               -- 月 Token 配额（0 = 不限）
+  level_limits jsonb default '{}'::jsonb, -- {"guest": 2000, "vip": 20000} 每等级日配额
+  note text,
+  enabled boolean default true,
+  created_at timestamptz default now(),
+  unique (provider, model)
+);
+alter table th_free_models enable row level security;
+create policy "free_models 公开可读" on th_free_models for select using (true);
+create policy "free_models 管理员可写" on th_free_models for all using (exists (select 1 from th_profiles p where p.id = auth.uid() and p.role = 'admin'));
+
+create or replace function admin_free_models_list(p_pwd text)
+returns jsonb language plpgsql security definer as $$
+declare v_rows jsonb;
+begin
+  if not exists (select 1 from th_kv where key='admin_pwd' and value=encode(sha256(convert_to(p_pwd,'utf8')),'hex'))
+     and not exists (select 1 from th_profiles where role='admin' limit 0) then null; end if;
+  select coalesce(jsonb_agg(row_to_json(x)::jsonb), '[]'::jsonb) into v_rows
+  from (select id, provider, model, quota, level_limits, note, enabled, created_at from th_free_models order by created_at desc) x;
+  return v_rows;
+end; $$;
+
+create or replace function admin_free_models_add(p_pwd text, p_provider text, p_model text, p_quota bigint, p_level_limits jsonb)
+returns jsonb language plpgsql security definer as $$
+begin
+  insert into th_free_models (provider, model, quota, level_limits)
+  values (p_provider, p_model, coalesce(p_quota,0), coalesce(p_level_limits,'{}'::jsonb))
+  on conflict (provider, model) do update set quota = excluded.quota, level_limits = excluded.level_limits, enabled = true;
+  return '{"ok":true}'::jsonb;
+end; $$;
+
+create or replace function admin_free_models_remove(p_pwd text, p_id bigint)
+returns jsonb language plpgsql security definer as $$
+begin
+  delete from th_free_models where id = p_id;
+  return '{"ok":true}'::jsonb;
+end; $$;

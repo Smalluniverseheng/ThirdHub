@@ -1,9 +1,0 @@
-{
-  "version": "5.9",
-  "type": "recommended",
-  "title": "ThirdHub v5.9",
-  "content": "AI 新建对话欢迎区改版为「灵感任务」；意见反馈默认仅管理员可见并支持附图；设备日志抓取更详细（含中文批注）；管理后台新增灵感任务库管理。",
-  "downloadUrl": "",
-  "releaseDate": "2026-08-21",
-  "releaseNotes": "灵感任务/反馈附图/设备日志/后台任务库"
-}

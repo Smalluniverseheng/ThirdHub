@@ -694,48 +694,69 @@ function showAvatarPicker(body, u) {
     });
   }
 
-  /* ================= 导航栏板块管理（1-5 个，「我的」固定） ================= */
+  /* ================= 导航栏板块管理（v6.1：分端设置 + 数量不限，「我的」固定） ================= */
   async function showTabManager() {
-    const { BOARDS, MAX_TABS, MIN_TABS } = await import('../boards.js');
-    const cur = await kvGet('ui:tabs', ['ai', 'search', 'read']);
-    const picked = new Set(Array.isArray(cur) && cur.length ? cur : ['ai']);
+    const { MIN_TABS } = await import('../boards.js');
+    const DEV_TABS = [
+      { id: 'mobile', name: '📱 移动端', key: 'nav:tabs-mobile', desc: '手机 / 折叠屏外屏' },
+      { id: 'desktop', name: '🖥️ 桌面端', key: 'nav:tabs-desktop', desc: '电脑 / 平板（宽屏）' },
+      { id: 'watch', name: '⌚ 手表端', key: 'nav:tabs-watch', desc: '超小屏触屏设备' },
+    ];
+    let curDev = 'mobile';
+    const picked = new Map(); // dev -> Set
 
     const body = el('<div></div>');
-    function render() {
+    async function render() {
+      const { BOARDS: B } = await import('../boards.js');
+      const list = B.filter((b) => !['novel', 'comic', 'audio'].includes(b.id));
+      const active = DEV_TABS.find((d) => d.id === curDev);
+      const set = picked.get(curDev) || new Set();
       body.innerHTML = `
-        <div class="muted" style="margin-bottom:10px;line-height:1.7">勾选要显示在底部导航栏的板块（${MIN_TABS}-${MAX_TABS} 个）。小说 / 漫画 / 有声已合并为「阅读」。未勾选的板块不会加载，勾选后首次打开时才下载。「我的」固定显示。</div>
+        <div class="muted" style="margin-bottom:10px;line-height:1.7">为不同设备分别设置导航栏板块（数量不限，导航可滑动 / 滚动）。未勾选的板块不加载。「我的」固定显示。</div>
+        <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+          ${DEV_TABS.map((d) => `<button class="ai-chip ${d.id === curDev ? 'on' : ''}" data-dev="${d.id}">${d.name}</button>`).join('')}
+        </div>
+        <div class="muted" style="font-size:12px;margin-bottom:8px">${esc(active.desc)} · 已选 <b data-v="n">${set.size}</b> 个板块</div>
         <div class="col gap8">
-          ${BOARDS.filter((b) => !['novel', 'comic', 'audio'].includes(b.id)).map((b) => `
+          ${list.map((b) => `
             <button class="list-item" style="width:100%" data-b="${b.id}">
               <span class="list-ico">${icon(b.ico)}</span>
               <div class="grow" style="text-align:left;min-width:0">
                 <div style="font-size:14px;font-weight:600">${b.name}</div>
                 <div class="muted ellipsis">${esc(b.desc)}</div>
               </div>
-              <span class="ai-toggle ${picked.has(b.id) ? 'on' : ''}"></span>
+              <span class="ai-toggle ${set.has(b.id) ? 'on' : ''}"></span>
             </button>`).join('')}
-        </div>
-        <div class="muted" style="text-align:center;margin-top:10px">已选 ${picked.size} / ${MAX_TABS} 个板块</div>`;
+        </div>`;
+      $$('[data-dev]', body).forEach((d) => d.onclick = () => { curDev = d.dataset.dev; render(); });
+      $$('[data-b]', body).forEach((b) => b.onclick = async () => {
+        const id = b.dataset.b;
+        const s = picked.get(curDev) || new Set();
+        if (s.has(id)) {
+          if (s.size <= MIN_TABS) return toast('至少保留 1 个板块');
+          s.delete(id);
+        } else s.add(id);
+        picked.set(curDev, s);
+        await kvSet(active.key, [...s]);
+        render();
+        const { rebuildTabs } = await import('../app.js');
+        const onTab = document.querySelector('#tabbar .tab.on');
+        rebuildTabs(onTab ? onTab.dataset.tab : null);
+      });
     }
-    render();
-    body.addEventListener('click', async (e) => {
-      const row = e.target.closest('[data-b]');
-      if (!row) return;
-      const id = row.dataset.b;
-      if (picked.has(id)) {
-        if (picked.size <= MIN_TABS) return toast('至少保留 1 个板块');
-        picked.delete(id);
-      } else {
-        if (picked.size >= MAX_TABS) return toast(`最多选择 ${MAX_TABS} 个板块`);
-        picked.add(id);
+    /* 预载当前各端配置后弹窗 */
+    (async () => {
+      const legacy = await kvGet('ui:tabs', ['ai', 'search', 'read']);
+      for (const d of DEV_TABS) {
+        const v = await kvGet(d.key, null);
+        picked.set(d.id, new Set(Array.isArray(v) ? v : legacy));
       }
-      await kvSet('ui:tabs', [...picked]);
-      render();
-      const { rebuildTabs } = await import('../app.js');
-      const onTab = document.querySelector('#tabbar .tab.on');
-      rebuildTabs(onTab ? onTab.dataset.tab : null);
-    });
-    modal({ title: '导航栏管理', body });
+      const { getDevice } = await import('../device-adapt.js');
+      const dev = getDevice();
+      curDev = dev === 'watch' ? 'watch' : (dev === 'desktop' ? 'desktop' : 'mobile');
+      await render();
+      modal({ title: '导航栏管理', body });
+    })();
   }
 
   /* ================= 历史版本（时间线，仅最新版展开） ================= */

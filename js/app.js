@@ -1,5 +1,5 @@
 /* ===== ThirdHub app.js — 应用入口 / 路由 / 初始化 ===== */
-export const APP_VERSION = '6.0';
+export const APP_VERSION = '5.1';
 window.__TH_CSS_V = APP_VERSION; /* v2.7：CSS 按需加载的版本戳 */
 
 import { $, $$, icon, toast, loadCss } from './ui.js';
@@ -146,9 +146,11 @@ async function getRenderer(board) {
   return (page) => mod[board.fn](page, board.arg);
 }
 
+let switchSeq = 0; /* v6.1：切换令牌 —— 快速连点时旧渲染结果作废，杜绝页面重叠 */
 export async function switchTab(tab, force = false) {
   if (!activeBoards.some((b) => b.id === tab)) tab = activeBoards[0] ? activeBoards[0].id : 'ai';
   if (tab === currentTab && !force) return;
+  const seq = ++switchSeq;
   $$('#tabbar .tab').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab));
   $$('.page').forEach((p) => p.classList.remove('active'));
   const page = $('#page-' + tab);
@@ -159,10 +161,13 @@ export async function switchTab(tab, force = false) {
       /* v2.7：板块样式按需加载（首次切换时才下载对应 CSS） */
       if (board.css) await Promise.all(board.css.map(loadCss));
       const render = await getRenderer(board);
+      if (seq !== switchSeq) return; /* v6.1：期间用户已切走，丢弃本次渲染 */
       page.innerHTML = '';
       await render(page);
+      if (seq !== switchSeq) return;
       rendered.add(tab);
     } catch (e) {
+      if (seq !== switchSeq) return;
       /* v4.3：带上板块名与真实错误信息，避免日志只剩 {} */
       console.error(`板块加载失败[${board.id}/${board.name}]`, e && e.message ? `${e.name || 'Error'}: ${e.message}` : e, e && e.stack ? '\n' + e.stack : '');
       page.innerHTML = `<div style="padding:80px 24px;text-align:center;color:var(--tx-3,#888)">
@@ -174,7 +179,8 @@ export async function switchTab(tab, force = false) {
       return;
     }
   }
-  requestAnimationFrame(() => page.classList.add('active'));
+  if (seq !== switchSeq) return;
+  requestAnimationFrame(() => { if (seq === switchSeq) page.classList.add('active'); });
   currentTab = tab;
   emit('tab:' + tab);
   refreshTabIndicator();

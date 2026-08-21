@@ -16,6 +16,7 @@
    后端 → stream_token {token, accumulated} / stream_done {full_text}
    后端 → tool_call {tool_name, arguments} / tool_result {tool_name, result}（Agent 工具轨迹） */
 import { WebSocketServer } from 'ws';
+import http from 'http';
 import { createHash, randomBytes, createCipheriv, createDecipheriv, scryptSync } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync, readFileSync as read } from 'node:fs';
@@ -126,7 +127,86 @@ async function closeHarness() {
   if (harness) { try { await harness.close(); } catch (e) {} harness = null; }
 }
 
+
+/* ---------- v0.3 设备自动发现与一键配对 ---------- */
+const SB_URL = 'https://mxvxlgjzeboktufumxbp.supabase.co';
+const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im14dnhsZ2p6ZWJva3R1ZnVteGJwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQzODM5OTcsImV4cCI6MjA5OTk1OTk5N30.QjSLfYAFhwX72YSeAcbTN5O2_PDLaNcv76HhdGJsqpo';
+const DEVICE_FILE = path.join(DATA_DIR, 'device.json');
+function loadDevice() {
+  try {
+    if (existsSync(DEVICE_FILE)) return JSON.parse(readFileSync(DEVICE_FILE, 'utf8'));
+  } catch (e) {}
+  const d = {
+    device_id: (os.hostname() || 'agent') + '-' + randomBytes(3).toString('hex'),
+    secret: randomBytes(16).toString('hex'),
+    name: os.hostname() || 'ThirdHub-Agent',
+    owner: null,
+  };
+  try { writeFileSync(DEVICE_FILE, JSON.stringify(d, null, 2)); } catch (e) {}
+  return d;
+}
+function saveDevice() {
+  try { writeFileSync(DEVICE_FILE, JSON.stringify(device, null, 2)); } catch (e) {}
+}
+const device = loadDevice();
+const deviceSecretHash = () => createHash('sha256').update(device.secret).digest('hex');
+async function sbRpc(fn, body) {
+  try {
+    const r = await fetch(SB_URL + '/rest/v1/rpc/' + fn, {
+      method: 'POST',
+      headers: { apikey: SB_ANON, Authorization: 'Bearer ' + SB_ANON, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body || {}),
+    });
+    if (!r.ok) return null;
+    return await r.json();
+  } catch (e) { return null; }
+}
+function lanIps() {
+  return Object.values(os.networkInterfaces()).flat()
+    .filter((x) => x && x.family === 'IPv4' && !x.internal)
+    .map((x) => x.address);
+}
+function isLanIp(ip) {
+  ip = String(ip || '').replace(/^::ffff:/, '');
+  if (ip === '127.0.0.1' || ip === '::1') return true;
+  const m = ip.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+  if (!m) return false;
+  const a = +m[1], b = +m[2];
+  if (a === 10) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 192 && b === 168) return true;
+  return false;
+}
+async function beat() {
+  const r = await sbRpc('device_ping', {
+    p_device_id: device.device_id, p_secret_hash: deviceSecretHash(),
+    p_name: device.name, p_lan_ips: lanIps(), p_public_ip: '', p_version: '0.3.0',
+  });
+  if (r && r.ok) {
+    if (r.status === 'bound' && r.owner && String(r.owner) !== String(device.owner || '')) {
+      device.owner = r.owner; saveDevice();
+    }
+    if (r.status === 'unbound' && device.owner) { device.owner = null; saveDevice(); }
+  }
+}
+/* HTTP 发现端口（9601）：/discover 返回设备信息，前端探测用 */
+http.createServer((req, res) => {
+  const u = new URL(req.url, 'http://x');
+  if (u.pathname === '/discover') {
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+    res.end(JSON.stringify({ device_id: device.device_id, name: device.name, version: '0.3.0', bound: !!device.owner, port: PORT }));
+    return;
+  }
+  res.writeHead(200, { 'Access-Control-Allow-Origin': '*' });
+  res.end('ThirdHub-Agent discover endpoint');
+}).listen(9601, '0.0.0.0');
+
+/* 注册 + 心跳（每 30s） */
+beat();
+setInterval(beat, 30000);
+
 /* ---------- WS 服务 ---------- */
+
 const wss = new WebSocketServer({ port: PORT, host: '0.0.0.0' });
 const clients = new Map(); // ws -> { authed, token, device }
 
@@ -345,8 +425,27 @@ wss.on('connection', (ws, req) => {
     try { msg = JSON.parse(raw.toString()); } catch (e) { return send(ws, { type: 'error', payload: { code: 'BAD_JSON', message: '消息格式错误' } }); }
     if (msg.type === 'heartbeat') return send(ws, { type: 'heartbeat', payload: { timestamp: Date.now() } });
 
+    if (msg.type === 'auth' && msg.action === 'pair') {
+      const token = String(msg.payload && msg.payload.token || '');
+      const r = await sbRpc('device_pair_claim', { p_device_id: device.device_id, p_token: token });
+      if (r && r.ok) {
+        device.owner = r.user_id; saveDevice();
+        client.authed = true; client.token = randomBytes(16).toString('hex');
+        const conf2 = currentModelConf();
+        return send(ws, { type: 'auth_result', id: msg.id, payload: { success: true, token: client.token, paired: true, owner: r.user_id, device_id: device.device_id, workspace: { id: 'main', mode: 'full', label: '本机工作区' }, capabilities: ['deepseek', 'tools', 'files', 'python'], active_model: conf2 ? { id: conf2.id, name: conf2.name, modelId: conf2.modelId } : null, models: (config.models || []).map((m) => ({ id: m.id, name: m.name, apiKeyMasked: m.apiKeyMask || '' })) } });
+      }
+      return send(ws, { type: 'auth_result', id: msg.id, payload: { success: false, error: '配对失败（令牌无效或已过期）' } });
+    }
+
     if (msg.type === 'auth' && msg.action === 'login') {
-      const ok = await bcrypt.compare(String(msg.payload && msg.payload.password || ''), config.passwordHash || '');
+      const pw = String(msg.payload && msg.payload.password || '');
+      /* 已配对设备：同局域网免密登录（一键配对后无需再输密码） */
+      if (!pw && device.owner && isLanIp(remote)) {
+        client.authed = true; client.token = randomBytes(16).toString('hex');
+        const conf3 = currentModelConf();
+        return send(ws, { type: 'auth_result', id: msg.id, payload: { success: true, token: client.token, paired: true, owner: device.owner, device_id: device.device_id, workspace: { id: 'main', mode: 'full', label: '本机工作区' }, capabilities: ['deepseek', 'tools', 'files', 'python'], active_model: conf3 ? { id: conf3.id, name: conf3.name, modelId: conf3.modelId } : null, models: (config.models || []).map((m) => ({ id: m.id, name: m.name, apiKeyMasked: m.apiKeyMask || '' })) } });
+      }
+      const ok = await bcrypt.compare(pw, config.passwordHash || '');
       if (!ok) return send(ws, { type: 'auth_result', id: msg.id, payload: { success: false, error: '密码错误' } });
       client.authed = true;
       client.token = randomBytes(16).toString('hex');
@@ -355,7 +454,7 @@ wss.on('connection', (ws, req) => {
         type: 'auth_result', id: msg.id,
         payload: {
           success: true, token: client.token,
-          device_id: (os.hostname() || 'agent') + '-' + createHash('sha1').update(os.hostname()).digest('hex').slice(0, 6),
+          device_id: device.device_id,
           /* v0.2：工作区与权限（管理员=full 全权限；分享用户=container 隔离容器，由 DSH 沙箱提供隔离） */
           workspace: { id: 'main', mode: 'full', label: '本机工作区' },
           capabilities: ['deepseek', 'tools', 'files', 'python'],
@@ -382,7 +481,7 @@ wss.on('connection', (ws, req) => {
 
 /* ---------- 启动 ---------- */
 async function main() {
-  console.log('ThirdHub-Agent v0.1.0');
+  console.log('ThirdHub-Agent v0.3.0');
   const ok = await ensurePassword();
   if (!ok) return;
   const ip = Object.values(os.networkInterfaces()).flat().find((x) => x && x.family === 'IPv4' && !x.internal);

@@ -1,6 +1,14 @@
 /* ===== ThirdHub changelog.js — 版本更新日志（发版时在末尾追加） ===== */
 export const CHANGELOG = [
   {
+    version: '6.3',
+    date: '2026-08-22',
+    items: [
+      '后端设备自动发现与一键配对：电脑端运行 ThirdHub-Agent 即自动上报，前端「后端」页自动显示局域网设备，点击一键配对（免密，登录态即凭证）',
+      'Agent v0.3.1：云端注册/心跳、HTTP 发现端口、配对令牌校验、已配对设备同局域网免密登录',
+    ],
+  },
+  {
     version: '6.2',
     date: '2026-08-22',
     items: [

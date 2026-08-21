@@ -350,3 +350,114 @@ begin
   update th_profiles set role = p_role where id = p_uid;
   return jsonb_build_object('ok', true);
 end; $$;
+
+-- ============================================================
+-- v1.4 权限体系：开发者(developer) > 管理员(admin)
+--   th_kv.admin_role      当前后台权限角色（developer / admin），SQL 默认 developer
+--   th_kv.admin_email     找回密码接收邮箱（登录页“忘记密码”用）
+--   th_kv.announcement    公告内容 {title, content, enabled}
+--   收款设置 admin_set_pay_config 仅 developer 可调用
+-- ============================================================
+
+-- 初始化后台配置（幂等）
+insert into th_kv (key, value) values
+  ('admin_role', 'developer'),
+  ('admin_email', '')
+on conflict (key) do nothing;
+
+-- 把指定账号标记为开发者（最高权限）。执行前把 WHERE 改成你的账号：
+--   例：WHERE id = '182'::uuid / WHERE email = 'xxx@yyy.com' / WHERE phone = '182'
+-- update th_profiles set role = 'developer'
+--   where id = '<你的182账号uid>'::uuid;
+
+-- 当前后台角色（登录后调用，前端据此显示/隐藏功能）
+create or replace function admin_whoami(p_pwd text)
+returns jsonb language plpgsql security definer as $$
+declare v_role text;
+begin
+  if not admin_check(p_pwd) then raise exception 'unauthorized'; end if;
+  select coalesce(value, 'developer') into v_role from th_kv where key = 'admin_role';
+  return jsonb_build_object('role', v_role);
+end; $$;
+
+-- 切换后台权限角色（开发者 <-> 管理员，需要当前密码；供后期调整权限用）
+create or replace function admin_set_role(p_pwd text, p_role text)
+returns jsonb language plpgsql security definer as $$
+begin
+  if not admin_check(p_pwd) then raise exception 'unauthorized'; end if;
+  if coalesce(p_role, '') not in ('developer', 'admin') then raise exception 'invalid role'; end if;
+  insert into th_kv (key, value) values ('admin_role', p_role)
+  on conflict (key) do update set value = excluded.value, updated_at = now();
+  return jsonb_build_object('ok', true, 'role', p_role);
+end; $$;
+
+-- 修改后台登录密码（需旧密码；新密码至少 6 位）
+create or replace function admin_change_pwd(p_pwd text, p_new_pwd text)
+returns jsonb language plpgsql security definer as $$
+begin
+  if not admin_check(p_pwd) then raise exception 'unauthorized'; end if;
+  if length(coalesce(p_new_pwd, '')) < 6 then raise exception 'password too short'; end if;
+  insert into th_kv (key, value) values ('admin_pwd', encode(sha256(convert_to(p_new_pwd, 'utf8')), 'hex'))
+  on conflict (key) do update set value = excluded.value, updated_at = now();
+  return jsonb_build_object('ok', true);
+end; $$;
+
+-- 忘记密码：请求重置码（邮箱必须等于 admin_email；码 10 分钟有效，返回给调用方用于发送邮件）
+create or replace function admin_reset_request(p_email text)
+returns jsonb language plpgsql security definer as $$
+declare v_email text; v_code text;
+begin
+  select coalesce(value, '') into v_email from th_kv where key = 'admin_email';
+  if v_email = '' or lower(trim(p_email)) <> lower(trim(v_email)) then
+    return jsonb_build_object('ok', false, 'reason', 'email mismatch');
+  end if;
+  v_code := lpad(floor(random() * 1000000)::text, 6, '0');
+  insert into th_kv (key, value) values ('admin_reset_code', v_code)
+  on conflict (key) do update set value = excluded.value, updated_at = now();
+  insert into th_kv (key, value) values ('admin_reset_expire', to_char(now() + interval '10 minutes', 'YYYY-MM-DD HH24:MI:SS'))
+  on conflict (key) do update set value = excluded.value, updated_at = now();
+  return jsonb_build_object('ok', true, 'code', v_code);
+end; $$;
+
+-- 忘记密码：用重置码设置新密码
+create or replace function admin_reset_apply(p_code text, p_new_pwd text)
+returns jsonb language plpgsql security definer as $$
+declare v_code text; v_expire text;
+begin
+  select coalesce(value, '') into v_code from th_kv where key = 'admin_reset_code';
+  select coalesce(value, '') into v_expire from th_kv where key = 'admin_reset_expire';
+  if v_code = '' or v_code <> trim(p_code) then return jsonb_build_object('ok', false, 'reason', 'bad code'); end if;
+  if v_expire = '' or now() > to_timestamp(v_expire, 'YYYY-MM-DD HH24:MI:SS') then
+    return jsonb_build_object('ok', false, 'reason', 'expired');
+  end if;
+  if length(coalesce(p_new_pwd, '')) < 6 then return jsonb_build_object('ok', false, 'reason', 'too short'); end if;
+  insert into th_kv (key, value) values ('admin_pwd', encode(sha256(convert_to(p_new_pwd, 'utf8')), 'hex'))
+  on conflict (key) do update set value = excluded.value, updated_at = now();
+  delete from th_kv where key in ('admin_reset_code', 'admin_reset_expire');
+  return jsonb_build_object('ok', true);
+end; $$;
+
+-- 公告管理（管理员可改）：存 th_kv.announcement
+create or replace function admin_upsert_announcement(p_pwd text, p_title text, p_content text, p_enabled boolean)
+returns jsonb language plpgsql security definer as $$
+begin
+  if not admin_check(p_pwd) then raise exception 'unauthorized'; end if;
+  insert into th_kv (key, value)
+  values ('announcement', jsonb_build_object('title', coalesce(p_title, ''), 'content', coalesce(p_content, ''), 'enabled', coalesce(p_enabled, false), 'updated_at', now()))
+  on conflict (key) do update set value = excluded.value, updated_at = now();
+  return jsonb_build_object('ok', true);
+end; $$;
+
+-- 收款设置权限：后端加固（可选）。已部署的 admin_set_pay_config 无法在此覆盖（需按实际表结构写），
+-- 前端已按角色隐藏「收款设置」入口；如需后端强制校验，取消下面注释并确认 th_pay_config 列名后执行：
+-- create or replace function admin_set_pay_config(p_pwd text, val jsonb)
+-- returns jsonb language plpgsql security definer as $$
+-- declare v_role text;
+-- begin
+--   if not admin_check(p_pwd) then raise exception 'unauthorized'; end if;
+--   select coalesce(value, 'developer') into v_role from th_kv where key = 'admin_role';
+--   if v_role <> 'developer' then raise exception 'developer only'; end if;
+--   insert into th_pay_config (key, value) values ('payment', val)
+--   on conflict (key) do update set value = excluded.value;
+--   return jsonb_build_object('ok', true);
+-- end; $$;

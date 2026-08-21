@@ -1,4 +1,4 @@
-/* ===== ThirdHub js/admin.js — 管理后台（v1.3） =====
+/* ===== ThirdHub js/admin.js — 管理后台（v1.4） =====
    入口 admin.html · 账号 admin · 密码由管理员在云端配置（不在此展示）
    侧边栏导航 / 仪表盘 / 用户管理（等级弹层选择·昵称编辑与恢复·多管理员·关注星标）/ 用户数据（书源·API 密钥）/
    订单 / 发票 / 会员定价 / 模型定价 / 排行榜（表格批量编辑）/ 限时免费模型（独立入口）/ 官方仓库 / 反馈 / 收款设置 / 历史版本
@@ -115,6 +115,11 @@ function renderGate() {
       '<input class="adm-input" id="g-pwd" type="password" placeholder="密码">' +
       '<button class="adm-btn adm-btn-primary adm-btn-block" id="g-login">登录</button>' +
       '<p id="g-err" style="color:#ef4444;font-size:13px;margin-top:10px"></p>' +
+      '<p style="margin-top:14px;font-size:13px">' +
+        '<a href="javascript:void 0" id="g-forgot" style="color:#7da2ff">忘记密码？</a>' +
+        '<span class="adm-muted"> · </span>' +
+        '<a href="javascript:void 0" id="g-reset" style="color:#7da2ff">有重置码？设置新密码</a>' +
+      '</p>' +
     '</div>';
   function doLogin() {
     var user = $('#g-user').value.trim();
@@ -128,15 +133,102 @@ function renderGate() {
       if (r.error) throw r.error;
       PWD = pwd;
       sessionStorage.setItem('th-admin-pwd', pwd);
+      // 读取当前后台权限角色（developer / admin）；RPC 未部署时回退开发者
+      return loadSb().then(function (cli2) { return cli2.rpc('admin_whoami', { pwd: pwd }); })
+        .then(function (wr) { return (wr && !wr.error && wr.data && wr.data.role) || 'developer'; })
+        .catch(function () { return 'developer'; });
+    }).then(function (role) {
+      sessionStorage.setItem('th-admin-role', role);
       renderHome();
     }).catch(function () { err.textContent = '密码错误或云端不可用'; });
   }
   $('#g-login').onclick = doLogin;
   $('#g-pwd').addEventListener('keydown', function (e) { if (e.key === 'Enter') doLogin(); });
+  $('#g-forgot').onclick = openForgotSheet;
+  $('#g-reset').onclick = openResetSheet;
 }
 
-/* ---------- 主框架（v1.3 左侧竖排导航） ---------- */
+/* ---------- 忘记密码：向配置邮箱发送 6 位重置码 ---------- */
+function openForgotSheet() {
+  var ov = openSheet(
+    '<div class="adm-sheet-title">🔑 忘记密码</div>' +
+    '<div class="adm-muted" style="margin-bottom:10px">输入后台绑定的接收邮箱（管理员在「系统设置 → 找回邮箱」中配置）。校验通过后会向该邮箱发送 6 位重置码，10 分钟内有效。</div>' +
+    '<input class="adm-input" data-f="em" placeholder="接收邮箱" style="margin-bottom:12px">' +
+    '<button class="adm-btn adm-btn-primary adm-btn-block" data-a="ok">发送重置码</button>'
+  );
+  $('[data-a="ok"]', ov).onclick = function () {
+    var em = $('[data-f="em"]', ov).value.trim();
+    if (!em) { toast('请输入邮箱', false); return; }
+    var btn = $('[data-a="ok"]', ov); btn.disabled = true; btn.textContent = '请求中…';
+    loadSb().then(function (cli) { return cli.rpc('admin_reset_request', { email: em }); })
+      .then(function (r) {
+        if (r.error) throw r.error;
+        if (!r.data || !r.data.ok) { toast('邮箱与后台绑定邮箱不一致', false); btn.disabled = false; btn.textContent = '发送重置码'; return; }
+        var code = r.data.code || '';
+        // 通过 formsubmit 免费转发到绑定邮箱（首次使用需在邮箱中点击激活确认）
+        return fetch('https://formsubmit.co/ajax/' + encodeURIComponent(em), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({ subject: 'ThirdHub 后台密码重置码', message: '你的后台密码重置码是：' + code + '（10 分钟内有效）。如果不是你本人操作请忽略。' }),
+        }).then(function (fr) { return fr.json(); }).catch(function () { return { success: false }; })
+          .then(function (fj) {
+            var sent = fj && fj.success !== false;
+            closeSheet(ov);
+            toast(sent ? '重置码已发送至邮箱，请查收（含垃圾箱）' : '重置码已生成，但邮件发送失败，请联系开发者', sent);
+          });
+      })
+      .catch(function (e) { toast('请求失败：' + e.message, false); btn.disabled = false; btn.textContent = '发送重置码'; });
+  };
+}
+
+/* ---------- 有重置码：设置新密码 ---------- */
+function openResetSheet() {
+  var ov = openSheet(
+    '<div class="adm-sheet-title">🔐 用重置码设置新密码</div>' +
+    '<input class="adm-input" data-f="code" placeholder="6 位重置码" style="margin-bottom:8px">' +
+    '<input class="adm-input" type="password" data-f="np" placeholder="新密码（至少 6 位）" style="margin-bottom:8px">' +
+    '<input class="adm-input" type="password" data-f="np2" placeholder="确认新密码" style="margin-bottom:12px">' +
+    '<button class="adm-btn adm-btn-primary adm-btn-block" data-a="ok">重置密码</button>'
+  );
+  $('[data-a="ok"]', ov).onclick = function () {
+    var code = $('[data-f="code"]', ov).value.trim();
+    var np = $('[data-f="np"]', ov).value;
+    var np2 = $('[data-f="np2"]', ov).value;
+    if (!code || code.length !== 6) { toast('请输入 6 位重置码', false); return; }
+    if (np.length < 6) { toast('新密码至少 6 位', false); return; }
+    if (np !== np2) { toast('两次输入的新密码不一致', false); return; }
+    var btn = $('[data-a="ok"]', ov); btn.disabled = true; btn.textContent = '提交中…';
+    loadSb().then(function (cli) { return cli.rpc('admin_reset_apply', { code: code, new_pwd: np }); })
+      .then(function (r) {
+        if (r.error) throw r.error;
+        if (!r.data || !r.data.ok) {
+          var why = r.data && r.data.reason === 'expired' ? '重置码已过期，请重新申请' : (r.data && r.data.reason === 'bad code' ? '重置码不正确' : '重置失败');
+          toast(why, false);
+          btn.disabled = false; btn.textContent = '重置密码';
+          return;
+        }
+        toast('密码已重置，请用新密码登录');
+        closeSheet(ov);
+      })
+      .catch(function (e) { toast('重置失败：' + e.message, false); btn.disabled = false; btn.textContent = '重置密码'; });
+  };
+}
+
+/* ---------- 主框架（v1.3 左侧竖排导航 / v1.4 按角色过滤） ---------- */
+function curRole() { return sessionStorage.getItem('th-admin-role') || 'developer'; }
+function visibleTabs() {
+  var role = curRole();
+  return TABS.filter(function (t) {
+    if (role === 'developer') return true;
+    if (t.id === 'paycfg') return false; // 收款设置仅开发者
+    return true;
+  });
+}
 function renderHome() {
+  var role = curRole();
+  var roleBadge = role === 'developer'
+    ? '<span class="adm-badge" style="background:#fbbf2422;color:#fbbf24">👑 开发者</span>'
+    : '<span class="adm-badge" style="background:#ef444422;color:#ef4444">🛡️ 管理员</span>';
   var html = '<div class="adm-layout">' +
     '<aside class="adm-side">' +
       '<div class="adm-side-head">' +
@@ -144,14 +236,17 @@ function renderHome() {
         '<div class="adm-side-title">ThirdHub<br>管理后台</div>' +
       '</div>' +
       '<nav class="adm-side-nav">' +
-        TABS.map(function (t) {
+        visibleTabs().map(function (t) {
           return '<button class="adm-tab' + (state.tab === t.id ? ' on' : '') + '" data-act="tab" data-t="' + t.id + '">' +
             '<span class="adm-tab-ico">' + (t.icon || '•') + '</span>' + t.name + '</button>';
         }).join('') +
       '</nav>' +
       '<div class="adm-side-foot">' +
-        '<button class="adm-btn adm-btn-sm" data-act="logout">🚪 退出</button>' +
-        '<span class="adm-muted" style="font-size:11px;line-height:2">v1.3 · 第三方科技</span>' +
+        roleBadge +
+        '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">' +
+          '<button class="adm-btn adm-btn-sm" data-act="logout">🚪 退出</button>' +
+        '</div>' +
+        '<span class="adm-muted" style="font-size:11px;line-height:2">v1.4 · 第三方科技</span>' +
       '</div>' +
     '</aside>' +
     '<main class="adm-main"><div id="adm-body"></div></main>' +
@@ -284,16 +379,14 @@ function renderUserList(allUsers) {
       '</div>' +
       '<div style="text-align:right">' +
         '<span class="adm-badge" style="background:' + levelColor(lv) + '22;color:' + levelColor(lv) + '">' + levelName(lv) + '</span>' +
-        (u.role === 'admin' ? ' <span class="adm-badge" style="background:#ef444422;color:#ef4444">管理员</span>' : '') +
+        (u.role === 'developer' ? ' <span class="adm-badge" style="background:#fbbf2422;color:#fbbf24">👑 开发者</span>' : '') +
+        (u.role === 'admin' ? ' <span class="adm-badge" style="background:#ef444422;color:#ef4444">🛡️ 管理员</span>' : '') +
         '<div class="adm-nick-row" style="justify-content:flex-end">' +
           '<button class="adm-btn adm-btn-sm" data-act="setlevel" data-uid="' + u.id + '">🎚️ 等级</button>' +
           '<button class="adm-btn adm-btn-sm" data-act="editnick" data-uid="' + u.id + '">✏️ 昵称</button>' +
           (getNickOrig(u.id) && getNickOrig(u.id) !== (u.nickname || '')
             ? '<button class="adm-btn adm-btn-sm" data-act="restorenick" data-uid="' + u.id + '" style="color:#fbbf24">↩️ 恢复昵称</button>'
             : '') +
-          (u.role === 'admin'
-            ? '<button class="adm-btn adm-btn-sm" data-act="setrole" data-uid="' + u.id + '" data-role="user" style="color:#f472b6">👑 取消管理员</button>'
-            : '<button class="adm-btn adm-btn-sm" data-act="setrole" data-uid="' + u.id + '" data-role="admin" style="color:#34d399">👑 设为管理员</button>') +
         '</div>' +
       '</div>' +
     '</div>';
@@ -430,36 +523,11 @@ function restoreUserNickname(uid) {
   };
 }
 
-/* ---------- 设置 / 取消管理员（管理员可有多个） ---------- */
-function toggleUserRole(uid, role) {
-  var u = (state.users || []).find(function (x) { return x.id === uid; });
-  if (!u) return;
-  var toAdmin = role === 'admin';
-  var ov = openSheet(
-    '<div class="adm-sheet-title">' + (toAdmin ? '👑 设为管理员' : '👑 取消管理员') + '</div>' +
-    '<div class="adm-muted" style="margin-bottom:10px">用户：' + esc(u.nickname || u.email || uid) +
-      (toAdmin ? '<br>设为管理员后拥有全部后台权限（可同时存在多位管理员）。' : '<br>取消后该用户不再拥有后台权限。') + '</div>' +
-    '<input class="adm-input" type="password" data-f="pwd" placeholder="管理员密码（确认操作）" style="margin-bottom:12px">' +
-    '<button class="adm-btn adm-btn-primary adm-btn-block" data-a="nn-ok">' + (toAdmin ? '确认设为管理员' : '确认取消管理员') + '</button>'
-  );
-  $('[data-a="nn-ok"]', ov).onclick = function () {
-    var pwd = $('[data-f="pwd"]', ov).value;
-    if (!pwd) { toast('请输入管理员密码', false); return; }
-    var btn = $('[data-a="nn-ok"]', ov); btn.disabled = true; btn.textContent = '提交中…';
-    loadSb().then(function (cli) {
-      return cli.rpc('admin_set_user_role', { pwd: pwd, uid: uid, role: role });
-    }).then(function (r) {
-      if (r.error) throw r.error;
-      toast(toAdmin ? '已设为管理员' : '已取消管理员');
-      closeSheet(ov);
-      state.users = null;
-      renderBody();
-    }).catch(function (e) {
-      toast('操作失败：' + (String(e.message || '').indexOf('unauthorized') >= 0 ? '管理员密码不正确' : e.message), false);
-      btn.disabled = false; btn.textContent = toAdmin ? '确认设为管理员' : '确认取消管理员';
-    });
-  };
-}
+/* ---------- v1.4 角色说明：开发者(developer) > 管理员(admin) ---------- */
+/* 开发者：最高权限（收款设置 / 改后台密码 / 权限切换），对应 182 账号
+   管理员：公告 / 限时免费模型 / 会员定价 / 发票 / 订单 / 用户 / 排行榜 / 反馈 / 仓库
+   角色由云端 th_kv.admin_role 决定（登录后 admin_whoami 返回），不在后台随意设置 */
+function toggleUserRoleDisabled() { }
 
 /* ---------- 用户数据（书源 / API 密钥） ---------- */
 function renderUserData(body) {
@@ -945,9 +1013,25 @@ function repoDoSave(btn) {
 }
 
 
-/* ================= 系统设置（v1.3：限时免费模型已独立成标签） ================= */
+/* ================= 系统设置（v1.4：密码 / 权限 / 公告 / 历史版本） ================= */
 function renderSystem(body) {
   body.innerHTML =
+    '<div class="adm-card" style="margin-bottom:12px;cursor:pointer" data-a="pwd">' +
+      '<b>🔑 修改后台密码</b>' +
+      '<p class="adm-muted" style="margin-top:6px">更换管理后台登录密码（需输入当前密码）</p>' +
+    '</div>' +
+    '<div class="adm-card" style="margin-bottom:12px;cursor:pointer" data-a="role">' +
+      '<b>👑 后台权限</b>' +
+      '<p class="adm-muted" style="margin-top:6px">当前：' + (curRole() === 'developer' ? '开发者（全部权限）' : '管理员（收款设置仅开发者）') + '，点击切换 / 调整</p>' +
+    '</div>' +
+    '<div class="adm-card" style="margin-bottom:12px;cursor:pointer" data-a="notice">' +
+      '<b>📢 公告管理</b>' +
+      '<p class="adm-muted" style="margin-top:6px">编辑 App 公告（标题 / 内容 / 启用状态），管理员可修改</p>' +
+    '</div>' +
+    '<div class="adm-card" style="margin-bottom:12px;cursor:pointer" data-a="email">' +
+      '<b>📮 找回邮箱</b>' +
+      '<p class="adm-muted" style="margin-top:6px">配置「忘记密码」时重置码的接收邮箱（如 182 账号邮箱）</p>' +
+    '</div>' +
     '<div class="adm-card" style="margin-bottom:12px;cursor:pointer" data-a="hist">' +
       '<b>📜 历史版本</b>' +
       '<p class="adm-muted" style="margin-top:6px">管理后台更新日志</p>' +
@@ -956,11 +1040,149 @@ function renderSystem(body) {
       '<b>🎁 限时免费模型</b>' +
       '<p class="adm-muted" style="margin-top:6px">已独立为左侧导航「限时免费模型」标签，点击前往</p>' +
     '</div>';
+  $('[data-a="pwd"]', body).onclick = function () { renderChangePwd(body); };
+  $('[data-a="role"]', body).onclick = function () { renderRoleCfg(body); };
+  $('[data-a="notice"]', body).onclick = function () { renderNoticeEdit(body); };
+  $('[data-a="email"]', body).onclick = function () { renderEmailCfg(body); };
   $('[data-a="fm"]', body).onclick = function () { state.tab = 'freemodels'; renderBody(); };
   $('[data-a="hist"]', body).onclick = function () { renderAdminChangelog(body); };
 }
 
+/* 修改后台密码 */
+function renderChangePwd(body) {
+  body.innerHTML =
+    '<div class="adm-card"><b>🔑 修改后台密码</b>' +
+      '<input class="adm-input" type="password" data-f="old" placeholder="当前密码" style="margin-top:12px">' +
+      '<input class="adm-input" type="password" data-f="np" placeholder="新密码（至少 6 位）">' +
+      '<input class="adm-input" type="password" data-f="np2" placeholder="确认新密码">' +
+      '<button class="adm-btn adm-btn-primary" data-a="ok">修改密码</button>' +
+      '<button class="adm-btn" data-a="back">返回</button>' +
+    '</div>';
+  $('[data-a="ok"]', body).onclick = function () {
+    var old = $('[data-f="old"]', body).value;
+    var np = $('[data-f="np"]', body).value;
+    var np2 = $('[data-f="np2"]', body).value;
+    if (!old) { toast('请输入当前密码', false); return; }
+    if (np.length < 6) { toast('新密码至少 6 位', false); return; }
+    if (np !== np2) { toast('两次输入的新密码不一致', false); return; }
+    var btn = $('[data-a="ok"]', body); btn.disabled = true; btn.textContent = '修改中…';
+    loadSb().then(function (cli) { return cli.rpc('admin_change_pwd', { pwd: old, new_pwd: np }); })
+      .then(function (r) {
+        if (r.error) throw r.error;
+        PWD = np;
+        sessionStorage.setItem('th-admin-pwd', np);
+        toast('密码已修改，请牢记新密码', true);
+        renderSystem(body);
+      }).catch(function (e) {
+        toast('修改失败：' + (String(e.message || '').indexOf('unauthorized') >= 0 ? '当前密码不正确' : e.message), false);
+        btn.disabled = false; btn.textContent = '修改密码';
+      });
+  };
+  $('[data-a="back"]', body).onclick = function () { renderSystem(body); };
+}
+
+/* 后台权限切换（开发者 / 管理员） */
+function renderRoleCfg(body) {
+  var role = curRole();
+  body.innerHTML =
+    '<div class="adm-card"><b>👑 后台权限</b>' +
+      '<p class="adm-muted" style="margin-top:8px">当前：<b style="color:' + (role === 'developer' ? '#fbbf24' : '#ef4444') + '">' + (role === 'developer' ? '开发者（最高权限：收款设置 / 改密码 / 权限切换）' : '管理员（公告 / 免费模型 / 会员定价 / 发票等，收款设置仅开发者）') + '</b></p>' +
+      '<div class="adm-level-grid" style="margin-top:10px">' +
+        '<button class="adm-level-opt' + (role === 'developer' ? ' on' : '') + '" data-r="developer" style="--lc:#fbbf24"><b>👑 开发者</b><span>全部权限，含收款设置</span></button>' +
+        '<button class="adm-level-opt' + (role === 'admin' ? ' on' : '') + '" data-r="admin" style="--lc:#ef4444"><b>🛡️ 管理员</b><span>运营权限，不含收款设置</span></button>' +
+      '</div>' +
+      '<input class="adm-input" type="password" data-f="pwd" placeholder="当前密码（确认切换）" style="margin-top:8px">' +
+      '<button class="adm-btn adm-btn-primary" data-a="ok">切换角色</button>' +
+      '<button class="adm-btn" data-a="back">返回</button>' +
+    '</div>';
+  var sel = role;
+  $$('.adm-level-opt', body).forEach(function (b) {
+    b.onclick = function () {
+      sel = b.getAttribute('data-r');
+      $$('.adm-level-opt', body).forEach(function (x) { x.classList.toggle('on', x === b); });
+    };
+  });
+  $('[data-a="ok"]', body).onclick = function () {
+    if (sel === role) { toast('已是该角色', false); return; }
+    var pwd = $('[data-f="pwd"]', body).value;
+    if (!pwd) { toast('请输入当前密码', false); return; }
+    var btn = $('[data-a="ok"]', body); btn.disabled = true; btn.textContent = '切换中…';
+    loadSb().then(function (cli) { return cli.rpc('admin_set_role', { pwd: pwd, role: sel }); })
+      .then(function (r) {
+        if (r.error) throw r.error;
+        sessionStorage.setItem('th-admin-role', sel);
+        toast(sel === 'developer' ? '已切换为开发者（全部权限）' : '已切换为管理员（收款设置已隐藏）', true);
+        renderHome();
+      }).catch(function (e) {
+        toast('切换失败：' + (String(e.message || '').indexOf('unauthorized') >= 0 ? '密码不正确' : e.message), false);
+        btn.disabled = false; btn.textContent = '切换角色';
+      });
+  };
+  $('[data-a="back"]', body).onclick = function () { renderSystem(body); };
+}
+
+/* 公告管理 */
+function renderNoticeEdit(body) {
+  body.innerHTML = '<div class="adm-card"><b>📢 公告管理</b><div data-v="n">加载中…</div></div>';
+  var box = $('[data-v="n"]', body);
+  loadSb().then(function (cli) { return cli.from('th_kv').select('*').eq('key', 'announcement').maybeSingle(); })
+    .then(function (r) {
+      if (r.error) throw r.error;
+      var v = (r.data && r.data.value) || {};
+      if (typeof v === 'string') { try { v = JSON.parse(v); } catch (e) { v = {}; } }
+      box.innerHTML =
+        '<p class="adm-muted" style="margin:10px 0 6px">标题</p>' +
+        '<input class="adm-input" data-f="t" value="' + esc(v.title || '') + '" placeholder="公告标题">' +
+        '<p class="adm-muted" style="margin:2px 0 6px">内容</p>' +
+        '<textarea class="adm-input" rows="6" data-f="c" placeholder="公告内容…">' + esc(v.content || '') + '</textarea>' +
+        '<label style="display:flex;gap:6px;align-items:center;margin:8px 0 12px;font-size:13px"><input type="checkbox" data-f="en"' + (v.enabled !== false ? ' checked' : '') + '> 启用公告（App 端显示）</label>' +
+        '<div class="adm-row"><button class="adm-btn adm-btn-primary" data-a="ok">保存公告</button>' +
+        '<button class="adm-btn" data-a="back">返回</button></div>';
+      $('[data-a="ok"]', box).onclick = function () {
+        var t = $('[data-f="t"]', box).value.trim();
+        var c = $('[data-f="c"]', box).value.trim();
+        var en = $('[data-f="en"]', box).checked;
+        var btn = $('[data-a="ok"]', box); btn.disabled = true; btn.textContent = '保存中…';
+        loadSb().then(function (cli2) { return cli2.rpc('admin_upsert_announcement', { pwd: PWD, title: t, content: c, enabled: en }); })
+          .then(function (rr) { if (rr.error) throw rr.error; toast('公告已保存，App 端生效', true); btn.disabled = false; btn.textContent = '保存公告'; })
+          .catch(function (e) { toast('保存失败：' + e.message, false); btn.disabled = false; btn.textContent = '保存公告'; });
+      };
+      $('[data-a="back"]', box).onclick = function () { renderSystem(body); };
+    })
+    .catch(function (e) { box.innerHTML = '<p class="adm-muted">加载失败：' + esc(e.message) + '</p>'; });
+}
+
+/* 找回邮箱配置 */
+function renderEmailCfg(body) {
+  body.innerHTML = '<div class="adm-card"><b>📮 找回邮箱</b><div data-v="e">加载中…</div></div>';
+  var box = $('[data-v="e"]', body);
+  loadSb().then(function (cli) { return cli.from('th_kv').select('*').eq('key', 'admin_email').maybeSingle(); })
+    .then(function (r) {
+      if (r.error) throw r.error;
+      var v = (r.data && r.data.value) || '';
+      box.innerHTML =
+        '<p class="adm-muted" style="margin:10px 0 6px">接收邮箱（登录页「忘记密码」会把重置码发到这里）</p>' +
+        '<input class="adm-input" data-f="em" value="' + esc(v) + '" placeholder="例如 your@example.com">' +
+        '<p class="adm-muted" style="margin:2px 0 10px">提示：邮件通过 formsubmit.co 免费转发，首次使用时请到该邮箱点击激活确认邮件；也可在 SQL 中直接配置 th_kv.admin_email。</p>' +
+        '<div class="adm-row"><button class="adm-btn adm-btn-primary" data-a="ok">保存邮箱</button>' +
+        '<button class="adm-btn" data-a="back">返回</button></div>';
+      $('[data-a="ok"]', box).onclick = function () {
+        var em = $('[data-f="em"]', box).value.trim();
+        var btn = $('[data-a="ok"]', box); btn.disabled = true; btn.textContent = '保存中…';
+        loadSb().then(function (cli2) {
+          return cli2.from('th_kv').upsert({ key: 'admin_email', value: em });
+        }).then(function (rr) {
+          if (rr.error) throw rr.error;
+          toast('找回邮箱已保存', true); btn.disabled = false; btn.textContent = '保存邮箱';
+        }).catch(function (e) { toast('保存失败：' + e.message, false); btn.disabled = false; btn.textContent = '保存邮箱'; });
+      };
+      $('[data-a="back"]', box).onclick = function () { renderSystem(body); };
+    })
+    .catch(function (e) { box.innerHTML = '<p class="adm-muted">加载失败：' + esc(e.message) + '</p>'; });
+}
+
 var ADMIN_CHANGELOG = [
+  { v: '1.4', d: '2026-08-21', items: ['修复导航高亮：点击用户管理 / 用户数据等标签时正确高亮当前页', '废除「设为 / 取消管理员」按钮（管理员固定，不随意设置）', '新增角色体系：开发者(developer) 为最高权限（收款设置 / 改密码 / 权限切换），管理员(admin) 负责运营（公告 / 限时免费模型 / 会员定价 / 发票等）', '系统设置新增：修改后台密码、后台权限切换、公告管理、找回邮箱配置', '登录页新增「忘记密码」：向绑定邮箱发送 6 位重置码，10 分钟内可重置后台密码', '用户卡片显示 👑开发者 / 🛡️管理员 身份徽标'] },
   { v: '1.3', d: '2026-08-21', items: ['界面大改：左侧竖排导航（旧版同款布局）、导航与按钮全面图标化', '会员等级改为弹层点选（不再手动输入），可选有效期', '用户昵称可在后台直接修改，敏感操作需再次输入管理员密码，改错可一键恢复原昵称', '支持设置 / 取消管理员（管理员可有多位）', '排行榜改为表格批量编辑：一行一条、可插入行、整体改名次、一次性保存', '限时免费模型独立为左侧标签，不再混在系统设置里'] },
   { v: '1.2', d: '2026-08-21', items: ['限时免费模型升级：仅指定用户可用（按 uid 分配，不只全员开放）、限时窗口（时间窗内无限用）、限量额度（次数 / Token，用完即止）、限时+限量组合；支持编辑与用量展示'] },
   { v: '1.1', d: '2026-08-21', items: ['系统设置上线：限时免费模型管理（多模型 / 分等级 Token 配额 / 可用模型范围）、历史版本页'] },
@@ -1240,7 +1462,7 @@ document.addEventListener('click', function (e) {
     sessionStorage.removeItem('th-admin-pwd'); PWD = ''; state.users = null; renderGate();
   } else if (act === 'tab') {
     state.tab = t.getAttribute('data-t');
-    $$('.adm-tabs .adm-tab').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-t') === state.tab); });
+    $$('.adm-side-nav .adm-tab').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-t') === state.tab); });
     renderBody();
   } else if (act === 'go') {
     state.tab = t.getAttribute('data-t');
@@ -1371,8 +1593,6 @@ document.addEventListener('click', function (e) {
     editUserNickname(t.getAttribute('data-uid'));
   } else if (act === 'restorenick') {
     restoreUserNickname(t.getAttribute('data-uid'));
-  } else if (act === 'setrole') {
-    toggleUserRole(t.getAttribute('data-uid'), t.getAttribute('data-role'));
   } else if (act === 'import-rank') {
     if (!confirm('把 App 内置综合榜导入云端？导入后覆盖 App 内置榜单，可随时再编辑。')) return;
     import('./js/ai/ai-rankings.js').then(function (mod) {

@@ -419,3 +419,21 @@ svg.ico.fill { fill: currentColor; stroke: none; }
 .vendor-ico.brand.raw img { background: transparent !important; }
 .vendor-ico.brand.self-bg { background: transparent !important; box-shadow: none !important; border-radius: 0; overflow: visible; }
 .vendor-ico.brand.self-bg svg { width: 100%; height: 100%; }
+
+/* v5.8.1：反馈附图添加框（详细内容下方的「+」加号） */
+.fb-addimg {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 12px 14px; margin-bottom: 10px;
+  border: 1.5px dashed var(--border); border-radius: 12px;
+  background: var(--bg-input); cursor: pointer; transition: border-color .2s, background .2s;
+  -webkit-user-select: none; user-select: none;
+}
+.fb-addimg:active { transform: scale(.98); border-color: var(--primary); }
+.fb-addimg-ico {
+  flex: none; width: 30px; height: 30px; border-radius: 10px;
+  background: rgba(59,91,253,.12); color: var(--primary);
+  display: grid; place-items: center;
+}
+.fb-addimg-ico svg { width: 15px; height: 15px; }
+.fb-addimg-t { font-size: 13.5px; font-weight: 700; color: var(--text-primary); }
+.fb-addimg-sub { margin-left: auto; font-size: 11.5px; color: var(--text-tertiary); }

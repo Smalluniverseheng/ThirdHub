@@ -1,4 +1,4 @@
-/* ===== ThirdHub js/admin.js — 管理后台（v1.4） =====
+/* ===== ThirdHub js/admin.js — 管理后台（v1.5） =====
    入口 admin.html · 账号 admin · 密码由管理员在云端配置（不在此展示）
    侧边栏导航 / 仪表盘 / 用户管理（等级弹层选择·昵称编辑与恢复·多管理员·关注星标）/ 用户数据（书源·API 密钥）/
    订单 / 发票 / 会员定价 / 模型定价 / 排行榜（表格批量编辑）/ 限时免费模型（独立入口）/ 官方仓库 / 反馈 / 收款设置 / 历史版本
@@ -29,6 +29,7 @@ var TABS = [
   { id: 'prices', name: '模型定价', icon: '🏷️' },
   { id: 'rank', name: '排行榜', icon: '🏆' },
   { id: 'freemodels', name: '限时免费模型', icon: '🎁' },
+  { id: 'prompts', name: '灵感任务', icon: '✨' },
   { id: 'repo', name: '官方仓库', icon: '📦' },
   { id: 'feedback', name: '意见反馈', icon: '💬' },
   { id: 'paycfg', name: '收款设置', icon: '💰' },
@@ -148,66 +149,69 @@ function renderGate() {
   $('#g-reset').onclick = openResetSheet;
 }
 
-/* ---------- 忘记密码：向配置邮箱发送 6 位重置码 ---------- */
+/* ---------- 忘记密码（v1.5 走 email-code 通道，163 SMTP） ---------- */
 function openForgotSheet() {
   var ov = openSheet(
     '<div class="adm-sheet-title">🔑 忘记密码</div>' +
-    '<div class="adm-muted" style="margin-bottom:10px">输入后台绑定的接收邮箱（管理员在「系统设置 → 找回邮箱」中配置）。校验通过后会向该邮箱发送 6 位重置码，10 分钟内有效。</div>' +
+    '<div class="adm-muted" style="margin-bottom:10px">输入后台绑定的接收邮箱（在「系统设置 → 找回邮箱」中配置）。校验通过后，验证码将发送到该邮箱（10 分钟内有效，同一邮箱 1 分钟只能发一次）。</div>' +
     '<input class="adm-input" data-f="em" placeholder="接收邮箱" style="margin-bottom:12px">' +
-    '<button class="adm-btn adm-btn-primary adm-btn-block" data-a="ok">发送重置码</button>'
+    '<button class="adm-btn adm-btn-primary adm-btn-block" data-a="ok">发送验证码</button>'
   );
   $('[data-a="ok"]', ov).onclick = function () {
     var em = $('[data-f="em"]', ov).value.trim();
     if (!em) { toast('请输入邮箱', false); return; }
     var btn = $('[data-a="ok"]', ov); btn.disabled = true; btn.textContent = '请求中…';
-    loadSb().then(function (cli) { return cli.rpc('admin_reset_request', { email: em }); })
+    loadSb().then(function (cli) { return cli.rpc('admin_check_email', { email: em }); })
       .then(function (r) {
         if (r.error) throw r.error;
-        if (!r.data || !r.data.ok) { toast('邮箱与后台绑定邮箱不一致', false); btn.disabled = false; btn.textContent = '发送重置码'; return; }
-        var code = r.data.code || '';
-        // 通过 formsubmit 免费转发到绑定邮箱（首次使用需在邮箱中点击激活确认）
-        return fetch('https://formsubmit.co/ajax/' + encodeURIComponent(em), {
+        if (!r.data || !r.data.ok) { toast('邮箱与后台绑定邮箱不一致', false); btn.disabled = false; btn.textContent = '发送验证码'; return; }
+        // 复用 Supabase Edge Function「email-code」（163 SMTP 发信）
+        return fetch('https://mxvxlgjzeboktufumxbp.supabase.co/functions/v1/email-code', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-          body: JSON.stringify({ subject: 'ThirdHub 后台密码重置码', message: '你的后台密码重置码是：' + code + '（10 分钟内有效）。如果不是你本人操作请忽略。' }),
-        }).then(function (fr) { return fr.json(); }).catch(function () { return { success: false }; })
-          .then(function (fj) {
-            var sent = fj && fj.success !== false;
-            closeSheet(ov);
-            toast(sent ? '重置码已发送至邮箱，请查收（含垃圾箱）' : '重置码已生成，但邮件发送失败，请联系开发者', sent);
-          });
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'send', email: em }),
+        }).then(function (fr) { return fr.json().catch(function () { return {}; }); });
       })
-      .catch(function (e) { toast('请求失败：' + e.message, false); btn.disabled = false; btn.textContent = '发送重置码'; });
+      .then(function (fj) {
+        closeSheet(ov);
+        if (fj && fj.ok) toast('验证码已发送至邮箱，请查收（含垃圾箱）', true);
+        else toast('发送失败：' + ((fj && fj.error) || '请稍后再试'), false);
+      })
+      .catch(function (e) { toast('请求失败：' + e.message, false); btn.disabled = false; btn.textContent = '发送验证码'; });
   };
 }
 
-/* ---------- 有重置码：设置新密码 ---------- */
+/* ---------- 有验证码：设置新密码（校验复用 email-code 的验证码表） ---------- */
 function openResetSheet() {
   var ov = openSheet(
-    '<div class="adm-sheet-title">🔐 用重置码设置新密码</div>' +
-    '<input class="adm-input" data-f="code" placeholder="6 位重置码" style="margin-bottom:8px">' +
+    '<div class="adm-sheet-title">🔐 用邮箱验证码设置新密码</div>' +
+    '<input class="adm-input" data-f="em" placeholder="接收邮箱" style="margin-bottom:8px">' +
+    '<input class="adm-input" data-f="code" placeholder="邮箱收到的验证码" style="margin-bottom:8px">' +
     '<input class="adm-input" type="password" data-f="np" placeholder="新密码（至少 6 位）" style="margin-bottom:8px">' +
     '<input class="adm-input" type="password" data-f="np2" placeholder="确认新密码" style="margin-bottom:12px">' +
     '<button class="adm-btn adm-btn-primary adm-btn-block" data-a="ok">重置密码</button>'
   );
   $('[data-a="ok"]', ov).onclick = function () {
+    var em = $('[data-f="em"]', ov).value.trim();
     var code = $('[data-f="code"]', ov).value.trim();
     var np = $('[data-f="np"]', ov).value;
     var np2 = $('[data-f="np2"]', ov).value;
-    if (!code || code.length !== 6) { toast('请输入 6 位重置码', false); return; }
+    if (!em) { toast('请输入邮箱', false); return; }
+    if (!code || code.length !== 6) { toast('请输入 6 位验证码', false); return; }
     if (np.length < 6) { toast('新密码至少 6 位', false); return; }
     if (np !== np2) { toast('两次输入的新密码不一致', false); return; }
     var btn = $('[data-a="ok"]', ov); btn.disabled = true; btn.textContent = '提交中…';
-    loadSb().then(function (cli) { return cli.rpc('admin_reset_apply', { code: code, new_pwd: np }); })
+    loadSb().then(function (cli) { return cli.rpc('admin_reset_via_code', { email: em, code: code, new_pwd: np }); })
       .then(function (r) {
         if (r.error) throw r.error;
         if (!r.data || !r.data.ok) {
-          var why = r.data && r.data.reason === 'expired' ? '重置码已过期，请重新申请' : (r.data && r.data.reason === 'bad code' ? '重置码不正确' : '重置失败');
+          var reason = r.data && r.data.reason;
+          var why = reason === 'expired' ? '验证码已过期，请重新发送' : (reason === 'bad code' ? '验证码不正确' : (reason === 'email mismatch' ? '邮箱与绑定邮箱不一致' : (reason === 'too many attempts' ? '尝试次数过多，请重新发送' : '重置失败')));
           toast(why, false);
           btn.disabled = false; btn.textContent = '重置密码';
           return;
         }
-        toast('密码已重置，请用新密码登录');
+        toast('密码已重置，请用新密码登录', true);
         closeSheet(ov);
       })
       .catch(function (e) { toast('重置失败：' + e.message, false); btn.disabled = false; btn.textContent = '重置密码'; });
@@ -267,6 +271,7 @@ function renderBody() {
   else if (state.tab === 'prices') renderPrices(body);
   else if (state.tab === 'rank') renderRank(body);
   else if (state.tab === 'freemodels') renderFreeModels(body);
+  else if (state.tab === 'prompts') renderPrompts(body);
   else if (state.tab === 'repo') renderRepo(body);
   else if (state.tab === 'feedback') renderFeedback(body);
   else if (state.tab === 'paycfg') renderPayCfg(body);
@@ -1151,6 +1156,113 @@ function renderNoticeEdit(body) {
     .catch(function (e) { box.innerHTML = '<p class="adm-muted">加载失败：' + esc(e.message) + '</p>'; });
 }
 
+/* ---------- 灵感任务（AI 新建对话欢迎区任务库，th_prompts，后台可扩充） ---------- */
+var PROMPT_CATS = ['📰 新闻资讯', '✍️ 写作文案', '💼 工作办公', '💻 编程开发', '📚 学习成长', '🎨 创意灵感', '🏠 生活助手', '🌐 社交沟通', '🧠 思维提升', '🎮 娱乐趣味'];
+function renderPrompts(body) {
+  body.innerHTML = '<div class="adm-card">' +
+    '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">' +
+      '<b style="flex:1">✨ 灵感任务库</b>' +
+      '<button class="adm-btn adm-btn-primary adm-btn-sm" data-a="new">＋ 新建任务</button>' +
+    '</div>' +
+    '<p class="adm-muted" style="line-height:1.7">展示在用户 AI 对话「新建对话」欢迎区（手机 3 个 / 电脑 4 个，随机换批、短时去重），点击后立即用用户自己的 API 执行。前端已内置 220 条，这里可继续扩充；云端任务优先于内置任务展示。</p>' +
+    '<div data-v="list" style="margin-top:10px">加载中…</div>' +
+  '</div>';
+  var box = $('[data-v="list"]', body);
+  $('[data-a="new"]', body).onclick = function () { renderPromptEdit(body, null); };
+  loadSb().then(function (cli) {
+    return cli.from('th_prompts').select('*').order('sort', { ascending: true }).order('id', { ascending: false });
+  }).then(function (r) {
+    if (r.error) throw r.error;
+    var list = r.data || [];
+    if (!list.length) { box.innerHTML = '<p class="adm-muted" style="text-align:center;padding:16px 0">还没有云端任务，点「＋ 新建任务」添加</p>'; return; }
+    box.innerHTML = list.map(function (p) {
+      return '<div class="adm-card" style="padding:10px 12px;margin-bottom:8px;' + (p.active ? '' : 'opacity:.55') + '">' +
+        '<div style="display:flex;gap:8px;align-items:center">' +
+          '<b style="flex:1;font-size:13.5px">' + esc(p.title) + '</b>' +
+          '<span class="adm-badge">' + esc(p.category || '未分类') + '</span>' +
+          '<span class="adm-badge" style="background:' + (p.active ? '#34d39922;color:#34d399' : '#9aa3b222;color:#9aa3b2') + '">' + (p.active ? '启用' : '停用') + '</span>' +
+        '</div>' +
+        '<div class="adm-muted" style="margin-top:4px;font-size:12px">' + esc(p.desc || '') + '</div>' +
+        '<div style="margin-top:4px;font-size:12px;color:#666;word-break:break-all;white-space:pre-wrap">' + esc((p.prompt || '').slice(0, 140)) + ((p.prompt || '').length > 140 ? '…' : '') + '</div>' +
+        '<div class="adm-row" style="margin-top:8px">' +
+          '<button class="adm-btn adm-btn-sm" data-act="edit" data-id="' + p.id + '">编辑</button>' +
+          '<button class="adm-btn adm-btn-sm" data-act="toggle" data-id="' + p.id + '">' + (p.active ? '停用' : '启用') + '</button>' +
+          '<button class="adm-btn adm-btn-sm" style="color:#ef4444" data-act="del" data-id="' + p.id + '">删除</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+    $$('[data-act="edit"]', box).forEach(function (b) {
+      b.onclick = function () {
+        var item = list.filter(function (x) { return String(x.id) === b.getAttribute('data-id'); })[0];
+        renderPromptEdit(body, item || null);
+      };
+    });
+    $$('[data-act="toggle"]', box).forEach(function (b) {
+      b.onclick = function () {
+        var item = list.filter(function (x) { return String(x.id) === b.getAttribute('data-id'); })[0];
+        if (!item) return;
+        loadSb().then(function (cli2) {
+          return cli2.rpc('admin_upsert_prompt', { pwd: PWD, p_id: item.id, p_title: null, p_category: null, p_desc: null, p_prompt: null, p_active: !item.active, p_sort: null });
+        }).then(function (rr) {
+          if (rr.error) throw rr.error;
+          toast(item.active ? '已停用' : '已启用', true);
+          renderPrompts(body);
+        }).catch(function (e) { toast('操作失败：' + e.message, false); });
+      };
+    });
+    $$('[data-act="del"]', box).forEach(function (b) {
+      b.onclick = function () {
+        var item = list.filter(function (x) { return String(x.id) === b.getAttribute('data-id'); })[0];
+        if (!item) return;
+        if (!confirm('删除灵感任务「' + item.title + '」？')) return;
+        loadSb().then(function (cli2) {
+          return cli2.rpc('admin_delete_prompt', { pwd: PWD, p_id: item.id });
+        }).then(function (rr) {
+          if (rr.error) throw rr.error;
+          toast('已删除', true);
+          renderPrompts(body);
+        }).catch(function (e) { toast('删除失败：' + e.message, false); });
+      };
+    });
+  }).catch(function (e) { box.innerHTML = '<p class="adm-muted">加载失败：' + esc(e.message) + '</p>'; });
+}
+
+function renderPromptEdit(body, item) {
+  var v = item || { title: '', category: '✍️ 写作文案', desc: '', prompt: '', active: true, sort: 0 };
+  body.innerHTML = '<div class="adm-card"><b>' + (item ? '✏️ 编辑灵感任务' : '✨ 新建灵感任务') + '</b>' +
+    '<p class="adm-muted" style="margin:10px 0 6px">标题（卡片主文案，如「帮我生成今日新闻」）</p>' +
+    '<input class="adm-input" data-f="t" value="' + esc(v.title || '') + '" placeholder="例如：帮我生成今日新闻">' +
+    '<p class="adm-muted" style="margin:2px 0 6px">分类</p>' +
+    '<select class="adm-input" data-f="c">' + PROMPT_CATS.map(function (c) { return '<option' + (v.category === c ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join('') + '</select>' +
+    '<p class="adm-muted" style="margin:2px 0 6px">副标题（卡片小字说明）</p>' +
+    '<input class="adm-input" data-f="d" value="' + esc(v.desc || '') + '" placeholder="例如：汇总当天热点与资讯">' +
+    '<p class="adm-muted" style="margin:2px 0 6px">执行提示词（点击任务后发给 AI 的完整内容）</p>' +
+    '<textarea class="adm-input" rows="5" data-f="p" placeholder="例如：请帮我生成今天的新闻早报，包括国内外要闻、科技动态…">' + esc(v.prompt || '') + '</textarea>' +
+    '<p class="adm-muted" style="margin:2px 0 6px">排序（数字越小越靠前；云端任务整体优先于内置任务）</p>' +
+    '<input class="adm-input" data-f="s" type="number" value="' + (v.sort || 0) + '">' +
+    '<label style="display:flex;gap:6px;align-items:center;margin:8px 0 12px;font-size:13px"><input type="checkbox" data-f="en"' + (v.active !== false ? ' checked' : '') + '> 启用（App 端显示）</label>' +
+    '<p class="adm-muted" style="margin:0 0 10px;line-height:1.7">提示：任务提示词会自动追加「任务自检要求」，AI 会先判断任务是否需要联网 / MCP 等能力，若无法完成会中断并请用户补充配置。</p>' +
+    '<div class="adm-row"><button class="adm-btn adm-btn-primary" data-a="ok">保存</button><button class="adm-btn" data-a="back">返回</button></div></div>';
+  $('[data-a="ok"]', body).onclick = function () {
+    var t = $('[data-f="t"]', body).value.trim();
+    var p = $('[data-f="p"]', body).value.trim();
+    if (!t || !p) { toast('标题和提示词必填', false); return; }
+    var btn = $('[data-a="ok"]', body); btn.disabled = true; btn.textContent = '保存中…';
+    loadSb().then(function (cli2) {
+      return cli2.rpc('admin_upsert_prompt', {
+        pwd: PWD, p_id: item ? item.id : null,
+        p_title: t, p_category: $('[data-f="c"]', body).value, p_desc: $('[data-f="d"]', body).value.trim(),
+        p_prompt: p, p_active: $('[data-f="en"]', body).checked, p_sort: parseInt($('[data-f="s"]', body).value || '0', 10) || 0,
+      });
+    }).then(function (rr) {
+      if (rr.error) throw rr.error;
+      toast('已保存，用户端下次新建对话生效', true);
+      renderPrompts(body);
+    }).catch(function (e) { toast('保存失败：' + e.message, false); btn.disabled = false; btn.textContent = '保存'; });
+  };
+  $('[data-a="back"]', body).onclick = function () { renderPrompts(body); };
+}
+
 /* 找回邮箱配置 */
 function renderEmailCfg(body) {
   body.innerHTML = '<div class="adm-card"><b>📮 找回邮箱</b><div data-v="e">加载中…</div></div>';
@@ -1162,7 +1274,7 @@ function renderEmailCfg(body) {
       box.innerHTML =
         '<p class="adm-muted" style="margin:10px 0 6px">接收邮箱（登录页「忘记密码」会把重置码发到这里）</p>' +
         '<input class="adm-input" data-f="em" value="' + esc(v) + '" placeholder="例如 your@example.com">' +
-        '<p class="adm-muted" style="margin:2px 0 10px">提示：邮件通过 formsubmit.co 免费转发，首次使用时请到该邮箱点击激活确认邮件；也可在 SQL 中直接配置 th_kv.admin_email。</p>' +
+        '<p class="adm-muted" style="margin:2px 0 10px">提示：验证码通过 Supabase Edge Function「email-code」（163 SMTP）发送，发件通道与 App 邮箱验证统一。也可在 SQL 中直接配置 th_kv.admin_email。</p>' +
         '<div class="adm-row"><button class="adm-btn adm-btn-primary" data-a="ok">保存邮箱</button>' +
         '<button class="adm-btn" data-a="back">返回</button></div>';
       $('[data-a="ok"]', box).onclick = function () {
@@ -1181,6 +1293,7 @@ function renderEmailCfg(body) {
 }
 
 var ADMIN_CHANGELOG = [
+  { v: '1.5', d: '2026-08-21', items: ['忘记密码改走 Supabase Edge Function「email-code」（163 SMTP）统一发信通道，与 App 邮箱验证码同一条链路', '重置密码改为邮箱验证码校验（复用 email_verification_codes 表），验证码 10 分钟有效、1 分钟限发一次'] },
   { v: '1.4', d: '2026-08-21', items: ['修复导航高亮：点击用户管理 / 用户数据等标签时正确高亮当前页', '废除「设为 / 取消管理员」按钮（管理员固定，不随意设置）', '新增角色体系：开发者(developer) 为最高权限（收款设置 / 改密码 / 权限切换），管理员(admin) 负责运营（公告 / 限时免费模型 / 会员定价 / 发票等）', '系统设置新增：修改后台密码、后台权限切换、公告管理、找回邮箱配置', '登录页新增「忘记密码」：向绑定邮箱发送 6 位重置码，10 分钟内可重置后台密码', '用户卡片显示 👑开发者 / 🛡️管理员 身份徽标'] },
   { v: '1.3', d: '2026-08-21', items: ['界面大改：左侧竖排导航（旧版同款布局）、导航与按钮全面图标化', '会员等级改为弹层点选（不再手动输入），可选有效期', '用户昵称可在后台直接修改，敏感操作需再次输入管理员密码，改错可一键恢复原昵称', '支持设置 / 取消管理员（管理员可有多位）', '排行榜改为表格批量编辑：一行一条、可插入行、整体改名次、一次性保存', '限时免费模型独立为左侧标签，不再混在系统设置里'] },
   { v: '1.2', d: '2026-08-21', items: ['限时免费模型升级：仅指定用户可用（按 uid 分配，不只全员开放）、限时窗口（时间窗内无限用）、限量额度（次数 / Token，用完即止）、限时+限量组合；支持编辑与用量展示'] },

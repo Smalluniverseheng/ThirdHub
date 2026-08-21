@@ -13,12 +13,12 @@ export async function listFeedback() {
   return (data || []).map((r) => ({ id: r.id, ...(r.data || {}), userId: r.user_id, updatedAt: r.updated_at }));
 }
 
-export async function addFeedback({ title, content, visibility }) {
+export async function addFeedback({ title, content, visibility, images = [] }) {
   const u = await currentUser();
   const id = uid();
   const row = {
     id, user_id: u.id,
-    data: { title, content, visibility, nickname: u.nickname || (u.email || '').split('@')[0], status: 'open', createdAt: Date.now() },
+    data: { title, content, visibility, images, nickname: u.nickname || (u.email || '').split('@')[0], status: 'open', createdAt: Date.now() },
   };
   const { error } = await (await sb()).from('th_feedback').insert(row);
   if (error) throw new Error(error.message);
@@ -80,11 +80,46 @@ export async function showFeedback() {
           ${formRow('详细内容', '<textarea class="input" rows="5" data-f="content" maxlength="1000" placeholder="描述复现步骤、期望效果等"></textarea>')}
           <div class="muted mb8">可见范围</div>
           <div class="nr-chip-row mb16" id="fb-vis">
-            <button class="ai-chip on" data-v="public">公开（所有人可见，可评论）</button>
-            <button class="ai-chip" data-v="admin">仅管理员团队可见</button>
+            <button class="ai-chip on" data-v="admin">仅管理员团队可见（推荐）</button>
+            <button class="ai-chip" data-v="public">公开（所有人可见，可评论）</button>
           </div>
+          <div class="muted" id="fb-vis-hint" style="font-size:12px;line-height:1.8;margin:-6px 2px 14px">「仅管理员团队可见」：反馈只对官方团队开放，适合报告 Bug、账号与隐私问题，处理更专注；「公开」：所有用户可见并可留言讨论，适合功能建议与需求投票，但可能涉及部分使用信息。默认推荐「仅管理员团队可见」。</div>
+          <div class="fb-addimg" data-a="addimg" role="button" tabindex="0" aria-label="添加图片">
+            <span class="fb-addimg-ico">${icon('plus')}</span>
+            <span class="fb-addimg-t">添加图片</span>
+            <span class="fb-addimg-sub">最多 3 张，帮助定位问题</span>
+          </div>
+          <div class="fb-imgs" id="fb-imgs" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px"></div>
         </div>`);
-        let vis = 'public';
+        let vis = 'admin';
+        /* v5.8：反馈附图（最多 3 张，压缩后 base64 内嵌） */
+        const fbImgs = [];
+        $('[data-a="addimg"]', b2).onclick = () => {
+          if (fbImgs.length >= 3) return toast('最多添加 3 张图片', 'err');
+          const input = document.createElement('input');
+          input.type = 'file';
+          input.accept = 'image/*';
+          input.onchange = async () => {
+            const f = input.files && input.files[0];
+            if (!f) return;
+            if (f.size > 8 * 1024 * 1024) return toast('图片过大（限 8MB）', 'err');
+            try {
+              const dataUrl = await compressImage(f, 1280);
+              fbImgs.push(dataUrl);
+              renderFbImgs();
+            } catch (e) { toast('图片读取失败', 'err'); }
+          };
+          input.click();
+        };
+        const renderFbImgs = () => {
+          const box2 = $('#fb-imgs', b2);
+          if (!box2) return;
+          box2.innerHTML = fbImgs.map((src, i2) => `<div style="position:relative">
+            <img src="${src}" style="width:64px;height:64px;border-radius:10px;object-fit:cover">
+            <button data-i="${i2}" style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;background:var(--danger);color:#fff;font-size:12px;line-height:1;border:none;cursor:pointer">×</button>
+          </div>`).join('');
+          $('#fb-imgs [data-i]', b2).forEach((b) => b.onclick = () => { fbImgs.splice(+b.dataset.i, 1); renderFbImgs(); });
+        };
         $$('#fb-vis .ai-chip', b2).forEach((c) => c.onclick = () => { vis = c.dataset.v; $$('#fb-vis .ai-chip', b2).forEach((x) => x.classList.toggle('on', x === c)); });
         const m = modal({
           title: '提交反馈', body: b2,
@@ -96,7 +131,7 @@ export async function showFeedback() {
           const content = $('[data-f="content"]', b2).value.trim();
           if (!title || !content) { toast('请填写标题和内容'); return; }
           try {
-            await addFeedback({ title, content, visibility: vis });
+            await addFeedback({ title, content, visibility: vis, images: fbImgs });
             m.close();
             toast('反馈已提交，感谢！', 'ok');
             renderList();
@@ -121,6 +156,7 @@ function showFeedbackDetail(f, onChange) {
             <span class="tag ${f.visibility === 'public' ? 'tag-green' : 'tag-gray'}">${f.visibility === 'public' ? '公开' : '仅管理员'}</span>
           </div>
           <div style="font-size:14px;line-height:1.8;margin-top:10px;white-space:pre-wrap">${esc(f.content)}</div>
+          ${(f.images && f.images.length) ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">${f.images.map((src) => `<img src="${esc(src)}" style="max-width:100%;border-radius:10px;max-height:240px" onclick="window.open(this.src)">`).join('')}</div>` : ''}
           <div class="muted mt8" style="font-size:12px">${esc(f.nickname || '用户')} · ${fmtDate(f.createdAt || Date.now())}</div>
         </div>
         <div class="section-title">留言</div>
@@ -153,5 +189,25 @@ function showFeedbackDetail(f, onChange) {
       };
       renderComments();
     },
+  });
+}
+
+/* 压缩图片为 dataURL（最长边 maxEdge，质量 0.8） */
+function compressImage(file, maxEdge = 1280) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      try {
+        const scale = Math.min(1, maxEdge / Math.max(img.width, img.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.8));
+      } catch (e) { reject(e); } finally { URL.revokeObjectURL(url); }
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('图片解码失败')); };
+    img.src = url;
   });
 }

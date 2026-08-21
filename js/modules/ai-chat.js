@@ -9,6 +9,7 @@ import {
   fetchRemoteModels, saveSyncedModels, getSyncedModels, transcribeAudio,
 } from '../ai/ai-api.js';
 import { SEARCH_SERVICES, getSearchConfig, setSearchConfig, hasSearchConfig, searchWeb, resultsToContext } from '../ai/web-search.js';
+import { PROMPT_TASKS, PROMPT_SELF_CHECK, cloudPromptTasks } from '../ai/ai-prompts.js';
 import { PROVIDERS, providerById, refreshCustomProviders, modelDisplayName } from '../ai/ai-models.js';
 import { vendorIcon, vendorIconRaw } from '../ai/vendors.js';
 import { modelIntro } from '../ai/model-intros.js';
@@ -1283,12 +1284,23 @@ function createThink(bubble, reasoning = '') {
 }
 
 /* ================= 消息渲染 ================= */
-function renderMessages(page) {
+async function renderMessages(page) {
   lastPage = page;
   const box = $('#ai-messages', page);
   box.innerHTML = '';
   applySessionBg(page);
   if (!session.messages.length) {
+    const wprov = providerById(currentModel.providerId);
+    /* v5.8：活动/公告小框（云端有启用公告时优先显示，否则显示灵感任务） */
+    let announcement = null;
+    try {
+      const { hasCloud, getSupabase } = await import('../supabase.js');
+      if (hasCloud()) {
+        const sb = getSupabase();
+        const { data: annRows, error: annErr } = await sb.rpc('get_active_announcement');
+        if (!annErr && annRows && annRows.value) announcement = annRows.value;
+      }
+    } catch (e) {}
     if (workspace !== 'chat') {
       const isImg = workspace === 'image';
       box.innerHTML = `<div class="ai-welcome">
@@ -1298,31 +1310,75 @@ function renderMessages(page) {
       </div>`;
       return;
     }
-    const SUGGESTIONS = [
-      { ico: 'edit', t: '写作助手', d: '润色、改写、起标题', p: '帮我润色这段话：' },
-      { ico: 'cpu', t: '代码帮手', d: '写代码、查错、讲解', p: '帮我写一段代码：' },
-      { ico: 'book', t: '学习问答', d: '概念讲解、知识梳理', p: '请用通俗的语言解释：' },
-      { ico: 'sparkle', t: '头脑风暴', d: '创意点子、方案对比', p: '帮我想几个点子，主题：' },
-    ];
-    const wprov = providerById(currentModel.providerId);
+    if (announcement) {
+      box.innerHTML = `<div class="ai-welcome">
+        <div class="ai-welcome-logo ai-welcome-vendor" title="${esc(wprov.name)}">${vendorIconRaw(currentModel.providerId) || icon('robot')}</div>
+        <div class="ai-welcome-title">你好，我是 ${esc(currentModel.model)}</div>
+        <div class="ai-welcome-sub ai-welcome-intro">${esc(modelIntro(currentModel.providerId, currentModel.model, wprov.name))}</div>
+        <button class="ann-banner" data-a="announce">
+          <span class="ann-banner-ico">${icon('mega')}</span>
+          <span class="grow" style="text-align:left;min-width:0">
+            <span class="ann-banner-t ellipsis">${esc(announcement.title || '活动公告')}</span>
+            <span class="ann-banner-d ellipsis">${esc((announcement.content || '').slice(0, 60))}</span>
+          </span>
+          <span class="ann-banner-go">查看详情 ${icon('arrowR')}</span>
+        </button>
+        <div class="muted" style="font-size:11px;margin-top:10px;text-align:center">📢 有新的活动 / 公告，点上方查看</div>
+      </div>`;
+      const ab = $('[data-a="announce"]', box);
+      if (ab) ab.onclick = () => {
+        import('../ui.js').then(({ modal }) => {
+          modal({ title: (announcement.title || '活动公告'), center: true, body: '<div style="font-size:14px;line-height:1.9;color:var(--text-secondary);white-space:pre-wrap">' + esc(announcement.content || '') + '</div>' });
+        });
+      };
+      return;
+    }
+    /* v5.8：灵感任务（新闻式）——每次新建/刷新换一批，短时去重；点击立即执行 */
+    const isDesktop = (window.innerWidth >= 768);
+    const want = isDesktop ? 4 : 3;
+    const recent = await kvGet('ai:prompt-recent', []);
+    let pool = [...PROMPT_TASKS];
+    try { const cloud = await cloudPromptTasks(); if (cloud && cloud.length) pool = [...cloud, ...pool]; } catch (e) {}
+    const fresh = pool.filter((x) => !recent.includes(x.id));
+    const pickFrom = fresh.length >= want ? fresh : pool;
+    const picked = [];
+    const used = new Set();
+    while (picked.length < want && pickFrom.length) {
+      const x = pickFrom[Math.floor(Math.random() * pickFrom.length)];
+      if (used.has(x.id)) continue;
+      used.add(x.id); picked.push(x);
+      if (pickFrom.length <= 1) break;
+    }
+    await kvSet('ai:prompt-recent', [...recent, ...picked.map((x) => x.id)].slice(-12));
+    const CAT_ICONS = { '📰 新闻资讯': 'globe', '✍️ 写作文案': 'edit', '💼 工作办公': 'briefcase', '💻 编程开发': 'cpu', '📚 学习成长': 'book', '🎨 创意灵感': 'sparkle', '🏠 生活助手': 'home', '🌐 社交沟通': 'chat', '🧠 思维提升': 'brain', '🎮 娱乐趣味': 'game' };
     box.innerHTML = `<div class="ai-welcome">
       <div class="ai-welcome-logo ai-welcome-vendor" title="${esc(wprov.name)}">${vendorIconRaw(currentModel.providerId) || icon('robot')}</div>
       <div class="ai-welcome-title">你好，我是 ${esc(currentModel.model)}</div>
       <div class="ai-welcome-sub ai-welcome-intro">${esc(modelIntro(currentModel.providerId, currentModel.model, wprov.name))}</div>
+      <div class="ai-welcome-head">
+        <span class="ai-welcome-head-t">${icon('sparkle')} 灵感任务</span>
+        <button class="ai-welcome-refresh" data-a="refresh" title="换一批">${icon('refresh')} 换一批</button>
+      </div>
       <div class="ai-welcome-cards">
-        ${SUGGESTIONS.map((s, i) => `<button class="ai-welcome-card" data-sug="${i}">
-          <span class="ai-welcome-card-ico">${icon(s.ico)}</span>
-          <span class="ai-welcome-card-t">${s.t}</span>
-          <span class="ai-welcome-card-d">${s.d}</span>
+        ${picked.map((s, i) => `<button class="ai-welcome-card" data-prompt="${i}">
+          <span class="ai-welcome-card-ico">${icon(CAT_ICONS[s.cat] || 'sparkle')}</span>
+          <span class="ai-welcome-card-t">${esc(s.t)}</span>
+          <span class="ai-welcome-card-d">${esc(s.d || s.cat)}</span>
         </button>`).join('')}
       </div>
+      <div class="muted" style="font-size:11px;margin-top:10px;text-align:center">✨ 每次新建对话都会换一批，点击立即执行；缺少联网 / MCP 等能力时会先说明并请你补充</div>
     </div>`;
-    $$('.ai-welcome-card', box).forEach((b) => b.onclick = () => {
+    $('.ai-welcome-card', box).forEach((b) => b.onclick = async () => {
+      const s = picked[+b.dataset.prompt];
       const ta = $('.ai-textarea', page);
-      ta.value = SUGGESTIONS[+b.dataset.sug].p;
+      ta.value = s.p + PROMPT_SELF_CHECK;
       ta.dispatchEvent(new Event('input'));
-      ta.focus();
+      await sendMessage(page);
     });
+    const rf = $('[data-a="refresh"]', box);
+    if (rf) rf.onclick = () => {
+      kvSet('ai:prompt-recent', recent.concat(picked.map((x) => x.id)).slice(-12)).then(() => renderMessages(page)).catch(() => renderMessages(page));
+    };
     return;
   }
   session.messages.forEach((m, i) => appendMessage(page, m, i));

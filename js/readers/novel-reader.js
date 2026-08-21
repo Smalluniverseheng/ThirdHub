@@ -237,9 +237,11 @@ export async function openNovelReader({ source, item, startChapter = 0 }) {
   });
   function toggleUI() {
     $$('.nr-ui', ov).forEach((h) => h.classList.toggle('nr-ui-hidden'));
+    ov.classList.toggle('nr-chrome-hidden'); /* 悬浮听书钮随工具栏上移避让 */
   }
   // 初始隐藏上下栏（沉浸阅读），点中央呼出
   $$('.nr-ui', ov).forEach((h) => h.classList.add('nr-ui-hidden'));
+  ov.classList.add('nr-chrome-hidden');
 
   /* ---------- 音量键 / 键盘翻页 ---------- */
   document.addEventListener('keydown', onKey);
@@ -393,6 +395,10 @@ export async function openNovelReader({ source, item, startChapter = 0 }) {
       ${toggle('readerInfoBar', S.readerInfoBar, '底部信息栏（章节 / 时间 / 页码）')}
       ${toggle('readerIllust', S.readerIllust, '显示正文插图（插图小说）')}
       ${toggle('readerFullscreen', S.readerFullscreen, '全屏阅读')}
+      <div class="nr-set-sec-head">听书</div>
+      ${chip('ttsRate', [[0.75, '0.75x'], [1, '1x'], [1.25, '1.25x'], [1.5, '1.5x'], [2, '2x']], ttsRate, '朗读语速')}
+      ${toggle('ttsAutoNext', ttsAutoNext, '自动朗读下一章')}
+      <div class="muted" style="font-size:12px;line-height:1.7;padding:2px 0 4px">更多音色 / TTS 引擎可在「更多设置 → 语音合成 TTS」中配置</div>
     </div>`);
     modal({ title: '阅读设置', body: body2 });
 
@@ -407,9 +413,17 @@ export async function openNovelReader({ source, item, startChapter = 0 }) {
     });
     $$('[data-k]', body2).forEach((b) => b.onclick = async () => {
       const k = b.dataset.k;
-      S[k] = k === 'readerFontWeight' ? +b.dataset.v : b.dataset.v;
-      await setSetting(k, S[k]);
-      applySettings();
+      if (k === 'ttsRate') {
+        /* v4.7：听书语速走独立存储，切换后立即以新语速重读 */
+        ttsRate = +b.dataset.v;
+        await kvSet('tts:rate', ttsRate);
+        $$('.nr-tts-rate', ttsBar).forEach((x) => x.classList.toggle('on', +x.dataset.r === ttsRate));
+        if (ttsOn) speakCurrent();
+      } else {
+        S[k] = k === 'readerFontWeight' ? +b.dataset.v : b.dataset.v;
+        await setSetting(k, S[k]);
+        applySettings();
+      }
       $$(`[data-k="${k}"]`, body2).forEach((x) => x.classList.toggle('on', x === b));
     });
     $$('[data-range]', body2).forEach((r) => r.oninput = async () => {
@@ -421,6 +435,13 @@ export async function openNovelReader({ source, item, startChapter = 0 }) {
     });
     $$('[data-tog]', body2).forEach((t) => t.onclick = async () => {
       const k = t.dataset.tog;
+      if (k === 'ttsAutoNext') {
+        /* v4.7：听书开关走独立存储 */
+        ttsAutoNext = !ttsAutoNext;
+        t.classList.toggle('on', ttsAutoNext);
+        await kvSet('tts:autoNext', ttsAutoNext);
+        return;
+      }
       S[k] = !S[k];
       t.classList.toggle('on', S[k]);
       await setSetting(k, S[k]);
@@ -437,8 +458,7 @@ export async function openNovelReader({ source, item, startChapter = 0 }) {
   /* ---------- 绑定 ---------- */
   $('[data-a="back"]', ov).onclick = () => {
     loadToken++; /* v4.1：退出阅读即取消进行中的章节下载 */
-    ttsOn = false;
-    stopSpeak();
+    setTts(false); /* v4.7：统一走开关，停止朗读并复位悬浮钮/播放条 */
     if (clockTimer) clearInterval(clockTimer);
     if (autoTimer) clearInterval(autoTimer);
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
@@ -455,12 +475,24 @@ export async function openNovelReader({ source, item, startChapter = 0 }) {
   $('[data-role="chslider"]', ov).onchange = (e) => { const v = +e.target.value; if (v !== idx) loadChapter(v); };
   $('[data-a="prev"]', ov).onclick = () => loadChapter(idx - 1);
   $('[data-a="next"]', ov).onclick = () => loadChapter(idx + 1);
-  /* ---------- v3.3/v3.4 听书：浮动控制条 + 语速 + 自动连读下一章 ---------- */
+  /* ---------- v3.3/v3.4/v4.7 听书：悬浮按钮 + 胶囊播放条 + 语速 + 自动连读 ----------
+     v4.7：播放条改为悬浮按钮形态——耳机悬浮钮常驻阅读页右下角（不随沉浸隐藏），
+     点击开启听书后胶囊播放条才显示；阅读设置内新增「听书」界面。 */
   let ttsOn = false;
   let ttsRate = 1;
+  let ttsAutoNext = true;
   try { ttsRate = (await kvGet('tts:rate', 1)) || 1; } catch (e) {}
+  try { ttsAutoNext = (await kvGet('tts:autoNext', true)) !== false; } catch (e) {}
+  /* 悬浮听书按钮（常驻右下角，适配安全区） */
+  const ttsFab = document.createElement('button');
+  ttsFab.className = 'nr-tts-fab';
+  ttsFab.title = '听书';
+  ttsFab.setAttribute('aria-label', '听书');
+  ttsFab.innerHTML = icon('headphone');
+  ov.appendChild(ttsFab);
+  /* 胶囊播放条（仅开启听书后显示） */
   const ttsBar = document.createElement('div');
-  ttsBar.className = 'nr-ttsbar nr-ui nr-ui-hidden';
+  ttsBar.className = 'nr-ttsbar';
   ttsBar.innerHTML = `
     <button class="nr-tts-btn" data-t="pp">暂停</button>
     <div class="nr-tts-rates">${[0.75, 1, 1.25, 1.5, 2].map((r) => `<button class="nr-tts-rate ${r === ttsRate ? 'on' : ''}" data-r="${r}">${r}x</button>`).join('')}</div>
@@ -478,28 +510,30 @@ export async function openNovelReader({ source, item, startChapter = 0 }) {
     if (ttsPaused) pauseSpeak(); else resumeSpeak();
     $('[data-t="pp"]', ttsBar).textContent = ttsPaused ? '继续' : '暂停';
   };
-  $('[data-t="close"]', ttsBar).onclick = () => stopTts();
+  $('[data-t="close"]', ttsBar).onclick = () => setTts(false);
   function speakCurrent() {
     if (!ttsOn) return;
     ttsPaused = false;
     $('[data-t="pp"]', ttsBar).textContent = '暂停';
     speak(currentPlain || currentText, {
       rate: ttsRate,
-      onEnd: () => { if (ttsOn && idx < chapters.length - 1) loadChapter(idx + 1); },
+      onEnd: () => { if (ttsOn && ttsAutoNext && idx < chapters.length - 1) loadChapter(idx + 1); },
     });
   }
-  function stopTts() {
-    ttsOn = false;
-    stopSpeak();
-    ttsBar.classList.add('nr-ui-hidden');
+  function setTts(on) {
+    ttsOn = on;
+    ttsBar.classList.toggle('nr-tts-open', on);
+    ttsFab.classList.toggle('on', on);
+    if (on) { ttsPaused = false; $('[data-t="pp"]', ttsBar).textContent = '暂停'; speakCurrent(); }
+    else stopSpeak();
   }
-  $('[data-a="tts"]', ov).onclick = () => {
-    if (ttsOn) { stopTts(); toast('已停止朗读'); return; }
-    ttsOn = true;
-    ttsBar.classList.remove('nr-ui-hidden');
-    speakCurrent();
+  function toggleTts() {
+    if (ttsOn) { setTts(false); toast('已停止朗读'); return; }
+    setTts(true);
     toast('开始朗读');
-  };
+  }
+  ttsFab.onclick = toggleTts;
+  $('[data-a="tts"]', ov).onclick = toggleTts;
 
   /* ---------- 选中文字 AI 辅助 ---------- */
   body.addEventListener('mouseup', async () => {

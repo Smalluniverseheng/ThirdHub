@@ -82,6 +82,20 @@ html[data-device="desktop"] body[data-navpos="top"] .tab { flex: 0 1 110px; }
   .nr-catalog { max-width: 420px; }
 }
 
+/* ---------- v4.7 阅读器多屏智能适配（与 device-adapt 标记联动） ---------- */
+/* 平板 / 折叠展开：正文与上下栏收窄居中，避免整屏拉伸 */
+html[data-device="tablet"] .nr-body,
+html[data-device="fold"] .nr-body { max-width: 760px; }
+html[data-device="tablet"] .nr-top,
+html[data-device="tablet"] .nr-bottom,
+html[data-device="fold"] .nr-top,
+html[data-device="fold"] .nr-bottom { max-width: 860px; margin: 0 auto; width: 100%; }
+/* 手表/超小屏：更紧凑的正文与字号 */
+html[data-device="watch"] .nr-body { font-size: 15px; line-height: 1.6; padding-left: 14px; padding-right: 14px; }
+html[data-device="watch"] .nr-chapter-title { font-size: 1.1em; }
+/* 折叠外屏/窄长屏：收紧正文边距 */
+html[data-device="narrow"] .nr-body { padding-left: 16px; padding-right: 16px; }
+
 /* ---------- 折叠屏铰链避让（支持 horizontal-viewport-segments 的设备） ---------- */
 @media (horizontal-viewport-segments: 2) {
   html[data-device="fold"] .modal-box { max-width: calc(50vw - 48px); }

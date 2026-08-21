@@ -453,7 +453,6 @@ export async function renderCategory(page) {
       if (existing.some((s) => s.name === entry.name)) { toast(`「${entry.name}」已存在`, 'err'); if (btn) { btn.textContent = '已添加'; } return 'exist'; }
       if (entry.fmt === 'tvbox') await importSource(tvboxToJsSource(entry.data));
       else if (entry.fmt === 'venera') await importSource(veneraToJsSource(entry.data.code || '', entry.data.name || entry.name));
-      else if (entry.fmt === 'js') await importSource(String(entry.data.code || entry.data || ''));
       else await importSource(legadoToJsSources(JSON.stringify([entry.data]))[0]);
       if (btn) btn.textContent = '已添加';
       return 'ok';

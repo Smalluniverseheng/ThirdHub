@@ -1,0 +1,129 @@
+/* ===== ThirdHub discover.css — 发现页 + 详情页 ===== */
+.discover-search { padding: 0 16px 4px; }
+.search-box {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--bg-card); border-radius: 999px;
+  padding: 6px 6px 6px 16px; box-shadow: var(--shadow-card);
+  border: 1px solid var(--border);
+}
+.search-box svg { color: var(--text-tertiary); flex-shrink: 0; }
+.search-box input { flex: 1; min-width: 0; border: none; outline: none; background: none; font-size: 14.5px; color: var(--text-primary); }
+.search-box input::placeholder { color: var(--text-tertiary); }
+
+.discover-section { margin-top: 20px; }
+.section-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 18px 10px; font-weight: 700; font-size: 15.5px;
+}
+.section-head svg { width: 20px; height: 20px; color: var(--primary); }
+
+.source-cards { display: flex; gap: 10px; overflow-x: auto; padding: 2px 16px 6px; scrollbar-width: none; }
+.source-card {
+  flex-shrink: 0; width: 128px; display: flex; flex-direction: column; align-items: flex-start; gap: 7px;
+  text-align: left;
+}
+
+.result-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; padding: 0 16px;
+}
+@media (min-width: 600px) { .result-grid { grid-template-columns: repeat(4, 1fr); } }
+@media (min-width: 900px) { .result-grid { grid-template-columns: repeat(6, 1fr); } }
+.content-card { text-align: left; }
+.content-cover {
+  aspect-ratio: 3/4; border-radius: 12px; background: var(--bg-input);
+  display: grid; place-items: center; overflow: hidden; color: var(--text-tertiary);
+  box-shadow: 0 3px 10px rgba(0,0,0,.16); margin-bottom: 6px;
+}
+.content-cover img { width: 100%; height: 100%; object-fit: cover; }
+.content-cover svg { width: 26px; height: 26px; }
+.content-name { font-size: 13px; font-weight: 600; }
+.content-sub { font-size: 11px; color: var(--text-tertiary); }
+
+/* 详情页 */
+.detail-hero { display: flex; gap: 16px; padding: 8px 18px 14px; }
+.detail-cover {
+  width: 110px; aspect-ratio: 3/4; border-radius: 12px; flex-shrink: 0;
+  background: var(--bg-input); display: grid; place-items: center;
+  overflow: hidden; color: var(--text-tertiary); box-shadow: 0 6px 20px rgba(0,0,0,.25);
+}
+.detail-cover img { width: 100%; height: 100%; object-fit: cover; }
+.detail-cover svg { width: 34px; height: 34px; }
+.detail-meta { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.detail-title { font-size: 18px; font-weight: 800; line-height: 1.4; }
+.detail-intro {
+  margin: 0 18px 14px; font-size: 13.5px; line-height: 1.8; color: var(--text-secondary);
+  background: var(--bg-card); padding: 12px 14px; border-radius: 12px; cursor: pointer;
+}
+.detail-actions { display: flex; gap: 8px; padding: 0 18px; }
+.detail-chapters { display: flex; flex-direction: column; padding: 0 18px calc(20px + env(safe-area-inset-bottom)); }
+.detail-ch {
+  text-align: left; padding: 12px 6px; font-size: 14px;
+  color: var(--text-secondary); border-bottom: 1px solid var(--border);
+}
+
+/* v4.0：详情页分组标签 / 推荐 / 评论 / 图源发现页 */
+.detail-tags { margin: 0 18px 12px; }
+.detail-recs { display: flex; gap: 10px; overflow-x: auto; padding: 0 18px 16px; scrollbar-width: none; }
+.detail-rec { flex-shrink: 0; width: 88px; display: flex; flex-direction: column; gap: 4px; text-align: left; }
+.detail-rec-cover {
+  width: 88px; height: 118px; border-radius: 8px; overflow: hidden;
+  background: var(--bg-input); display: grid; place-items: center;
+}
+.detail-rec-cover img { width: 100%; height: 100%; object-fit: cover; }
+.cmt { padding: 10px 18px; border-bottom: 1px solid var(--border); }
+.cmt-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.cmt-avatar { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; background: var(--bg-input); }
+.cmt-body { font-size: 13.5px; line-height: 1.7; color: var(--text-secondary); word-break: break-word; }
+.cmt-body img { max-width: 100%; border-radius: 8px; margin-top: 6px; }
+
+.xpl-tabs { display: flex; gap: 8px; overflow-x: auto; padding: 4px 18px 10px; scrollbar-width: none; }
+.xpl-part { padding: 4px 0 10px; }
+.xpl-part-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 18px 8px; }
+.xpl-part-title { font-size: 16px; font-weight: 800; }
+.xpl-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 0 18px; }
+.xpl-cell { display: flex; flex-direction: column; gap: 4px; text-align: left; }
+.xpl-cover {
+  width: 100%; aspect-ratio: 3/4; border-radius: 10px; overflow: hidden;
+  background: var(--bg-input); display: grid; place-items: center; color: var(--text-tertiary);
+}
+.xpl-cover img { width: 100%; height: 100%; object-fit: cover; }
+.xpl-name { font-size: 12px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.detail-ch:active { color: var(--primary); }
+
+/* v3.1：搜索结果列表 —— 左封面右介绍（番茄小说风格） */
+.result-list { display: flex; flex-direction: column; gap: 4px; padding: 0 12px; }
+.result-item {
+  display: flex; gap: 12px; text-align: left; padding: 10px 8px;
+  border-radius: 14px; background: none; border: none; width: 100%;
+}
+.result-item:active { background: var(--bg-input); }
+.result-cover {
+  flex: none; width: 68px; height: 92px; border-radius: 8px; background: var(--bg-input);
+  display: grid; place-items: center; overflow: hidden; color: var(--text-tertiary);
+  box-shadow: 0 3px 10px rgba(0,0,0,.14);
+}
+.result-cover img { width: 100%; height: 100%; object-fit: cover; }
+.result-cover svg { width: 24px; height: 24px; }
+.result-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; padding: 2px 0; }
+.result-name { font-size: 15px; font-weight: 700; line-height: 1.35; }
+.result-sub { font-size: 12px; color: var(--text-secondary); }
+.result-intro {
+  font-size: 12px; color: var(--text-tertiary); line-height: 1.55;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.result-tags { display: flex; gap: 6px; margin-top: auto; }
+.result-src, .result-type {
+  font-size: 10.5px; color: var(--text-tertiary); background: var(--bg-input);
+  padding: 2px 8px; border-radius: 999px;
+}
+
+/* v4.3：板块内「发现 / 书架」子页签 */
+.bm-subtabs {
+  display: flex; gap: 4px; padding: 4px 16px 8px;
+}
+.bm-subtab {
+  padding: 7px 20px; border-radius: 999px;
+  font-size: 14px; font-weight: 600; color: var(--text-tertiary);
+  transition: all .2s;
+}
+.bm-subtab.on { background: var(--bg-card); color: var(--text-primary); box-shadow: var(--shadow-card); }

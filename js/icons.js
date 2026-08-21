@@ -90,6 +90,7 @@ const ICONS = {
   logout: P('<path d="M14 4H6.5A1.5 1.5 0 0 0 5 5.5v13A1.5 1.5 0 0 0 6.5 20H14"/><path d="M10 12h10.5M17.5 8.5L21 12l-3.5 3.5"/>'),
   gridNine: P('<circle cx="6" cy="6" r="1.3" fill="currentColor" stroke="none"/><circle cx="12" cy="6" r="1.3" fill="currentColor" stroke="none"/><circle cx="18" cy="6" r="1.3" fill="currentColor" stroke="none"/><circle cx="6" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="18" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="6" cy="18" r="1.3" fill="currentColor" stroke="none"/><circle cx="12" cy="18" r="1.3" fill="currentColor" stroke="none"/><circle cx="18" cy="18" r="1.3" fill="currentColor" stroke="none"/>'),
   hdd: P('<rect x="3" y="9" width="18" height="8" rx="2"/><path d="M7 13h6"/><circle cx="17.5" cy="13" r="1.1" fill="currentColor" stroke="none"/><path d="M6 9l1.5-4h9L18 9"/>'),
+  wallet: P('<rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10h18M16 15h2.5"/><circle cx="16.5" cy="14.5" r=".4" fill="currentColor" stroke="none"/>'),
   webdav: P('<circle cx="12" cy="12" r="8.5"/><path d="M7.5 9.5L9 14l1.5-4.5M13 9.5v4.5M15.5 9.5v4.5M13 12h2.5"/>'),
   splash: P('<rect x="3.5" y="3.5" width="17" height="17" rx="4"/><path d="M3.5 15.5l4.5-4.5 3.5 3.5 3-3 6 6"/><circle cx="9.2" cy="8.2" r="1.4"/>'),
   checkbox: P('<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8.5 12.2l2.4 2.4 4.6-5"/>'),

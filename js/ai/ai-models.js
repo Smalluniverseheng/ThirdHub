@@ -78,16 +78,16 @@ export const PROVIDERS = [
     '360gpt-pro', '360gpt-turbo', '360gpt2-pro',
   ], deprecated: ['360gpt-turbo-32k', '360gpt_s2_v9'] },
   { id: 'mistral', name: 'Mistral', base: 'https://api.mistral.ai/v1', type: 'openai', models: [
-    'mistral-large-latest', 'mistral-medium-latest', 'mistral-small-latest', 'codestral-latest', 'pixtral-large-latest', 'ministral-8b-latest', 'open-mistral-nemo',
+    'mistral-large-latest', 'mistral-large-3', 'mistral-saba-latest', 'mistral-medium-latest', 'mistral-small-latest', 'codestral-latest', 'pixtral-large-latest', 'ministral-8b-latest', 'open-mistral-nemo',
   ], deprecated: ['mistral-large-2407', 'mistral-small-2402', 'open-mistral-7b', 'open-mixtral-8x22b'] },
   { id: 'cohere', name: 'Cohere', base: 'https://api.cohere.com/compatibility/v1', type: 'openai', models: [
-    'command-r-plus', 'command-r', 'command-a-03-2025',
+    'command-r-plus', 'command-r', 'command-r7b', 'command-a-03-2025',
   ], deprecated: ['command', 'command-light', 'command-nightly'] },
   { id: 'perplexity', name: 'Perplexity', base: 'https://api.perplexity.ai', type: 'openai', models: [
     'sonar', 'sonar-pro', 'sonar-reasoning', 'sonar-reasoning-pro',
   ], deprecated: ['sonar-small-online', 'sonar-medium-online', 'llama-3.1-sonar-large-128k-online'] },
   { id: 'groq', name: 'Groq', base: 'https://api.groq.com/openai/v1', type: 'openai', models: [
-    'llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'llama3-70b-8192', 'llama3-8b-8192', 'deepseek-r1-distill-llama-70b', 'gemma2-9b-it',
+    'llama-4-maverick', 'llama-4-scout', 'llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'llama3-70b-8192', 'llama3-8b-8192', 'deepseek-r1-distill-llama-70b', 'gemma2-9b-it',
   ], deprecated: ['mixtral-8x7b-32768', 'llama2-70b-4096', 'gemma-7b-it'] },
   { id: 'together', name: 'Together AI', base: 'https://api.together.xyz/v1', type: 'openai', models: [
     'meta-llama/Llama-3.3-70B-Instruct-Turbo', 'meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo', 'Qwen/Qwen2.5-72B-Instruct-Turbo', 'deepseek-ai/DeepSeek-V3', 'deepseek-ai/DeepSeek-R1',
@@ -103,9 +103,9 @@ export const PROVIDERS = [
   ], deprecated: ['openai/gpt-4o', 'anthropic/claude-sonnet-4', 'deepseek/deepseek-chat', 'deepseek/deepseek-r1', 'x-ai/grok-3', 'mistralai/mistral-large', 'openai/gpt-3.5-turbo'] },
   { id: 'azure', name: 'Azure OpenAI', base: '', type: 'openai', models: [], deprecated: [] },
   { id: 'nvidia', name: 'NVIDIA NIM', base: 'https://integrate.api.nvidia.com/v1', type: 'openai', models: [
-    'meta/llama-3.3-70b-instruct', 'deepseek-ai/deepseek-r1', 'qwen/qwen2.5-72b-instruct', 'mistralai/mistral-large-2-instruct',
+    'meta/llama-4-maverick-instruct', 'meta/llama-4-scout-instruct', 'nvidia/nemotron-h-70b', 'meta/llama-3.3-70b-instruct', 'deepseek-ai/deepseek-r1', 'qwen/qwen2.5-72b-instruct', 'mistralai/mistral-large-2-instruct',
   ], deprecated: ['meta/llama-3.1-70b-instruct'] },
-  { id: 'cloudflare', name: 'Cloudflare Workers AI', base: '', type: 'openai', models: [], deprecated: [] },
+  { id: 'cloudflare', name: 'Cloudflare Workers AI', base: 'https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1', type: 'openai', models: ['@cf/meta/llama-3.3-70b-instruct', '@cf/meta/llama-4-maverick-instruct', '@cf/qwen/qwen2.5-72b-instruct', '@cf/deepseek-ai/deepseek-r1-distill-qwen-32b'], deprecated: ['@cf/meta/llama-3.1-8b-instruct'] },
   { id: 'custom', name: '自定义提供商', base: '', type: 'openai', models: [], deprecated: [] },
 ];
 

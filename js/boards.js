@@ -35,7 +35,7 @@ export const BOARDS = [
 export const PROFILE_BOARD = 
 { id: 'profile', name: '我的', ico: 'user', css: ['css/profile.css'], load: () => import('./modules/profile.js'), fn: 'renderProfile' };
 
-export const MAX_TABS = 5;
+export const MAX_TABS = 999; /* v6.0：板块数量不设上限（导航可滑动/滚动） */
 export const MIN_TABS = 1;
 
 export function boardById(id) {

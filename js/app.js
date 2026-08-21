@@ -1,5 +1,5 @@
 /* ===== ThirdHub app.js — 应用入口 / 路由 / 初始化 ===== */
-export const APP_VERSION = '5.0';
+export const APP_VERSION = '6.0';
 window.__TH_CSS_V = APP_VERSION; /* v2.7：CSS 按需加载的版本戳 */
 
 import { $, $$, icon, toast, loadCss } from './ui.js';
@@ -36,7 +36,11 @@ const rendered = new Set();
 let currentTab = null;
 
 async function loadEnabledTabs() {
-  let tabs = await kvGet('ui:tabs', null);
+  /* v6.0：分端导航配置（手表/移动/桌面），回退旧 ui:tabs */
+  const dev = getDevice();
+  const key = dev === 'watch' ? 'nav:tabs-watch' : (dev === 'desktop' ? 'nav:tabs-desktop' : 'nav:tabs-mobile');
+  let tabs = await kvGet(key, null);
+  if (!Array.isArray(tabs)) tabs = await kvGet('ui:tabs', null);
   if (!Array.isArray(tabs)) tabs = null;
   tabs = (tabs || ['ai', 'search', 'read']).filter((id) => BOARDS.some((b) => b.id === id));
   /* v3.7：小说/漫画/有声合并为「阅读」板块——旧导航自动迁移（一次性） */
@@ -47,7 +51,6 @@ async function loadEnabledTabs() {
     if (!tabs.includes('read')) tabs.splice(Math.min(first, tabs.length), 0, 'read');
     kvSet('ui:tabs', tabs).catch(() => {});
   }
-  tabs = tabs.slice(0, MAX_TABS);
   if (!tabs.length) tabs = ['ai'];
   return tabs;
 }

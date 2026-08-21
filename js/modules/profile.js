@@ -208,23 +208,8 @@ export async function renderProfile(page) {
           };
         }
 
-        $('#pf-avatar', body).onclick = () => {
-          const input = document.createElement('input');
-          input.type = 'file';
-          input.accept = 'image/*';
-          input.onchange = async () => {
-            const f = input.files[0];
-            if (!f) return;
-            try {
-              const url = await downscaleImage(f, 128);
-              await updateProfile({ avatar: url });
-              u.avatar = url;
-              $('#pf-avatar', body).innerHTML = `<img src="${url}"><span class="avatar-edit-badge">${icon('camera')}</span>`;
-              toast('头像已更新', 'ok');
-            } catch (e) { toast(e.message, 'err'); }
-          };
-          input.click();
-        };
+        /* v6.0：头像选择器（官方内置 10 款 + 本地上传） */
+        $('#pf-avatar', body).onclick = () => showAvatarPicker(body, u);
       },
     });
   }
@@ -374,13 +359,58 @@ export async function renderProfile(page) {
     });
   }
 
+
+/* v6.0：官方内置头像（SVG data URI，离线可用）+ 本地上传 */
+const OFFICIAL_AVATARS = [{"id":"brand","bg":"#3b5bfd","label":"品牌"},{"id":"cosmos","bg":"#7c3aed","label":"星云"},{"id":"sunset","bg":"#f97316","label":"落日"},{"id":"ocean","bg":"#0ea5e9","label":"海洋"},{"id":"forest","bg":"#22c55e","label":"森林"},{"id":"rose","bg":"#ec4899","label":"玫瑰"},{"id":"amber","bg":"#f59e0b","label":"琥珀"},{"id":"slate","bg":"#64748b","label":"石墨"},{"id":"crimson","bg":"#ef4444","label":"绯红"},{"id":"teal","bg":"#14b8a6","label":"青碧"}].map((a) => {
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">' +
+    '<rect width="128" height="128" rx="28" fill="' + a.bg + '"/>' +
+    '<circle cx="64" cy="50" r="24" fill="rgba(255,255,255,.85)"/>' +
+    '<path d="M22 118c4-26 20-38 42-38s38 12 42 38" fill="rgba(255,255,255,.85)"/>' +
+    '</svg>';
+  return { id: a.id, label: a.label, url: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg) };
+});
+function showAvatarPicker(body, u) {
+  const m = modal({
+    title: '选择头像',
+    body: el('<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;padding:4px"></div>'),
+  });
+  const grid = m.bodyEl;
+  OFFICIAL_AVATARS.forEach((a) => {
+    const b = el('<button class="vip-card" style="border-radius:50%;overflow:hidden;padding:0;aspect-ratio:1;border:2px solid var(--border);cursor:pointer" title="' + esc(a.label) + '"><img src="' + a.url + '" style="width:100%;height:100%;display:block"></button>');
+    b.onclick = async () => {
+      await updateProfile({ avatar: a.url });
+      u.avatar = a.url;
+      $('#pf-avatar', body).innerHTML = '<img src="' + a.url + '"><span class="avatar-edit-badge">' + icon('camera') + '</span>';
+      m.close();
+      toast('头像已更新', 'ok');
+    };
+    grid.appendChild(b);
+  });
+  const up = el('<button class="vip-card" style="border-radius:14px;padding:14px;display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer"><span style="font-size:26px">📷</span><span class="muted" style="font-size:11px">上传图片</span></button>');
+  up.onclick = () => {
+    m.close();
+    const input = document.createElement('input');
+    input.type = 'file'; input.accept = 'image/*';
+    input.onchange = async () => {
+      const f = input.files[0];
+      if (!f) return;
+      try {
+        const url = await downscaleImage(f, 128);
+        await updateProfile({ avatar: url });
+        u.avatar = url;
+        $('#pf-avatar', body).innerHTML = '<img src="' + url + '"><span class="avatar-edit-badge">' + icon('camera') + '</span>';
+        toast('头像已更新', 'ok');
+      } catch (e) { toast(e.message, 'err'); }
+    };
+    input.click();
+  };
+  grid.appendChild(up);
+}
   /* ================= 数据管理 ================= */
   function renderData() {
     const box = $('[data-role="data"]', page);
     box.innerHTML = [
-      { a: 'storage', ico: 'hdd', name: '存储管理', desc: '本地 / 云端 / 自有服务器 · 回收站' },
-      { a: 'cloud', ico: 'cloud', name: '云端同步', desc: hasCloud() ? '已配置' : '未配置（纯本地模式）' },
-      { a: 'backup', ico: 'download', name: '本地备份 / 恢复', desc: '导出或导入全部本地数据' },
+      { a: 'storage', ico: 'hdd', name: '存储管理', desc: '本地 / 云端同步 / 备份恢复 · 回收站' },
       { a: 'cache', ico: 'trash', name: '清理缓存', desc: '清空章节内容缓存' },
     ].map((m) => `
       <button class="list-item" style="margin-bottom:8px;width:100%" data-a="${m.a}">

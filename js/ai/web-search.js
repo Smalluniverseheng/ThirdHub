@@ -8,6 +8,11 @@ export const SEARCH_SERVICES = [
   { id: 'brave',   name: 'Brave Search',      keyHint: 'BSA...',              desc: 'Brave 搜索引擎 API，免费额度 2000 次/月', needUrl: false },
   { id: 'serpapi', name: 'SerpAPI（Google）', keyHint: '一串十六进制 Key',     desc: 'Google 搜索结果 API',                    needUrl: false },
   { id: 'searxng', name: 'SearXNG（自建）',   keyHint: '可留空',               desc: '自建搜索聚合引擎，填实例地址即可',       needUrl: true },
+  { id: 'exa',     name: 'Exa（AI 搜索）',   keyHint: 'exa_...',              desc: '专为 AI 构建的语义搜索 API，结果干净',    needUrl: false },
+  { id: 'serper',  name: 'Serper（Google）', keyHint: '一串 Key',             desc: 'Google 搜索 API，单次查询低至 0.3 分',     needUrl: false },
+  { id: 'bing',    name: 'Bing Web Search',  keyHint: 'Azure Key',            desc: '微软 Bing 网页搜索 API',                  needUrl: false },
+  { id: 'perplexity', name: 'Perplexity（Sonar）', keyHint: 'pplx-...',       desc: 'AI 搜索模型，直接返回带引用的答案',        needUrl: false },
+  { id: 'jina',    name: 'Jina Reader（免费）', keyHint: '可留空',            desc: '免费搜索 + 网页阅读，无需 Key',            needUrl: false },
 ];
 
 export async function getSearchConfig() {

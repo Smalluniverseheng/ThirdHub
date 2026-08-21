@@ -1379,7 +1379,7 @@ function appendMessage(page, m, msgIndex = -1) {
   const wrap = el(`<div class="msg ${isUser ? 'user' : 'assistant'}${noAva ? ' msg-noava' : ''}">
     ${noAva ? '' : `<div class="msg-avatar">${isUser ? userAvatarHtml() : vendorIcon(m.providerId || currentModel.providerId)}</div>`}
     <div class="msg-body">
-      <div class="msg-meta">${m.debateRole ? `<span class="debate-side debate-${m.debateRole}">${m.debateRole === 'pro' ? '正方' : m.debateRole === 'con' ? '反方' : '裁判'}</span>` : ''}<span>${esc(m.model || '')}</span>${m.ms ? `<span class="msg-ms">${m.ms}ms</span>` : ''}</div>
+      <div class="msg-meta">${m.debateRole ? `<span class="debate-side debate-${m.debateRole}">${m.debateRole === 'pro' ? '正方' : m.debateRole === 'con' ? '反方' : '裁判'}</span>` : ''}${m.collabRole ? `<span class="collab-role collab-${m.collabRole}">${m.collabRole === 'leader' ? '主导' : '协作'}</span>` : ''}${m.stage ? `<span class="msg-stage">${esc(m.stage)}</span>` : ''}<span>${esc(m.model || '')}</span>${m.ms ? `<span class="msg-ms">${m.ms}ms</span>` : ''}</div>
       <div class="msg-bubble"></div>
       ${isUser ? '' : '<div class="msg-actions"><button class="msg-act" data-act="copy" title="复制">' + icon('copy') + '</button><button class="msg-act" data-act="speak" title="朗读">' + icon('speaker') + '</button></div>'}
     </div>

@@ -198,6 +198,7 @@ export function showAdvSettings(page) {
       add('headphone', '语音合成 TTS', '播放模式 · 引擎 · 音色 · 语速音调', () => subTTS());
       add('bookmark', '记忆系统', '跨对话长期记忆与记忆库管理', () => subMemory());
       add('chart', '用量统计', 'Token 总览 · 活跃热图 · 模型榜单', () => subUsage());
+      add('wallet', '模型控制台', '各厂商 API Key 余额与用量查询', () => subConsole());
       add('plug', '工具中心', '内置工具与 MCP 工具的暴露开关', () => subTools());
       add('globe', '模块代理设置', '各模块独立选择直连 / 自有代理 / 云端代理', async () => { const px = await import('./proxy-settings.js'); px.showProxySettings(); });
       add('cpu', '提供商与模型管理', '密钥 · 模型列表 · 专用模型', () => subProviders(page));
@@ -904,6 +905,45 @@ function showLocalBackend(page) {
 }
 
 /* ---------- 提供商与模型管理 ---------- */
+/* ---------- 模型控制台（v6.0：各厂商余额 / 用量） ---------- */
+function subConsole() {
+  openOverlay({
+    title: '模型控制台',
+    build: async (body) => {
+      const { PROVIDERS } = await import('../ai/ai-models.js');
+      const { checkAllBalances, fmtMoney } = await import('../ai/balance.js');
+      const providers = PROVIDERS.filter((p) => p.key !== false);
+      body.innerHTML = `
+        <div class="set-wrap">
+          <div class="muted" style="font-size:12.5px;line-height:1.8;margin-bottom:10px">
+            查询各厂商 API Key 的余额与用量（调厂商公开查询接口，Key 仅本机直连厂商，不经任何中间服务器）。
+            未配置 Key 的厂商自动跳过。
+          </div>
+          <div data-role="rows"></div>
+          <button class="btn btn-primary" data-a="refresh" style="width:100%;margin-top:6px">刷新</button>
+        </div>`;
+      const rows = $('[data-role="rows"]', body);
+      const render = async () => {
+        rows.innerHTML = '<div class="loading-row"><div class="spinner"></div>查询中…</div>';
+        const res = await checkAllBalances(providers);
+        rows.innerHTML = res.length ? res.map((r) => `
+          <div class="list-item" style="width:100%;margin-bottom:8px">
+            <span class="list-ico">${icon(r.ok ? 'wallet' : 'info')}</span>
+            <div class="grow" style="text-align:left;min-width:0">
+              <div style="font-size:14px;font-weight:600">${esc(r.label || r.name || r.provider)}</div>
+              <div class="muted" style="font-size:12px">${r.ok
+                ? '余额 ' + fmtMoney(r.balance, r.currency) + (r.used != null ? ' · 已用 ' + fmtMoney(r.used, r.currency) : '') + (r.total != null ? ' · 总额 ' + fmtMoney(r.total, r.currency) : '')
+                : '⚠️ ' + esc(r.error || '查询失败')}</div>
+            </div>
+            <span class="list-arrow" style="color:${r.ok ? 'var(--primary)' : 'var(--accent,#e8452c)'}">${r.ok ? '✓' : '!'}</span>
+          </div>`).join('') : '<div class="muted" style="text-align:center;padding:20px">请先在「提供商与模型管理」中配置 API Key</div>';
+      };
+      $('[data-a="refresh"]', body).onclick = render;
+      await render();
+    },
+  });
+}
+
 function subProviders(page) {
   openOverlay({
     title: '提供商与模型管理',

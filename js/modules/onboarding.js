@@ -2,12 +2,12 @@
    陌生人首次进入（本地无任何记录）：
    ① 产品介绍落地页（ hero + 环绕模型 Logo + 能力 + 模型库 + FAQ ）
    ② 登录页（可跳过 = 游客模式；注册 → 独立子页面，昵称 + 真实邮箱验证码）
-   ③ 新注册用户 → 选择使用目的（即选择要启用的板块，至少 1 个、最多 5 个） */
+   ③ 新注册用户 → 选择使用目的（即选择要启用的板块，至少 1 个、 5 个） */
 import { $, $$, el, esc, icon, toast } from '../ui.js';
 import { kvGet, kvSet } from '../store.js';
 import { signIn } from '../auth.js';
 import { hasCloud } from '../supabase.js';
-import { BOARDS, MAX_TABS } from '../boards.js';
+import { BOARDS } from '../boards.js';
 import { vendorIconLocal } from '../ai/vendors.js'; /* v4.9：首屏用本地图标，避免 CDN 加载慢/错位 */
 import { PROVIDERS } from '../ai/ai-models.js';
 import { showRegisterPage } from './register-page.js';
@@ -44,6 +44,33 @@ const FAQS = [
   { q: '支持哪些设备？', a: '网页版支持桌面、手机、手表浏览器，另有 Android 客户端。添加到底层主屏幕后可作为 PWA 离线使用。' },
 ];
 
+
+/* v6.0：安卓安装包下载页（前端包 / 后端包，构建中占位） */
+export function showDownloadPage() {
+  openOverlay({
+    title: '下载安卓版',
+    build: (body) => {
+      body.innerHTML = '<div class="set-wrap">' +
+        '<div class="muted" style="font-size:12.5px;line-height:1.8;margin-bottom:14px">安卓客户端分两部分安装：</div>' +
+        '<button class="list-item" style="width:100%;margin-bottom:10px" data-a="front">' +
+          '<span class="list-ico">' + icon('phone') + '</span>' +
+          '<div class="grow" style="text-align:left;min-width:0">' +
+            '<div style="font-size:14px;font-weight:600">ThirdHub 前端 App</div>' +
+            '<div class="muted">界面与阅读体验（网页版同源）</div>' +
+          '</div><span class="list-arrow">' + icon('arrowR') + '</span></button>' +
+        '<button class="list-item" style="width:100%" data-a="back">' +
+          '<span class="list-ico">' + icon('server') + '</span>' +
+          '<div class="grow" style="text-align:left;min-width:0">' +
+            '<div style="font-size:14px;font-weight:600">ThirdHub-Agent 本地后端</div>' +
+            '<div class="muted">本地算力 / DSH 内核（电脑或安卓 Termux）</div>' +
+          '</div><span class="list-arrow">' + icon('arrowR') + '</span></button>' +
+        '<div class="muted" style="text-align:center;margin-top:16px;font-size:12.5px">安装包构建中，敬请期待（先在浏览器使用 https://thirdhub.pages.dev）</div>' +
+      '</div>';
+      $('[data-a="front"]', body).onclick = () => toast('前端安装包构建中，敬请期待');
+      $('[data-a="back"]', body).onclick = () => toast('后端安装包构建中，敬请期待');
+    },
+  });
+}
 export async function maybeOnboard() {
   const done = await kvGet('onboard:done', false);
   if (done || /[?&]noob=1/.test(location.search || '')) return false;
@@ -52,7 +79,7 @@ export async function maybeOnboard() {
     const ov = el(`<div class="ob"></div>`);
     document.body.appendChild(ov);
     const finish = async (tabs) => {
-      if (tabs && tabs.length) await kvSet('ui:tabs', tabs.slice(0, MAX_TABS));
+      if (tabs && tabs.length) await kvSet('ui:tabs', tabs);
       await kvSet('onboard:done', true);
       ov.classList.add('ob-out');
       setTimeout(() => { ov.remove(); resolve(true); }, 260);
@@ -91,7 +118,7 @@ export async function maybeOnboard() {
             <div class="obl-cta">
               <button class="btn btn-primary ob-btn" data-a="go">开始体验</button>
               <button class="ob-skip" data-a="guest">先看看，不登录 →</button>
-              ${IN_APP ? '' : `<a class="ob-skip" href="https://github.com/Smalluniverseheng/ThirdHub-Android/releases/latest" target="_blank" rel="noopener" style="text-decoration:none">下载安卓版 App ↗</a>`}
+              ${IN_APP ? '' : `<button class="ob-skip" data-a="dl" style="background:none;border:none;cursor:pointer">下载安卓版 App ↗</button>`}
             </div>
           </div>
           <div class="obl-marquee"><div class="obl-mq-track">${marquee}${marquee}</div></div>
@@ -145,13 +172,14 @@ export async function maybeOnboard() {
 
           <div class="obl-sec rv" style="text-align:center;padding-bottom:44px">
             <button class="btn btn-primary ob-btn" data-a="go2">立即开始</button>
-            ${IN_APP ? '' : `<div style="margin-top:12px"><a class="ob-skip" href="https://github.com/Smalluniverseheng/ThirdHub-Android/releases/latest" target="_blank" rel="noopener" style="text-decoration:none">下载安卓版 App ↗</a></div>`}
+            ${IN_APP ? '' : `<div style="margin-top:12px"><button class="ob-skip" data-a="dl" style="background:none;border:none;cursor:pointer">下载安卓版 App ↗</button></div>`}
             <div class="muted" style="font-size:12px;margin-top:14px">第三方科技 · 不预置任何内容源</div>
           </div>
         </div>`;
       $('[data-a="go"]', ov).onclick = stepAuth;
       $('[data-a="go2"]', ov).onclick = stepAuth;
       $('[data-a="guest"]', ov).onclick = () => finish(['ai']);
+      $$('[data-a="dl"]', ov).forEach((b) => b.onclick = () => showDownloadPage());
 
       /* 滚动显现 + 数字动画 */
       const io = new IntersectionObserver((es) => {
@@ -214,7 +242,7 @@ export async function maybeOnboard() {
       ov.innerHTML = `
         <div class="ob-inner ob-wide">
           <div class="ob-title">你想用 ThirdHub 做什么？</div>
-          <div class="ob-desc">选择你感兴趣的板块，选中的板块会出现在底部导航栏。<br>至少 1 个、最多 ${MAX_TABS} 个，之后可随时在「我的 → 导航栏管理」中调整。</div>
+          <div class="ob-desc">选择你感兴趣的板块，选中的板块会出现在导航栏（可滑动）。<br>至少 1 个、数量不限，之后可随时在「我的 → 导航栏管理」中调整。</div>
           <div class="ob-grid">
             ${BOARDS.map((b) => `
               <button class="ob-board ${b.id === 'ai' ? 'on' : ''}" data-b="${b.id}">
@@ -224,7 +252,7 @@ export async function maybeOnboard() {
                 <span class="ob-board-check">${icon('check')}</span>
               </button>`).join('')}
           </div>
-          <div class="ob-count">已选 <b data-v="n">1</b> / ${MAX_TABS} 个板块</div>
+          <div class="ob-count">已选 <b data-v="n">1</b> 个板块</div>
           <button class="btn btn-primary ob-btn" data-a="done">完成，进入 ThirdHub</button>
         </div>`;
       $$('.ob-board', ov).forEach((b) => b.onclick = () => {
@@ -233,7 +261,6 @@ export async function maybeOnboard() {
           if (picked.size <= 1) return toast('至少保留 1 个板块');
           picked.delete(id); b.classList.remove('on');
         } else {
-          if (picked.size >= MAX_TABS) return toast(`最多选择 ${MAX_TABS} 个板块`);
           picked.add(id); b.classList.add('on');
         }
         $('[data-v="n"]', ov).textContent = picked.size;

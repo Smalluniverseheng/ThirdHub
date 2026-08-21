@@ -41,6 +41,61 @@ export async function showStorageManagement() {
     build: async (body) => {
       body.innerHTML = `<div class="col gap8" id="sm-cats"></div>`;
       const cats = $('#sm-cats', body);
+      /* v6.0：云端同步 / 本地备份归入存储管理 */
+      const addCloudSync = () => {
+        openOverlay({
+          title: '云端同步配置',
+          build: (b) => {
+            b.innerHTML = '<div class="set-wrap">' +
+              formRow('Supabase URL', '<input class="input" data-f="url" placeholder="https://xxx.supabase.co">') +
+              formRow('Anon Key', '<input class="input" data-f="key" placeholder="eyJ...">') +
+              '<div class="muted" style="font-size:12.5px;line-height:1.8">配置后重启应用生效。留空则保持纯本地模式。同步内容：书架 / 历史 / 收藏 / 阅读进度 / 设置 / 连接器。</div></div>';
+            kvGet('cloud:url', '').then((v) => { $('[data-f="url"]', b).value = v; });
+            kvGet('cloud:key', '').then((v) => { $('[data-f="key"]', b).value = v; });
+            b.insertAdjacentHTML('beforeend', '<button class="btn btn-primary" data-a="save" style="width:100%">保存</button>');
+            $('[data-a="save"]', b).onclick = async () => {
+              await kvSet('cloud:url', $('[data-f="url"]', b).value.trim());
+              await kvSet('cloud:key', $('[data-f="key"]', b).value.trim());
+              toast('已保存，即将刷新', 'ok');
+              setTimeout(() => location.reload(), 800);
+            };
+          },
+        });
+      };
+      const addBackup = () => {
+        openOverlay({
+          title: '本地备份 / 恢复',
+          build: (b) => {
+            b.innerHTML = '<div class="muted" style="font-size:12.5px;line-height:1.8;margin-bottom:12px">导出全部本地数据（设置 / 连接器 / 书架 / 历史 / 收藏 / AI 会话）为 JSON 文件，或从备份文件恢复。</div><div class="col gap8"><button class="btn btn-primary" data-a="export" style="width:100%">导出备份（JSON）</button><button class="btn" data-a="import" style="width:100%">从备份恢复</button></div>';
+            $('[data-a="export"]', b).onclick = async () => {
+              const data = {};
+              for (const store of ['kv', 'sources', 'shelf', 'history', 'favorites', 'chats']) data[store] = await db.all(store);
+              const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+              const a = document.createElement('a');
+              a.href = URL.createObjectURL(blob);
+              a.download = 'thirdhub-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+              a.click();
+              toast('备份已导出', 'ok');
+            };
+            $('[data-a="import"]', b).onclick = () => {
+              const input = document.createElement('input');
+              input.type = 'file'; input.accept = '.json';
+              input.onchange = async () => {
+                try {
+                  const data = JSON.parse(await input.files[0].text());
+                  for (const [store, rows] of Object.entries(data)) {
+                    if (!['kv', 'sources', 'shelf', 'history', 'favorites', 'chats'].includes(store)) continue;
+                    for (const row of rows) await db.put(store, row);
+                  }
+                  toast('恢复完成，即将刷新', 'ok');
+                  setTimeout(() => location.reload(), 800);
+                } catch (e) { toast('备份文件无效', 'err'); }
+              };
+              input.click();
+            };
+          },
+        });
+      };
       const add = (ic, name, desc, fn) => {
         const b = el(`<button class="list-item" style="width:100%">
           <span class="list-ico">${icon(ic)}</span>

@@ -47,3 +47,21 @@ create policy "community_comments 本人可删" on community_comments for delete
 -- 开启 Realtime（实时评论）
 alter publication supabase_realtime add table community_posts;
 alter publication supabase_realtime add table community_comments;
+
+-- ============================================================
+-- v6.0 设备日志云端上报（默认开启，日志页可关闭）
+-- ============================================================
+create table if not exists device_logs (
+  id bigint generated always as identity primary key,
+  user_id uuid not null,
+  level text not null,          -- error | warn | info
+  tag text,
+  msg text not null,
+  app_version text,
+  ts timestamptz default now()
+);
+create index if not exists idx_device_logs_user on device_logs (user_id, ts desc);
+alter table device_logs enable row level security;
+create policy "device_logs 本人可写" on device_logs for insert with check (auth.uid() = user_id);
+create policy "device_logs 本人可读" on device_logs for select using (auth.uid() = user_id);
+create policy "device_logs 管理员可读" on device_logs for select using (exists (select 1 from th_profiles p where p.id = auth.uid() and p.role = 'admin'));

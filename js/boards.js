@@ -26,7 +26,7 @@ export const BOARDS = [
   
 { id: 'community',  name: '社区',   ico: 'users',     cat: 'tool', desc: '书友圈：发帖、求助、实时评论',                 css: ['css/community.css'], load: () => import('./modules/community.js'), fn: 'renderCommunity' },
   
-{ id: 'compute',    name: '算力',   ico: 'cpu',       cat: 'tool', desc: '本地 AI 算力：连接电脑上的 Agent（DSH），浏览器之外跑完整工具', css: ['css/compute.css'], load: () => import('./modules/compute.js'),    fn: 'renderCompute' },
+{ id: 'compute',    name: '后端',   ico: 'cpu',       cat: 'tool', desc: '本地 / 云端 Agent 后端（DSH）：直连或中转，浏览器之外跑完整工具', css: ['css/compute.css'], load: () => import('./modules/compute.js'),    fn: 'renderCompute' },
   
 { id: 'cloudphone', name: '云手机', ico: 'phone',     cat: 'tool', desc: '云端安卓实例（即将上线）',                 load: () => import('./modules/board-cloudphone.js'),  fn: 'renderCloudPhoneBoard' },
 ];

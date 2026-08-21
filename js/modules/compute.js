@@ -35,7 +35,8 @@ export function sendToDevice(deviceId, msg) {
 export async function connectDevice(dev, { silent = false } = {}) {
   const old = wsPool.get(dev.id);
   if (old && old.ws) { try { old.ws.close(); } catch (e) {} }
-  const ws = new WebSocket('ws://' + dev.host + ':' + dev.port);
+  const url = dev.relay ? String(dev.relay).trim() : ('ws://' + dev.host + ':' + dev.port);
+  const ws = new WebSocket(url);
   const c = { ws, status: 'connecting', info: null };
   wsPool.set(dev.id, c);
 
@@ -122,15 +123,16 @@ export async function renderCompute(page) {
   function render() {
     page.innerHTML = `
       <div class="page-head">
-        <div class="page-title">算力</div>
+        <div class="page-title">后端</div>
         <div class="spacer"></div>
         <button class="icon-btn" data-a="add" title="添加设备">${icon('plus')}</button>
       </div>
       <div class="cp-wrap">
         <div class="muted" style="font-size:12.5px;line-height:1.8;margin-bottom:14px">
-          连接你电脑上运行的 <b>ThirdHub-Agent</b>（基于 DeepSeek Harness），
-          即可在浏览器之外使用完整 Agent 能力：本地工具、文件读写、代码执行、MCP 服务。
-          设备端启动：<code>npm i -g thirdhub-agent && thirdhub-agent</code>
+          连接你电脑 / 服务器上运行的 <b>ThirdHub-Agent</b>（基于 DeepSeek Harness）：
+          浏览器之外使用完整 Agent 能力——本地工具、文件读写、代码执行、MCP 服务。
+          设备端启动：<code>npm i -g thirdhub-agent && thirdhub-agent</code>。
+          同一局域网用「直连」；跨网络用「中转」（需中转服务地址）。
         </div>
         <div data-role="list">
           ${devices.length ? devices.map(deviceCard).join('') : `
@@ -183,34 +185,56 @@ export async function renderCompute(page) {
           <input class="input" data-f="host" placeholder="192.168.1.5" value="${esc(d.host)}">
         </div>
         <div>
-          <div class="muted mb8" style="font-size:12.5px">端口</div>
+          <div class="muted mb8" style="font-size:12.5px">连接方式</div>
+          <select class="input" data-f="mode">
+            <option value="lan">局域网直连（同一 WiFi / 网络）</option>
+            <option value="relay">互联网中转（跨网络，填中转地址）</option>
+          </select>
+        </div>
+        <div data-v="lan">
+          <div class="muted mb8" style="font-size:12.5px">后端地址（IP 或域名）</div>
+          <input class="input" data-f="host" placeholder="192.168.1.5" value="${esc(d.host)}">
+          <div class="muted mb8" style="font-size:12.5px;margin-top:8px">端口</div>
           <input class="input" data-f="port" placeholder="9600" value="${esc(d.port)}">
+        </div>
+        <div data-v="relay" style="display:none">
+          <div class="muted mb8" style="font-size:12.5px">中转地址（wss://relay.example.com/agent/设备ID）</div>
+          <input class="input" data-f="relay" placeholder="wss://中转地址" value="${esc(d.relay || '')}">
         </div>
         <div>
           <div class="muted mb8" style="font-size:12.5px">访问密码（后端启动时设置）</div>
           <input class="input" type="password" data-f="password" placeholder="后端访问密码" value="${esc(d.password)}">
         </div>
-        <div class="cp-hint">提示：后端在你电脑上运行 thirdhub-agent 启动；首次启动会要求设置访问密码。设备密码仅保存在本机浏览器。</div>
+        <div class="cp-hint">提示：后端运行 thirdhub-agent 启动，首次启动设置访问密码。同一局域网选「直连」；跨网络需中转服务（会员可享官方中转，或自建 CF Worker 中继）。密码仅保存在本机浏览器。</div>
       </div>`),
       footer: '<button class="btn grow" data-a="cancel">取消</button><button class="btn btn-primary grow" data-a="ok">' + (dev ? '保存' : '连接') + '</button>',
     });
     {
       $('[data-a="cancel"]', m.mask).onclick = () => m.close();
+      const modeSel = $('[data-f="mode"]', m.mask);
+      if (modeSel) {
+        modeSel.value = (d && d.mode) || 'lan';
+        const syncMode = () => { const r = modeSel.value === 'relay'; $('[data-v="relay"]', m.mask).style.display = r ? 'block' : 'none'; $('[data-v="lan"]', m.mask).style.display = r ? 'none' : 'block'; };
+        modeSel.onchange = syncMode; syncMode();
+      }
       $('[data-a="ok"]', m.mask).onclick = async () => {
         const name = $('[data-f="name"]', m.mask).value.trim();
+        const mode = ($('[data-f="mode"]', m.mask) || {}).value || 'lan';
         const host = $('[data-f="host"]', m.mask).value.trim();
         const port = ($('[data-f="port"]', m.mask).value.trim() || '9600').replace(/\D/g, '');
+        const relay = mode === 'relay' ? ($('[data-f="relay"]', m.mask).value || '').trim() : '';
         const password = $('[data-f="password"]', m.mask).value;
-        if (!host) return toast('请填写后端地址');
+        if (mode === 'relay' && !relay) return toast('请填写中转地址');
+        if (mode !== 'relay' && !host) return toast('请填写后端地址');
         const list = listDevices();
         let entry;
         if (dev) {
-          entry = { ...dev, name: name || host, host, port, password };
+          entry = { ...dev, name: name || host, host, port, password, relay, mode };
           const idx = list.findIndex((x) => x.id === dev.id);
           if (idx >= 0) list[idx] = entry;
           disconnectDevice(dev.id);
         } else {
-          entry = { id: 'dev-' + Date.now().toString(36), name: name || host, host, port, password };
+          entry = { id: 'dev-' + Date.now().toString(36), name: name || host, host, port, password, relay, mode };
           list.push(entry);
         }
         saveDevices(list);

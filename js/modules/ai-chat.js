@@ -1319,7 +1319,7 @@ function appendMessage(page, m, msgIndex = -1) {
   if (empty) empty.remove();
 
   if (m.role === 'compare') {
-    const grid = el(`<div class="msg assistant"><div class="msg-body" style="max-width:100%"><div class="compare-grid"></div></div></div>`);
+    const grid = el(`<div class="msg assistant"><div class="msg-body" style="max-width:100%"><div class="compare-grid c${Math.min(m.results.length, 4)}"></div></div></div>`);
     const g = $('.compare-grid', grid);
     m.results.forEach((r) => {
       const cell = el(`<div class="compare-cell">
@@ -1440,7 +1440,7 @@ async function openRunModePanel(page) {
           <b>直连模式</b>：请求由当前设备（浏览器 / 前端）直接发送到模型厂商接口，响应快、无需额外部署；适合日常对话。
           <span class="ai-help-dot" data-a="help" title="说明">?</span>
         </div>
-        <div class="section-title" style="margin-top:16px">后端算力设备（可运行 Python / 插件 / MCP）</div>
+        <div class="section-title" style="margin-top:16px">后端设备（可运行 Python / 插件 / MCP）</div>
         <div class="col gap8" data-role="devs">
           ${devs.length ? devs.map((d) => `
             <button class="list-item" style="width:100%" data-dev="${d.id}">
@@ -1450,7 +1450,7 @@ async function openRunModePanel(page) {
                 <div class="muted" style="font-size:11.5px">${d.host}:${d.port}</div>
               </div>
               <span class="list-arrow">${localMode.on && localMode.deviceId === d.id ? '✓' : ''}</span>
-            </button>`).join('') : '<div class="muted" style="font-size:12.5px">还没有算力设备，去「算力」板块添加。</div>'}
+            </button>`).join('') : '<div class="muted" style="font-size:12.5px">还没有后端设备，去「后端」板块添加。</div>'}
         </div>
         <button class="btn" style="width:100%;margin-top:12px" data-a="direct">${!localMode.on ? '✓ ' : ''}切换到直连模式</button>
       </div>`;
@@ -1488,7 +1488,7 @@ async function openRunModePanel(page) {
 async function sendLocalMessage(page, text) {
   const { getStatus, sendToDevice } = await import('./compute.js');
   if (getStatus(localMode.deviceId) !== 'online') {
-    toast('算力设备离线，请先在「算力」页连接', 'err');
+    toast('后端设备离线，请先在「后端」页连接', 'err');
     return;
   }
   const clean = text.trim();

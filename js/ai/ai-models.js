@@ -136,6 +136,19 @@ export const PROVIDER_SITES = {
   together: { create: 'https://api.together.ai/settings/api-keys', intro: 'Together AI 开源模型托管平台' },
   fireworks: { create: 'https://fireworks.ai/api-keys', intro: 'Fireworks AI 模型托管平台' },
 };
+/* v5.5：国内 / 国外厂商区分（国外模型可能被墙，国内优先展示） */
+const CN_PROVIDERS = ['deepseek', 'zhipu', 'moonshot', 'aliyun', 'tencent', 'baidu', 'bytedance', 'xiaomi', 'minimax', 'baichuan', 'stepfun', 'spark', 'siliconflow', 'yi', 'sensechat', 'tiangong', 'qihoo', 'custom'];
+export function isCnProvider(id) { return CN_PROVIDERS.includes(id); }
+/* 国内置顶顺序：deepseek 第 1、kimi 第 2，其余国内厂商按列表顺序，之后才是国外 */
+export function sortProviders(list) {
+  const prio = { deepseek: 0, moonshot: 1 };
+  const rank = (p) => {
+    if (prio[p.id] != null) return prio[p.id];
+    if (isCnProvider(p.id)) return 10;
+    return 20;
+  };
+  return [...list].sort((a, b) => rank(a) - rank(b));
+}
 export function providerSite(id) { return PROVIDER_SITES[id] || null; }
 
 /* v5.4：模型能力标签（上下文窗口 / 模态）——按规则匹配，约值标注 */

@@ -1,9 +1,9 @@
 {
-  "version": "5.5",
+  "version": "5.6",
   "type": "recommended",
-  "title": "ThirdHub v5.5",
-  "content": "按住说话优化（键盘按钮右移+可修改后发送）；联网搜索「保存并验证」+官网直达；厂商 API 支持多 Key（自命名/会员计划/切换）；模型列表标注上下文与模态标签。",
+  "title": "ThirdHub v5.6",
+  "content": "关于页整理（更新/历史移入）；多端下载中心（防 GitHub 被墙直跳）；模型国内外区分+长按置顶；多模型对比分栏 UI；算力改名「后端」+ 局域网/中转连接设置。",
   "downloadUrl": "",
   "releaseDate": "2026-08-21",
-  "releaseNotes": "语音输入优化、搜索/厂商配置增强、模型能力标签"
+  "releaseNotes": "关于页、下载中心、模型排序置顶、对比分栏、后端改名与中转"
 }

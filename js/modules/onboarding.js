@@ -45,32 +45,42 @@ const FAQS = [
 ];
 
 
-/* v6.0：安卓安装包下载页（前端包 / 后端包，构建中占位） */
+/* v5.5：下载中心（安卓前端 / 安卓后端 / 桌面端 / 插件），点击下载按钮才跳转 GitHub（避免被墙页直接卡死） */
 export function showDownloadPage() {
   openOverlay({
-    title: '下载安卓版',
+    title: '下载中心',
     build: (body) => {
-      body.innerHTML = '<div class="set-wrap">' +
-        '<div class="muted" style="font-size:12.5px;line-height:1.8;margin-bottom:14px">安卓客户端分两部分安装：</div>' +
-        '<button class="list-item" style="width:100%;margin-bottom:10px" data-a="front">' +
-          '<span class="list-ico">' + icon('phone') + '</span>' +
-          '<div class="grow" style="text-align:left;min-width:0">' +
-            '<div style="font-size:14px;font-weight:600">ThirdHub 前端 App</div>' +
-            '<div class="muted">界面与阅读体验（网页版同源）</div>' +
-          '</div><span class="list-arrow">' + icon('arrowR') + '</span></button>' +
-        '<button class="list-item" style="width:100%" data-a="back">' +
-          '<span class="list-ico">' + icon('server') + '</span>' +
-          '<div class="grow" style="text-align:left;min-width:0">' +
-            '<div style="font-size:14px;font-weight:600">ThirdHub-Agent 本地后端</div>' +
-            '<div class="muted">本地算力 / DSH 内核（电脑或安卓 Termux）</div>' +
-          '</div><span class="list-arrow">' + icon('arrowR') + '</span></button>' +
-        '<div class="muted" style="text-align:center;margin-top:16px;font-size:12.5px">安装包构建中，敬请期待（先在浏览器使用 https://thirdhub.pages.dev）</div>' +
-      '</div>';
-      $('[data-a="front"]', body).onclick = () => toast('前端安装包构建中，敬请期待');
-      $('[data-a="back"]', body).onclick = () => toast('后端安装包构建中，敬请期待');
+      const APPS = [
+        { id: 'apk', ico: 'phone', name: 'ThirdHub 安卓前端 App', desc: '原生界面与阅读体验（网页版同源，Kotlin 重构中）', url: 'https://github.com/Smalluniverseheng/ThirdHub-Android/releases/latest', status: '构建中' },
+        { id: 'agent', ico: 'server', name: 'ThirdHub-Agent 本地后端', desc: '本地算力 / DSH 内核（电脑或安卓 Termux 运行）', url: 'https://github.com/Smalluniverseheng/ThirdHub', status: '可用' },
+        { id: 'desktop', ico: 'monitor', name: 'ThirdHub 桌面端', desc: 'Windows / macOS / Linux（Tauri，规划中）', url: '', status: '规划中' },
+        { id: 'plugin', ico: 'plug', name: '官方插件包', desc: '连接器 / MCP 配置一键包（整理中）', url: '', status: '整理中' },
+      ];
+      body.innerHTML = `<div class="set-wrap">
+        <div class="muted" style="font-size:12.5px;line-height:1.8;margin-bottom:14px">选择要安装的组件。点击「下载」后跳转到发布页（GitHub，大陆网络可能需要代理，若打不开请稍后重试或使用镜像）。</div>
+        <div class="col gap8">
+          ${APPS.map((a) => `
+            <div class="card" style="padding:12px">
+              <div style="display:flex;align-items:center;gap:10px">
+                <span class="list-ico">${icon(a.ico)}</span>
+                <div class="grow" style="min-width:0">
+                  <div style="font-size:14px;font-weight:700">${esc(a.name)} <span class="tag ${a.status === '可用' ? 'tag-green' : 'tag-gray'}" style="font-size:10px">${esc(a.status)}</span></div>
+                  <div class="muted" style="font-size:12px;line-height:1.6">${esc(a.desc)}</div>
+                </div>
+              </div>
+              ${a.url ? `<button class="btn btn-sm btn-primary" style="margin-top:8px" data-dl="${a.id}">下载 ↗</button>` : '<div class="muted" style="font-size:11.5px;margin-top:6px">敬请期待</div>'}
+            </div>`).join('')}
+        </div>
+        <div class="muted" style="text-align:center;margin-top:14px;font-size:12px">网页版随时可用：https://thirdhub.pages.dev</div>
+      </div>`;
+      $$('[data-dl]', body).forEach((b) => b.onclick = () => {
+        const a = APPS.find((x) => x.id === b.dataset.dl);
+        if (a && a.url) window.open(a.url, '_blank', 'noopener');
+      });
     },
   });
 }
+
 export async function maybeOnboard() {
   const done = await kvGet('onboard:done', false);
   if (done || /[?&]noob=1/.test(location.search || '')) return false;

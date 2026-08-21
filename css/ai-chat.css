@@ -154,11 +154,21 @@
 @keyframes blink { 50% { opacity: 0; } }
 
 /* 多模型对比 */
+/* v5.5：多模型对比分栏（选的模型越多格子越多，桌面端多列并行） */
 .compare-grid { display: grid; gap: 10px; }
-@media (min-width: 768px) { .compare-grid { grid-template-columns: 1fr 1fr; } }
+@media (min-width: 768px) {
+  .compare-grid.c1 { grid-template-columns: 1fr; }
+  .compare-grid.c2 { grid-template-columns: 1fr 1fr; }
+  .compare-grid.c3 { grid-template-columns: 1fr 1fr 1fr; }
+  .compare-grid.c4 { grid-template-columns: 1fr 1fr; }
+}
 .compare-cell { background: var(--bg-card); border-radius: 14px; padding: 12px; box-shadow: var(--shadow-card); }
 .compare-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12px; font-weight: 700; }
 .compare-head .vendor-ico { width: 20px; height: 20px; }
+.compare-cell.streaming .compare-head::after { content: '…'; color: var(--primary); animation: cmp-blink 1s infinite; }
+@keyframes cmp-blink { 50% { opacity: .2; } }
+.compare-cell.error { border: 1px solid rgba(239,68,68,.35); }
+.compare-content { font-size: 13.5px; line-height: 1.7; word-break: break-word; }
 
 /* 输入栏 */
 /* v5.0：运行模式条（直连 / 本地算力） */

@@ -475,11 +475,8 @@ function showAvatarPicker(body, u) {
       { a: 'splash', ico: 'splash', name: '开屏动画', desc: splashOn ? '已启用（打开应用时展示品牌动画）' : '已关闭' },
       { a: 'proxy', ico: 'globe', name: '模块代理设置', desc: '各模块独立选择直连 / 自有代理 / 云端代理' },
       { a: 'sources', ico: 'plug', name: '连接器管理', desc: '导入 / 管理内容连接器' },
-      ...(IN_APP ? [] : [{ a: 'apk', ico: 'download', name: '下载安卓版', desc: '获取最新安卓安装包' }]),
-      { a: 'update', ico: 'refresh', name: '检查更新', desc: '当前 v' + APP_VERSION },
-      { a: 'autoupdate', ico: 'sync', name: '自动检查更新', desc: '开启后每次启动自动检查并下载新版本' },
-      { a: 'changelog', ico: 'history', name: '历史版本', desc: '各版本更新日志' },
-      { a: 'about', ico: 'info', name: '关于 ThirdHub', desc: '版本与许可' },
+      ...(IN_APP ? [] : [{ a: 'apk', ico: 'download', name: '下载 APP', desc: '安卓 / 桌面 / 插件安装包' }]),
+      { a: 'about', ico: 'info', name: '关于 ThirdHub', desc: '版本 / 更新 / 许可' },
     ].map((m) => `
       <button class="list-item" style="margin-bottom:8px;width:100%" data-a="${m.a}">
         <span class="list-ico">${icon(m.ico)}</span>
@@ -517,29 +514,8 @@ function showAvatarPicker(body, u) {
       const { renderCategory } = await import('./category.js');
       openOverlay({ title: '连接器管理', build: async (body) => { body.style.overflowY = 'auto'; await renderCategory(body); const h = body.querySelector('.page-head'); if (h) h.remove(); } });
     };
-    $('[data-a="apk"]', box).onclick = () => window.open('https://github.com/Smalluniverseheng/ThirdHub-Android/releases/latest', '_blank');
-    $('[data-a="update"]', box).onclick = () => checkUpdate(true);
-    $('[data-a="autoupdate"]', box).onclick = async () => {
-      const cur = await kvGet('update:auto', true);
-      const b2 = el(`<div>
-        <div class="row gap8" style="align-items:center;margin-bottom:12px">
-          <div class="grow"><div style="font-weight:600;font-size:14px">启动时自动检查更新</div>
-          <div class="muted">每次打开应用时后台检查新版本；发现新版会自动下载安装包，下载完成后提示你安装。</div></div>
-          <button class="ai-toggle ${cur ? 'on' : ''}" data-v="sw"></button>
-        </div>
-        <button class="btn btn-block" data-a="now">${icon('refresh')} 立即检查更新</button>
-      </div>`);
-      const m2 = modal({ title: '自动检查更新', body: b2, footer: '<button class="btn btn-block" data-a="c">关闭</button>' });
-      $('[data-a="c"]', m2.mask).onclick = m2.close;
-      $('[data-v="sw"]', b2).onclick = async (e) => {
-        const on = !e.target.classList.contains('on');
-        e.target.classList.toggle('on', on);
-        await kvSet('update:auto', on);
-        toast(on ? '已开启自动检查更新' : '已关闭自动检查更新', 'ok');
-      };
-      $('[data-a="now"]', b2).onclick = () => { m2.close(); checkUpdate(true); };
-    };
-    $('[data-a="changelog"]', box).onclick = showChangelog;
+    $('[data-a="apk"]', box).onclick = () => { const ob = document.getElementById('overlay-root'); showDownloadPage(); };
+
     $('[data-a="about"]', box).onclick = () => showAboutPage();
 
     /* v5.3：关于页（模块介绍 / 开源致谢 / 云存储实时用量） */
@@ -564,6 +540,22 @@ function showAvatarPicker(body, u) {
                   <div class="muted" data-role="storage-text">${u ? fmtBytes(u.storageUsed || 0) + ' / ' + (lv.storage === Infinity ? '无限' : fmtBytes(lv.storage)) : '未登录'}</div>
                 </div>
                 <span class="list-arrow">${icon('refresh')}</span>
+              </button>
+              <button class="list-item" style="width:100%" data-a="checkupd">
+                <span class="list-ico">${icon('refresh')}</span>
+                <div class="grow" style="text-align:left;min-width:0">
+                  <div style="font-size:14px;font-weight:600">检查更新</div>
+                  <div class="muted" data-role="curver">当前 v${APP_VERSION}</div>
+                </div>
+                <span class="list-arrow">${icon('arrowR')}</span>
+              </button>
+              <button class="list-item" style="width:100%" data-a="version">
+                <span class="list-ico">${icon('sync')}</span>
+                <div class="grow" style="text-align:left;min-width:0">
+                  <div style="font-size:14px;font-weight:600">版本与更新设置</div>
+                  <div class="muted">自动检查开关 · 当前版本号 · 更新说明</div>
+                </div>
+                <span class="list-arrow">${icon('arrowR')}</span>
               </button>
               <button class="list-item" style="width:100%" data-a="modules">
                 <span class="list-ico">${icon('grid')}</span>
@@ -627,6 +619,35 @@ function showAvatarPicker(body, u) {
                     <div class="muted" style="font-size:12px;line-height:1.6;margin-top:2px">${esc(d)}</div>
                     ${u ? `<a href="${esc(u)}" target="_blank" rel="noopener" style="font-size:11.5px;color:var(--primary)">${esc(u)} ↗</a>` : ''}
                   </div>`).join('')}</div>`;
+              },
+            });
+          };
+          $('[data-a="checkupd"]', body).onclick = () => checkUpdate(true);
+          $('[data-a="version"]', body).onclick = () => {
+            openOverlay({
+              title: '版本与更新设置',
+              build: (b2) => {
+                kvGet('update:auto', true).then((on) => {
+                  b2.innerHTML = `
+                    <div class="card" style="padding:14px;margin-bottom:12px">
+                      <div style="font-size:14px;font-weight:700">当前版本</div>
+                      <div style="font-size:28px;font-weight:800;margin:8px 0 2px">v${APP_VERSION}</div>
+                      <div class="muted" style="font-size:12px">ThirdHub · 第三方科技</div>
+                    </div>
+                    <div class="nr-set-row"><span>启动时自动检查更新</span><button class="ai-toggle ${on ? 'on' : ''}" data-v="sw"></button></div>
+                    <div class="muted" style="font-size:12px;line-height:1.7;margin:8px 2px 14px">开启后每次打开应用后台检查新版本；发现新版会弹出更新公告并提示刷新。</div>
+                    <button class="btn btn-primary" style="width:100%" data-a="now">${icon('refresh')} 立即检查更新</button>
+                    <button class="btn" style="width:100%;margin-top:8px" data-a="hist">${icon('history')} 历史版本</button>
+                  `;
+                  $('[data-v="sw"]', b2).onclick = async (e) => {
+                    const nxt = !e.target.classList.contains('on');
+                    e.target.classList.toggle('on', nxt);
+                    await kvSet('update:auto', nxt);
+                    toast(nxt ? '自动检查已开启' : '自动检查已关闭', 'ok');
+                  };
+                  $('[data-a="now"]', b2).onclick = () => checkUpdate(true);
+                  $('[data-a="hist"]', b2).onclick = showChangelog;
+                });
               },
             });
           };

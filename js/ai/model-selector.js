@@ -3,13 +3,15 @@ import { PROVIDERS, refreshCustomProviders, modelIdOf, modelNickOf } from './ai-
 import { vendorIcon } from './vendors.js';
 import { modal, $, esc, icon } from '../ui.js';
 import { getApiKey, getSyncedModels } from './ai-api.js';
+import { kvGet, kvSet } from '../store.js';
 
 /* type: 'chat'（默认）| 'image' | 'video' */
 export async function pickModel({ multi = false, selected = [], type = 'chat' } = {}) {
   await refreshCustomProviders();
+  /* v5.5：国内厂商优先（deepseek 置顶、kimi 次之），国外靠后 */
   const ordered = [
     ...PROVIDERS.filter((p) => p.custom),
-    ...PROVIDERS.filter((p) => !p.custom && p.id !== 'custom'),
+    ...sortProviders(PROVIDERS.filter((p) => !p.custom && p.id !== 'custom')),
   ];
   const keys = {};
   for (const p of ordered) keys[p.id] = !!(await getApiKey(p.id));
@@ -46,10 +48,14 @@ export async function pickModel({ multi = false, selected = [], type = 'chat' } 
       const kw = filter.trim().toLowerCase();
       listEl.innerHTML = '';
       let myHeader = false;
-      ordered.forEach((p) => {
+      ordered.forEach(async (p) => {
         let entries = modelsOf(p).map((m) => ({ id: modelIdOf(m), nick: modelNickOf(m), isNew: false })).filter((x) => x.id);
         if (syncedMap[p.id]) entries = entries.concat(syncedMap[p.id].map((m) => ({ id: m, nick: m, isNew: true })));
         entries = entries.filter((x) => !kw || x.id.toLowerCase().includes(kw) || x.nick.toLowerCase().includes(kw) || p.name.toLowerCase().includes(kw));
+        /* v5.5：置顶模型排最前（按置顶先后） */
+        const pins = (await kvGet('ai:model-pins', [])) || [];
+        const pinRank = (x) => { const i = pins.indexOf(p.id + '/' + x.id); return i < 0 ? 999 : i; };
+        entries = entries.sort((a, b) => pinRank(a) - pinRank(b));
         if (!entries.length) return;
         if (p.custom && !myHeader) {
           myHeader = true;
@@ -84,6 +90,21 @@ export async function pickModel({ multi = false, selected = [], type = 'chat' } 
           const item = document.createElement('button');
           item.className = 'ms-item' + (picked.has(id) ? ' on' : '') + (keys[p.id] ? '' : ' dim');
           item.innerHTML = `<span class="ellipsis">${esc(x.nick)}${x.nick !== x.id ? `<span class="muted" style="font-size:11px;margin-left:6px">${esc(x.id)}</span>` : ''}</span>${x.isNew ? '<span class="tag tag-blue">新上线</span>' : ''}${modelCapTags(p.id, x.id)}${picked.has(id) ? icon('check') : ''}`;
+          /* v5.5：长按模型置顶（可多个，按置顶先后；云端同步） */
+          let pinTimer = null;
+          item.addEventListener('touchstart', () => { pinTimer = setTimeout(pinModel, 550); }, { passive: true });
+          item.addEventListener('touchend', () => clearTimeout(pinTimer));
+          item.addEventListener('touchmove', () => clearTimeout(pinTimer));
+          item.addEventListener('contextmenu', (e) => { e.preventDefault(); pinModel(); });
+          async function pinModel() {
+            const list = (await kvGet('ai:model-pins', [])) || [];
+            const key2 = p.id + '/' + x.id;
+            const rest = list.filter((k3) => k3 !== key2);
+            rest.push(key2);
+            await kvSet('ai:model-pins', rest);
+            toast('已置顶：' + (x.nick || x.id), 'ok');
+            render(kw ? $('.ms-search input', body).value : '');
+          }
           item.onclick = () => {
             if (multi) {
               picked.has(id) ? picked.delete(id) : picked.add(id);

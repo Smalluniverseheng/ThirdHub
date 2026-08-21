@@ -461,3 +461,53 @@ end; $$;
 --   on conflict (key) do update set value = excluded.value;
 --   return jsonb_build_object('ok', true);
 -- end; $$;
+
+-- ============================================================
+-- v5.8：灵感任务库 + 活动/公告（AI 新建对话欢迎区）
+-- 任务：前端内置 220 条，后台可在此表扩充；公告：优先显示活动/公告小框
+-- ============================================================
+
+create table if not exists th_prompts (
+  id bigint generated always as identity primary key,
+  title text not null,
+  category text default '✍️ 写作文案',
+  desc text,
+  prompt text not null,
+  active boolean default true,
+  sort int default 0,
+  created_at timestamptz default now()
+);
+alter table th_prompts enable row level security;
+create policy "th_prompts_read" on th_prompts for select using (true);
+create policy "th_prompts_write" on th_prompts for all using (auth.role() = 'service_role') with check (auth.role() = 'service_role');
+
+-- 灵感任务管理（管理员口令校验）
+create or replace function admin_upsert_prompt(p_pwd text, p_id bigint, p_title text, p_category text, p_desc text, p_prompt text, p_active boolean, p_sort int)
+returns jsonb language plpgsql security definer as $$
+begin
+  if not admin_check(p_pwd) then raise exception 'unauthorized'; end if;
+  if p_id is null then
+    insert into th_prompts (title, category, desc, prompt, active, sort)
+    values (coalesce(p_title, ''), coalesce(p_category, '✍️ 写作文案'), coalesce(p_desc, ''), coalesce(p_prompt, ''), coalesce(p_active, true), coalesce(p_sort, 0));
+  else
+    update th_prompts set title = coalesce(p_title, title), category = coalesce(p_category, category),
+      desc = coalesce(p_desc, desc), prompt = coalesce(p_prompt, prompt),
+      active = coalesce(p_active, active), sort = coalesce(p_sort, sort)
+    where id = p_id;
+  end if;
+  return jsonb_build_object('ok', true);
+end; $$;
+
+create or replace function admin_delete_prompt(p_pwd text, p_id bigint)
+returns jsonb language plpgsql security definer as $$
+begin
+  if not admin_check(p_pwd) then raise exception 'unauthorized'; end if;
+  delete from th_prompts where id = p_id;
+  return jsonb_build_object('ok', true);
+end; $$;
+
+-- 公告读取（前端 AI 欢迎区使用）：返回当前启用的公告
+create or replace function get_active_announcement()
+returns jsonb language sql stable as $$
+  select value from th_kv where key = 'announcement' and (value->>'enabled')::boolean = true
+$$;

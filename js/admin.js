@@ -527,7 +527,6 @@ function restoreUserNickname(uid) {
 /* 开发者：最高权限（收款设置 / 改后台密码 / 权限切换），对应 182 账号
    管理员：公告 / 限时免费模型 / 会员定价 / 发票 / 订单 / 用户 / 排行榜 / 反馈 / 仓库
    角色由云端 th_kv.admin_role 决定（登录后 admin_whoami 返回），不在后台随意设置 */
-function toggleUserRoleDisabled() { }
 
 /* ---------- 用户数据（书源 / API 密钥） ---------- */
 function renderUserData(body) {

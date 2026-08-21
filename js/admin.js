@@ -29,6 +29,7 @@ var TABS = [
   { id: 'prices', name: '模型定价' },
   { id: 'rank', name: '排行榜' },
   { id: 'repo', name: '官方仓库' },
+  { id: 'system', name: '系统设置' },
   { id: 'feedback', name: '意见反馈' },
   { id: 'paycfg', name: '收款设置' },
 ];
@@ -161,6 +162,7 @@ function renderBody() {
   else if (state.tab === 'repo') renderRepo(body);
   else if (state.tab === 'feedback') renderFeedback(body);
   else if (state.tab === 'paycfg') renderPayCfg(body);
+  else if (state.tab === 'system') renderSystem(body);
 }
 
 /* ---------- 数据加载 ---------- */
@@ -747,6 +749,101 @@ function repoDoSave(btn) {
     }).catch(function (e) { toast('上传失败：' + e.message, false); btn.disabled = false; btn.textContent = '上传到官方仓库'; });
 }
 
+
+/* ================= v1.1 系统设置：历史版本 / 限时免费模型 ================= */
+function renderSystem(body) {
+  body.innerHTML =
+    '<div class="adm-card" style="margin-bottom:12px;cursor:pointer" data-a="fm">' +
+      '<b>限时免费模型</b>' +
+      '<p class="adm-muted" style="margin-top:6px">添加 / 管理限时免费模型：每个等级可用的 Token 配额与模型范围（需云端表与 RPC，见 supabase/community.sql 附录）</p>' +
+    '</div>' +
+    '<div class="adm-card" style="margin-bottom:12px;cursor:pointer" data-a="hist">' +
+      '<b>历史版本</b>' +
+      '<p class="adm-muted" style="margin-top:6px">管理后台更新日志</p>' +
+    '</div>';
+  $('[data-a="fm"]', body).onclick = function () { renderFreeModels(body); };
+  $('[data-a="hist"]', body).onclick = function () { renderAdminChangelog(body); };
+}
+
+var ADMIN_CHANGELOG = [
+  { v: '1.1', d: '2026-08-21', items: ['系统设置上线：限时免费模型管理（多模型 / 分等级 Token 配额 / 可用模型范围）、历史版本页'] },
+  { v: '1.0', d: '2026-08-21', items: ['管理后台初始化：仪表盘 / 用户管理 / 订单 / 会员定价 / 模型定价 / 排行榜 / 官方仓库'] },
+];
+function renderAdminChangelog(body) {
+  body.innerHTML = '<div class="adm-card"><b>历史版本</b>' +
+    ADMIN_CHANGELOG.map(function (c) {
+      return '<div style="padding:12px 0;border-bottom:1px solid #2a2f3a">' +
+        '<b>v' + c.v + '</b> <span class="adm-muted">' + c.d + '</span>' +
+        '<ul style="margin:6px 0 0 18px;font-size:13px;color:var(--muted)">' + c.items.map(function (i) { return '<li>' + i + '</li>'; }).join('') + '</ul>' +
+      '</div>';
+    }).join('') +
+    '</div><button class="adm-btn" style="margin-top:12px" data-a="back">返回</button>';
+  $('[data-a="back"]', body).onclick = function () { renderSystem(body); };
+}
+
+var FM_LEVELS = ['guest', 'user', 'advanced', 'vip', 'agent'];
+var FM_LEVEL_NAMES = { guest: '游客', user: '普通', advanced: '进阶', vip: 'VIP', agent: '代理' };
+function renderFreeModels(body) {
+  body.innerHTML =
+    '<div class="adm-card" style="margin-bottom:12px"><b>添加限时免费模型</b>' +
+      '<div class="row" style="margin-top:10px;gap:8px">' +
+        '<input class="adm-input" data-f="provider" placeholder="厂商 id（如 deepseek / zhipu / openai）" style="flex:1;margin-bottom:0">' +
+        '<input class="adm-input" data-f="model" placeholder="模型名（如 deepseek-v4-flash）" style="flex:1.2;margin-bottom:0">' +
+        '<input class="adm-input" data-f="quota" type="number" placeholder="月 Token 配额" style="flex:.8;margin-bottom:0">' +
+        '<button class="adm-btn adm-btn-primary" data-a="add">添加</button>' +
+      '</div>' +
+      '<p class="adm-muted" style="margin-top:8px">每个等级可额外限制（留空 = 不限制）：</p>' +
+      '<div class="row" style="gap:6px;flex-wrap:wrap">' +
+        FM_LEVELS.map(function (lv) {
+          return '<label style="font-size:12px;display:flex;align-items:center;gap:4px">' + FM_LEVEL_NAMES[lv] + ' <input type="number" data-lv="' + lv + '" placeholder="不限" style="width:72px;padding:4px 6px;border:1px solid #2a2f3a;border-radius:6px;background:#0d0f14;color:var(--text)"> <span class="adm-muted">token/日</span></label>';
+        }).join('') +
+      '</div>' +
+    '</div>' +
+    '<div class="adm-card"><b>当前免费模型</b><div data-v="list" style="margin-top:10px"><p class="adm-muted">加载中…</p></div></div>' +
+    '<button class="adm-btn" style="margin-top:12px" data-a="back">返回</button>';
+  var listBox = $('[data-v="list"]', body);
+  function load() {
+    loadSb().then(function (cli) { return cli.rpc('admin_free_models_list', { pwd: PWD }); })
+      .then(function (r) {
+        if (r.error) throw r.error;
+        var rows = r.data || [];
+        if (!rows.length) { listBox.innerHTML = '<p class="adm-muted">还没有免费模型</p>'; return; }
+        listBox.innerHTML = rows.map(function (x) {
+          return '<div class="adm-card" style="margin-bottom:6px;padding:8px 12px;display:flex;align-items:center;gap:10px">' +
+            '<div style="flex:1;min-width:0"><b>' + esc(x.provider) + '/' + esc(x.model) + '</b> <span class="adm-muted">' + (x.quota ? '月配额 ' + esc(x.quota) : '不限量') + ' · ' + (x.level_limits ? esc(x.level_limits) : '等级不限') + '</span></div>' +
+            '<button class="adm-btn adm-btn-sm" data-del="' + esc(x.id) + '">删除</button></div>';
+        }).join('');
+        $$('[data-del]', listBox).forEach(function (b) {
+          b.onclick = function () {
+            loadSb().then(function (cli) { return cli.rpc('admin_free_models_remove', { pwd: PWD, id: b.getAttribute('data-del') }); })
+              .then(function (rr) { if (rr.error) throw rr.error; toast('已删除'); load(); }).catch(function (e) { toast('删除失败：' + e.message, false); });
+          };
+        });
+      }).catch(function (e) { listBox.innerHTML = '<p class="adm-muted">加载失败：' + esc(e.message) + '</p>'; });
+  }
+  $('[data-a="add"]', body).onclick = function () {
+    var provider = $('[data-f="provider"]', body).value.trim();
+    var model = $('[data-f="model"]', body).value.trim();
+    if (!provider || !model) { toast('请填写厂商与模型名', false); return; }
+    var quota = parseInt($('[data-f="quota"]', body).value) || 0;
+    var limits = {};
+    FM_LEVELS.forEach(function (lv) {
+      var v = parseInt(($('[data-lv="' + lv + '"]', body) || {}).value) || 0;
+      if (v > 0) limits[lv] = v;
+    });
+    var btn = $('[data-a="add"]', body); btn.disabled = true; btn.textContent = '添加中…';
+    loadSb().then(function (cli) { return cli.rpc('admin_free_models_add', { pwd: PWD, provider: provider, model: model, quota: quota, level_limits: limits }); })
+      .then(function (r) {
+        if (r.error) throw r.error;
+        toast('已添加免费模型', true);
+        $('[data-f="provider"]', body).value = ''; $('[data-f="model"]', body).value = ''; $('[data-f="quota"]', body).value = '';
+        load();
+      }).catch(function (e) { toast('添加失败：' + e.message, false); })
+      .finally(function () { btn.disabled = false; btn.textContent = '添加'; });
+  };
+  $('[data-a="back"]', body).onclick = function () { renderSystem(body); };
+  load();
+}
 
 function renderPayCfg(body) {
   body.innerHTML = '<p class="adm-muted">加载中…</p>';

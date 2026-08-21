@@ -1,6 +1,13 @@
 /* ===== ThirdHub changelog.js — 版本更新日志（发版时在末尾追加） ===== */
 export const CHANGELOG = [
   {
+    version: '6.9',
+    date: '2026-08-23',
+    items: [
+      '自动识别 Key 提速：全部厂商一次性并行验证（原分批 8 家串行空等），通常 1~3 秒出结果，不再“点了没反应”',
+    ],
+  },
+  {
     version: '6.8',
     date: '2026-08-23',
     items: [

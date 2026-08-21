@@ -2664,7 +2664,7 @@ async function afterKeySavedHook(p) {
 function showIdentifyDialog(onSaved) {
   const body = el(`<div>
     ${formRow('粘贴任意厂商的 API Key', '<textarea class="input" rows="3" data-f="key" placeholder="sk-... / tp-... / sk-ant-... / AIza... 等"></textarea>')}
-    <div class="muted" style="margin-bottom:10px;line-height:1.7">识别不靠猜前缀：程序会对各家厂商并行发送<b>真实对话请求</b>（每批 8 家），哪家成功返回对话结果，Key 就属于哪家。</div>
+    <div class="muted" style="margin-bottom:10px;line-height:1.7">识别不靠猜前缀：程序会对<b>全部厂商一次性并行</b>发送真实对话请求，最快命中立即返回，通常 1~3 秒出结果。</div>
     <div class="identify-log" data-v="log" style="display:none"></div>
   </div>`);
   const logEl = $('[data-v="log"]', body);

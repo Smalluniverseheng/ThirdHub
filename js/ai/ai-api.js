@@ -575,20 +575,17 @@ export async function identifyApiKey(key, onProgress = null) {
   const rest = usable.filter((p) => !first.includes(p));
   const candidates = [...first, ...rest];
 
-  const BATCH = 8;
+  /* v6.8：一口气并行验证所有厂商（最快命中立即返回，不再分批空等） */
   let lastErr = null;
-  for (let i = 0; i < candidates.length; i += BATCH) {
-    const chunk = candidates.slice(i, i + BATCH);
-    onProgress && onProgress(`正在并行验证 ${chunk.length} 家厂商（${Math.min(i + BATCH, candidates.length)}/${candidates.length}）…`);
-    try {
-      const r = await Promise.any(chunk.map((p) => testProviderKey(p.id, key)));
-      onProgress && onProgress(`✓ ${r.provider.name} 对话验证通过`);
-      return r;
-    } catch (e) {
-      const errs = (e && e.errors) || [];
-      lastErr = errs.find((x) => x && x.quota) || errs[0] || lastErr;
-      onProgress && onProgress(`✗ 本批未通过${lastErr ? `（${lastErr.message}）` : ''}`);
-    }
+  onProgress && onProgress(`正在并行验证 ${candidates.length} 家厂商，最快命中即返回…`);
+  try {
+    const r = await Promise.any(candidates.map((p) => testProviderKey(p.id, key, 7000)));
+    onProgress && onProgress(`✓ ${r.provider.name} 对话验证通过`);
+    return r;
+  } catch (e) {
+    const errs = (e && e.errors) || [];
+    lastErr = errs.find((x) => x && x.quota) || errs[0] || lastErr;
+    onProgress && onProgress(`✗ 未匹配到厂商${lastErr ? `（最后错误：${lastErr.message}）` : ''}`);
   }
   throw new Error('所有厂商对话验证均未通过' + (lastErr ? `（最后错误：${lastErr.message}）` : ''));
 }

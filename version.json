@@ -1,9 +1,9 @@
 {
-  "version": "6.8",
+  "version": "6.9",
   "type": "recommended",
-  "title": "ThirdHub v6.8",
-  "content": "后端模式全面修复：刷新不掉线、离线自动重连、多设备并发排队；新增公网中继，Chrome 浏览器也能连电脑后端。",
+  "title": "ThirdHub v6.9",
+  "content": "自动识别 Key 提速：全部厂商一次性并行验证，1~3 秒出结果。",
   "downloadUrl": "",
   "releaseDate": "2026-08-23",
-  "releaseNotes": "后端模式修复/公网中继/多设备并发"
+  "releaseNotes": "自动识别Key提速"
 }

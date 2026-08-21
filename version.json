@@ -1,9 +1,9 @@
 {
-  "version": "4.6",
+  "version": "5.4",
   "type": "recommended",
-  "title": "ThirdHub v4.6",
-  "content": "板块第二页签按类型命名：阅读类=书架、视频=片单、音乐=歌单；云存储用量统计覆盖全部云端数据（头像/昵称/设置/书架/历史/收藏/进度），存量已重算；AI抽屉底部搜索栏+加号整条仅在历史会话页签显示。",
-  "downloadUrl": "https://github.com/Smalluniverseheng/ThirdHub-Android/releases/download/v2.2/ThirdHub-Android-v2.2.apk",
-  "releaseDate": "2026-08-20",
-  "releaseNotes": "板块第二页签按类型命名：阅读类=书架、视频=片单、音乐=歌单；云存储用量统计覆盖全部云端数据（头像/昵称/设置/书架/历史/收藏/进度），存量已重算；AI抽屉底部搜索栏+加号整条仅在历史会话页签显示。"
+  "title": "ThirdHub v5.4",
+  "content": "运行模式入口移至加号底部功能行；厂商图标修复（不再图层重叠）；排行榜点击模型先看详情（接口/计费/能力雷达）；检查更新改为云端版本对比（不再误报已是最新）；关于页新增模块介绍与开源致谢；书架桌面端右键可删除/置顶；长按导航栏可调整各端板块顺序。",
+  "downloadUrl": "",
+  "releaseDate": "2026-08-21",
+  "releaseNotes": "运行模式入口修正、图标修复、模型详情页、更新检测修复、关于页扩展、书架右键菜单、导航顺序自定义"
 }

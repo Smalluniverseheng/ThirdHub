@@ -1,6 +1,13 @@
 /* ===== ThirdHub changelog.js — 版本更新日志（发版时在末尾追加） ===== */
 export const CHANGELOG = [
   {
+    version: '6.7',
+    date: '2026-08-23',
+    items: [
+      '紧急修复：AI 对话 / 我的 两个板块打不开的问题（运行模式面板模板字符串转义损坏导致模块语法错误，现恢复正常）',
+    ],
+  },
+  {
     version: '6.6',
     date: '2026-08-23',
     items: [

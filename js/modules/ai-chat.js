@@ -1587,29 +1587,29 @@ async function openRunModePanel(page) {
   openOverlay({
     title: '运行模式',
     build: (body) => {
-      body.innerHTML = \`<div class="set-wrap">
+      body.innerHTML = `<div class="set-wrap">
         <div class="ai-mode-desc" style="line-height:1.9">
           <b>直连模式</b>：请求由当前设备（浏览器）直接发送到模型厂商接口，Key 只在本机。
           <br><b>后端模式</b>：消息发送到你的电脑 / 服务器设备（DeepSeek Harness），可运行 Python / 插件 / MCP / 文件工具；切换到后端时会<b>自动把前端已配置的厂商 Key 同步到设备</b>（加密存储），切换模型时设备同步切换。
         </div>
         <div class="section-title" style="margin-top:14px">后端设备</div>
         <div class="col gap8" data-role="devs">
-          \${devs.length ? devs.map((d) => \`
-            <button class="list-item" style="width:100%" data-dev="\${d.id}">
-              <span class="list-ico">\${icon('cpu')}</span>
+          ${devs.length ? devs.map((d) => `
+            <button class="list-item" style="width:100%" data-dev="${d.id}">
+              <span class="list-ico">${icon('cpu')}</span>
               <div class="grow" style="text-align:left;min-width:0">
-                <div style="font-size:14px;font-weight:600">\${d.name || d.host} <span class="muted" style="font-size:11px">\${getStatus(d.id) === 'online' ? '🟢 在线' : '⚪ 离线'}</span></div>
-                <div class="muted" style="font-size:11.5px">\${d.host}:\${d.port}</div>
+                <div style="font-size:14px;font-weight:600">${d.name || d.host} <span class="muted" style="font-size:11px">${getStatus(d.id) === 'online' ? '🟢 在线' : '⚪ 离线'}</span></div>
+                <div class="muted" style="font-size:11.5px">${d.host}:${d.port}</div>
               </div>
-              <span class="list-arrow">\${selDev === d.id ? '✓' : ''}</span>
-            </button>\`).join('') : '<div class="muted" style="font-size:12.5px">还没有后端设备：电脑端安装运行 ThirdHub-Agent 后会自动发现，或去「后端」板块添加。</div>'}
+              <span class="list-arrow">${selDev === d.id ? '✓' : ''}</span>
+            </button>`).join('') : '<div class="muted" style="font-size:12.5px">还没有后端设备：电脑端安装运行 ThirdHub-Agent 后会自动发现，或去「后端」板块添加。</div>'}
         </div>
         <div data-role="dmodels" style="margin-top:4px"></div>
         <div class="row" style="gap:8px;margin-top:14px">
           <button class="btn btn-primary grow" data-a="backend">切换到后端模式</button>
           <button class="btn grow" data-a="direct">切换到直连模式</button>
         </div>
-      </div>\`;
+      </div>`;
       const dmodelsBox = $('[data-role="dmodels"]', body);
       const refreshModels = (id) => sendToDevice(id, { type: 'config', id: 'lst-' + Date.now(), payload: { action: 'list' } });
       const off = onAgentMessage((msg, did) => {
@@ -1622,11 +1622,11 @@ async function openRunModePanel(page) {
         const act = localMode.on && localMode.deviceId === id ? localMode.modelId : '';
         if (!ms.length) { dmodelsBox.innerHTML = '<div class="muted" style="font-size:12px">设备模型列表（切换后端模式时自动同步 Key 后出现）</div>'; return; }
         dmodelsBox.innerHTML = '<div class="section-title" style="margin:8px 0 6px">设备模型（点击预选）</div>' +
-          ms.map((m) => \`<button class="list-item" style="width:100%" data-m="\${esc(m.id)}">
-            <div class="grow" style="text-align:left;min-width:0"><b style="font-size:13px">\${esc(m.name || m.id)}</b>
-            <span class="muted" style="font-size:11px"> · \${esc(m.modelId || '')}\${m.apiKeyMasked ? ' · key ' + esc(m.apiKeyMasked) : ' · 未配置Key'}</span></div>
-            <span class="list-arrow">\${act === m.id ? '✓' : ''}</span>
-          </button>\`).join('');
+          ms.map((m) => `<button class="list-item" style="width:100%" data-m="${esc(m.id)}">
+            <div class="grow" style="text-align:left;min-width:0"><b style="font-size:13px">${esc(m.name || m.id)}</b>
+            <span class="muted" style="font-size:11px"> · ${esc(m.modelId || '')}${m.apiKeyMasked ? ' · key ' + esc(m.apiKeyMasked) : ' · 未配置Key'}</span></div>
+            <span class="list-arrow">${act === m.id ? '✓' : ''}</span>
+          </button>`).join('');
         $$('[data-m]', dmodelsBox).forEach((b) => b.onclick = () => {
           if (localMode.on && localMode.deviceId === id) { localMode.modelId = b.dataset.m; }
           else { localMode.modelId = b.dataset.m; }

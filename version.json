@@ -1,9 +1,9 @@
 {
-  "version": "6.6",
+  "version": "6.7",
   "type": "recommended",
-  "title": "ThirdHub v6.6",
-  "content": "新增 OpenCode Zen 免费模型厂商（含 Ox Alpha Free 限时免费、置顶展示、隐私分级）；新增第三方中转站通用密钥（多品牌自动识别匹配）。",
+  "title": "ThirdHub v6.7",
+  "content": "修复 AI 对话 / 我的 板块打不开的问题；OpenCode Zen 免费模型、中转密钥等 v6.6 新功能同步上线。",
   "downloadUrl": "",
   "releaseDate": "2026-08-23",
-  "releaseNotes": "OpenCode Zen 免费模型/中转密钥/限时免费管理"
+  "releaseNotes": "修复AI/我的板块打不开/OpenCode Zen免费模型/中转密钥"
 }

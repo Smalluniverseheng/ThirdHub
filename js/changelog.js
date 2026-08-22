@@ -1,6 +1,14 @@
 /* ===== ThirdHub changelog.js — 版本更新日志（发版时在末尾追加） ===== */
 export const CHANGELOG = [
   {
+    version: '7.2',
+    date: '2026-08-24',
+    items: [
+      '模型选择器新增「后端设备（DSH）」分组：直接选设备即切换到后端模式（原独立的运行模式面板移除，连接模式状态保留在抽屉）',
+      '局域网连接修复：Windows 防火墙放行 Agent 端口 9600/9601，手机同一 WiFi 可直接连电脑',
+    ],
+  },
+  {
     version: '7.1',
     date: '2026-08-24',
     items: [

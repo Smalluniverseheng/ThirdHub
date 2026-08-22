@@ -51,10 +51,46 @@ export async function pickModel({ multi = false, selected = [], type = 'chat' } 
     function render(filter = '') {
       kw = filter.trim().toLowerCase();
       listEl.innerHTML = '';
+      /* v7.2：后端设备（DSH）分组 —— 从模型选择器直接选后端 */
+      renderBackend();
       /* v5.8：异步渲染完成后才判断空态，避免空态文案残留在列表顶部 */
       Promise.all(ordered.map((p) => Promise.resolve().then(() => renderVendor(p)))).then(() => {
         if (!listEl.children.length) listEl.innerHTML = '<div class="empty"><div class="empty-title">没有匹配的模型</div></div>';
       });
+    }
+    async function renderBackend() {
+      let devices = [];
+      try {
+        const { listDevices, getStatus } = await import('../modules/compute.js');
+        devices = listDevices().filter((d) => d.paired || d.auto);
+        const statusOf = (id) => getStatus(id);
+        if (!devices.length) return;
+        const group = document.createElement('div');
+        group.className = 'ms-group open';
+        group.innerHTML = `
+          <button class="ms-vendor">
+            <span class="ms-vico">${vendorIcon('cpu')}</span>
+            <span class="ms-vname ellipsis">🖥️ 后端设备（DSH）</span>
+            <span class="ms-vcount">${devices.length}</span>
+            <span class="ms-chev">${icon('arrowR')}</span>
+          </button>
+          <div class="ms-items"></div>`;
+        const itemsEl = group.querySelector('.ms-items');
+        group.querySelector('.ms-vendor').onclick = () => { const open = itemsEl.hidden; itemsEl.hidden = !open; group.classList.toggle('open', open); };
+        devices.forEach((d) => {
+          const st = statusOf(d.id);
+          const item = document.createElement('button');
+          item.className = 'ms-item' + (st === 'online' ? '' : ' dim');
+          item.innerHTML = `<span class="ellipsis">🖥️ ${esc(d.name || d.host)}${st === 'online' ? '<span class="tag tag-green" style="font-size:10px">在线</span>' : '<span class="tag tag-gray" style="font-size:10px">离线 · 自动重连</span>'}</span>`;
+          item.onclick = () => {
+            if (st !== 'online') toast('设备离线，连接后自动生效', 'ok');
+            settle({ providerId: 'backend', model: d.id });
+            m2.mask.remove();
+          };
+          itemsEl.appendChild(item);
+        });
+        listEl.appendChild(group);
+      } catch (e) {}
     }
     async function renderVendor(p) {
       let entries = modelsOf(p).map((m) => ({

@@ -334,8 +334,7 @@ export async function renderAIChat(page) {
           <span class="ai-drawer-arrow">${icon('arrowR')}</span>
         </button>
         <button class="ai-plus-row" data-a="runmode-row">
-          <div class="ai-plus-row-info"><div class="ai-plus-row-name">运行模式</div><div class="ai-plus-row-sub" id="ai-runmode-sub">直连模式 · 直接对接厂商接口</div></div>
-          <span class="ai-drawer-arrow">${icon('arrowR')}</span>
+          <div class="ai-plus-row-info"><div class="ai-plus-row-name">连接模式</div><div class="ai-plus-row-sub" id="ai-runmode-sub">直连模式 · 直接对接厂商接口</div></div>
         </button>
       </div>
       <input type="file" id="ai-cam-input" accept="image/*" capture="environment" hidden>
@@ -514,10 +513,10 @@ export async function renderAIChat(page) {
     if (!localMode.on || !localMode.deviceId) { sub.textContent = '直连模式 · 直接对接厂商接口'; return; }
     const { listDevices, getStatus } = await import('./compute.js');
     const d = listDevices().find((x) => x.id === localMode.deviceId);
-    sub.textContent = '本地模式 · ' + (d ? (d.name || d.host) : '设备') + (getStatus(localMode.deviceId) === 'online' ? '（在线）' : '（离线）');
+    sub.textContent = '后端模式 · ' + (d ? (d.name || d.host) : '设备') + (getStatus(localMode.deviceId) === 'online' ? '（在线）' : '（离线）');
   };
   const rmRow = $('[data-a="runmode-row"]', page);
-  if (rmRow) rmRow.onclick = () => openRunModePanel(page);
+  if (rmRow) rmRow.onclick = () => { closeDrawer(); pickModelFlow(page); };
   syncRunModeSub();
   on('compute:status', (s) => { if (s && s.status === 'online') flushPendingLocal(); syncRunModeSub(); });
   $('[data-a="voice"]', page).onclick = () => enterVoiceBar(page);
@@ -645,7 +644,24 @@ async function pickModelFlow(page) {
     }
   } else {
     const picked = await pickModel();
-    if (picked) { currentModel = picked; await kvSet('ai:last-model', picked); }
+    if (!picked) return;
+    /* v7.2：从模型选择器直接选后端设备（替代原「运行模式」面板） */
+    if (picked.providerId === 'backend') {
+      localMode = { on: true, deviceId: picked.model, modelId: localMode.modelId || '' };
+      await kvSet('ai:local-mode', localMode).catch(() => {});
+      toast('已切换到后端模式：' + (picked.model || ''), 'ok');
+      try {
+        const { getStatus } = await import('./compute.js');
+        if (getStatus(picked.model) === 'online') {
+          const res = await syncAllProviderKeys(picked.model);
+          if (res.count) toast('已同步 ' + res.count + ' 个厂商 Key 到设备', 'ok');
+          else if (!res.fail && !res.count) toast('前端还没有配置任何厂商 Key', 'err');
+        }
+      } catch (err) {}
+      updateTopbar(page);
+      return;
+    }
+    currentModel = picked; await kvSet('ai:last-model', picked);
   }
   /* v6.5：后端模式下切换模型 → 设备同步联动 */
   if (localMode.on && localMode.deviceId && currentModel) {

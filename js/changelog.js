@@ -1,6 +1,13 @@
 /* ===== ThirdHub changelog.js — 版本更新日志（发版时在末尾追加） ===== */
 export const CHANGELOG = [
   {
+    version: '7.5',
+    date: '2026-08-24',
+    items: [
+      '对话模式新增「后端 Agent」：模式面板一键选后端设备切换（选设备/自动同步 Key），顶部模式显示「后端 Agent」',
+    ],
+  },
+  {
     version: '7.4',
     date: '2026-08-24',
     items: [

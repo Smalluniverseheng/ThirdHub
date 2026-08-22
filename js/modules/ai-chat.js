@@ -79,6 +79,7 @@ const MODES = [
   { id: 'compare', name: '多模型对比', desc: '同一问题多模型并排回答' },
   { id: 'debate',  name: '辩论模式',  desc: '正反双方多轮辩论' },
   { id: 'collab',  name: '协同模式',  desc: '多模型协作修订回答' },
+  { id: 'backend', name: '后端 Agent', desc: '连接电脑 DSH 执行（完整工具/文件/代码）' },
 ];
 const WORKSPACES = [
   { id: 'chat',  name: '聊天', ico: 'robot' },
@@ -600,7 +601,7 @@ function updateTopbar(page) {
     mp.textContent = compareModels.length ? `${compareModels.length} 个模型` : '选择模型';
     mi.innerHTML = icon('users');
   }
-  $('[data-a="mode"] .pill-text', page).textContent = '模式: ' + MODES.find(m => m.id === currentMode).name;
+  $('[data-a="mode"] .pill-text', page).textContent = localMode.on && localMode.deviceId ? '模式: 后端 Agent' : ('模式: ' + MODES.find(m => m.id === currentMode).name);
   $('[data-a="mode"]', page).style.display = inChat ? '' : 'none';
   syncNokeyPill(page);
   // 切换模型后刷新欢迎语（你好，我是 XX 模型）
@@ -662,6 +663,12 @@ async function pickModelFlow(page) {
       return;
     }
     currentModel = picked; await kvSet('ai:last-model', picked);
+    /* v7.2：选普通模型 = 切回直连模式（选后端设备才是后端模式） */
+    if (localMode.on) {
+      localMode = { on: false, deviceId: null, modelId: '' };
+      await kvSet('ai:local-mode', localMode).catch(() => {});
+      toast('已切换到直连模式', 'ok');
+    }
   }
   /* v6.5：后端模式下切换模型 → 设备同步联动 */
   if (localMode.on && localMode.deviceId && currentModel) {
@@ -673,8 +680,30 @@ async function pickModelFlow(page) {
 }
 
 async function pickModeFlow(page) {
-  const v = await actionSheet('对话模式', MODES.map((m) => ({ label: `${m.name} · ${m.desc}`, value: m.id, icon: m.id === currentMode ? 'check' : undefined })));
+  const v = await actionSheet('对话模式', MODES.map((m) => ({ label: `${m.name} · ${m.desc}`, value: m.id, icon: (m.id === 'backend' && localMode.on) || m.id === currentMode ? 'check' : undefined })));
   if (!v) return;
+  /* v7.4：后端 Agent 模式 = 切换后端设备（不改 currentMode，模型选择器也可切） */
+  if (v === 'backend') {
+    if (localMode.on && localMode.deviceId) { toast('已处于后端模式：' + localMode.deviceId, 'ok'); updateTopbar(page); return; }
+    try {
+      const { listDevices, getStatus, connectDevice } = await import('./compute.js');
+      const devs = (listDevices() || []).filter((d) => d.paired || d.auto);
+      if (!devs.length) { toast('还没有后端设备，请到「后端」板块添加', 'err'); return; }
+      const pick = await actionSheet('选择后端设备', devs.map((d) => ({ label: (getStatus(d.id) === 'online' ? '🟢 ' : '⚪ ') + (d.name || d.host), value: d.id, icon: 'cpu' })));
+      if (!pick) return;
+      const dev = devs.find((d) => d.id === pick);
+      if (getStatus(pick) !== 'online' && dev) { const rr = await connectDevice(dev, { silent: true }); if (!rr.ok) { toast('设备连接失败：' + rr.error, 'err'); return; } }
+      localMode = { on: true, deviceId: pick, modelId: localMode.modelId || '' };
+      await kvSet('ai:local-mode', localMode).catch(() => {});
+      try {
+        const res = await syncAllProviderKeys(pick);
+        if (res.count) toast('已切换到后端 Agent：' + (dev ? dev.name : pick) + '（同步 ' + res.count + ' 个厂商 Key）', 'ok');
+        else toast('已切换到后端 Agent：' + (dev ? dev.name : pick), 'ok');
+      } catch (e) { toast('已切换到后端 Agent', 'ok'); }
+    } catch (e) { toast('切换失败：' + e.message, 'err'); }
+    updateTopbar(page);
+    return;
+  }
   currentMode = v;
   await kvSet('ai:last-mode', v);
   if ((v === 'compare' || v === 'collab' || v === 'debate') && compareModels.length < 2) {

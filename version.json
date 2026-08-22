@@ -2,8 +2,8 @@
   "version": "9.1",
   "type": "recommended",
   "title": "ThirdHub v9.1",
-  "content": "修复更新日历重复条目（8.9/8.8 条目去重）。",
+  "content": "修复刷新大图标；插件页刷新；AI 对话 UI 视觉优化。",
   "downloadUrl": "",
   "releaseDate": "2026-08-22",
-  "releaseNotes": "修复更新日历重复条目（8.9/8.8 条"
+  "releaseNotes": "闪屏修复/插件刷新/AI界面优化"
 }

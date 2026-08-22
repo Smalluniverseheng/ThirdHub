@@ -1,9 +1,9 @@
 {
-  "version": "8.4",
+  "version": "8.5",
   "type": "recommended",
-  "title": "ThirdHub v8.4",
-  "content": "DSH 轨迹富渲染：对话气泡、思考块、工具卡片、Markdown 全部可视化。",
+  "title": "ThirdHub v8.5",
+  "content": "社区点赞可取消；后端板块新增醒目电脑面板入口。",
   "downloadUrl": "",
   "releaseDate": "2026-08-23",
-  "releaseNotes": "DSH轨迹富渲染"
+  "releaseNotes": "点赞可取消/电脑面板入口"
 }

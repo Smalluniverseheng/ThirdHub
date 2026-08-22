@@ -107,9 +107,11 @@ export async function renderCommunity(page) {
     });
     $$('[data-a="like"]', scope).forEach((b) => b.onclick = async () => {
       if (!(await needLogin())) return;
-      const n = +b.dataset.likes + 1;
+      /* v8.5：点一下点赞，再点取消 */
+      const liked = b.classList.contains('on');
+      const n = Math.max(0, +b.dataset.likes + (liked ? -1 : 1));
       b.dataset.likes = n;
-      b.classList.add('on');
+      b.classList.toggle('on', !liked);
       $('[data-role="like-n"]', b).textContent = n;
       sb().from('community_posts').update({ likes: n }).eq('id', b.dataset.id).then(() => {});
     });
@@ -261,8 +263,9 @@ export async function renderCommunity(page) {
         $('[data-a="like"]', body).onclick = async () => {
           if (!(await needLogin())) return;
           const b = $('[data-a="like"]', body);
-          const n = +b.dataset.likes + 1;
-          b.dataset.likes = n; b.classList.add('on');
+          const liked = b.classList.contains('on');
+          const n = Math.max(0, +b.dataset.likes + (liked ? -1 : 1));
+          b.dataset.likes = n; b.classList.toggle('on', !liked);
           $('[data-role="like-n"]', b).textContent = n;
           sb().from('community_posts').update({ likes: n }).eq('id', postId).then(() => {});
         };

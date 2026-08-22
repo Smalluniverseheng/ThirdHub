@@ -1,5 +1,5 @@
 /* ===== ThirdHub app.js — 应用入口 / 路由 / 初始化 ===== */
-export const APP_VERSION = '8.4';
+export const APP_VERSION = '8.5';
 window.__TH_CSS_V = APP_VERSION; /* v2.7：CSS 按需加载的版本戳 */
 
 import { $, $$, icon, toast, loadCss } from './ui.js';

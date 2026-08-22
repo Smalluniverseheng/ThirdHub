@@ -375,9 +375,18 @@ export async function renderCompute(page) {
               <span style="font-size:12px">点击右上角 ＋ 添加（输入后端地址与访问密码）</span>
             </div>`}
         </div>
+        <button class="btn btn-primary" data-a="panel" style="width:100%;margin-bottom:10px">🖥️ 电脑面板 · 书源 / 存储 / 搜索</button>
         <button class="cp-add" data-a="add2">＋ 添加设备</button>
       </div>`;
     $$('[data-a="add"], [data-a="add2"]', page).forEach((b) => b.onclick = showAddDialog);
+    /* v8.5：醒目的电脑面板入口（设备在线时显示） */
+    const panelBtn = $('[data-a="panel"]', page);
+    if (panelBtn) panelBtn.onclick = async () => {
+      const on = devices.find((d) => getStatus(d.id) === 'online');
+      if (!on) { toast('请先连接一台后端设备', 'err'); return; }
+      const { renderDshConsole } = await import('./dsh-console.js');
+      renderDshConsole(page, on.id);
+    };
     const discBox = $('[data-role="discover"]', page);
     if (discBox) loadDiscoverBox(discBox);
     $$('[data-a="conn"]', page).forEach((b) => b.onclick = async () => {

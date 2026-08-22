@@ -1,9 +1,9 @@
 {
-  "version": "7.2",
+  "version": "7.3",
   "type": "recommended",
-  "title": "ThirdHub v7.2",
-  "content": "模型选择器直接选后端设备切换后端模式（移除独立运行模式面板）；局域网连接修复（防火墙放行 9600/9601）。",
+  "title": "ThirdHub v7.3",
+  "content": "连接器管理新增「同步到电脑」：书源一键托管到电脑后端，电脑端可管理/搜索。",
   "downloadUrl": "",
   "releaseDate": "2026-08-23",
-  "releaseNotes": "模型选择器选后端/局域网修复"
+  "releaseNotes": "书源同步到电脑"
 }

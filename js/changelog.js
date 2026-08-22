@@ -1,6 +1,13 @@
 /* ===== ThirdHub changelog.js — 版本更新日志（发版时在末尾追加） ===== */
 export const CHANGELOG = [
   {
+    version: '7.3',
+    date: '2026-08-24',
+    items: [
+      '连接器管理新增「同步到电脑」：书源一键托管到电脑后端（DSH 工作台→电脑存储可查看/删除），支持 API 型书源电脑端搜索',
+    ],
+  },
+  {
     version: '7.2',
     date: '2026-08-24',
     items: [

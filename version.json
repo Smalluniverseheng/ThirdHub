@@ -1,9 +1,9 @@
 {
-  "version": "7.5",
+  "version": "7.6",
   "type": "recommended",
-  "title": "ThirdHub v7.5",
-  "content": "对话模式新增「后端 Agent」入口：一键切换后端设备。",
+  "title": "ThirdHub v7.6",
+  "content": "修复更新日历排序：版本号全量重排连续（补 6.0、修 5.7/5.8、去重 6.1）。",
   "downloadUrl": "",
   "releaseDate": "2026-08-23",
-  "releaseNotes": "对话模式新增后端Agent"
+  "releaseNotes": "修复更新日历排序"
 }

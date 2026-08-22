@@ -1,5 +1,5 @@
 /* ThirdHub Service Worker */
-const VERSION = '7.5';
+const VERSION = '7.6';
 const CACHE_NAME = 'thirdhub-v' + VERSION;
 
 const CORE_ASSETS = [

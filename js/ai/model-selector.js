@@ -63,8 +63,21 @@ export async function pickModel({ multi = false, selected = [], type = 'chat', o
     async function renderBackend() {
       let devices = [];
       try {
-        const { listDevices, getStatus } = await import('../modules/compute.js');
+        const { listDevices, getStatus, discoverCloudDevices, connectDevice } = await import('../modules/compute.js');
         devices = listDevices().filter((d) => d.paired || d.auto);
+        /* v8.2：合并云端设备（手机新浏览器本地无记录也能看到电脑） */
+        try {
+          const cloud = await discoverCloudDevices();
+          for (const cd of cloud) {
+            if (!devices.some((d) => d.id === cd.device_id)) {
+              const ip = (cd.lan_ips && cd.lan_ips[0]) || '';
+              devices.push({ id: cd.device_id, name: cd.name || cd.device_id, host: ip || '0.0.0.0', port: 9600, password: '', paired: true, auto: true, relay: cd.relay || '' });
+            } else {
+              const ex = devices.find((d) => d.id === cd.device_id);
+              if (!ex.relay && cd.relay) ex.relay = cd.relay;
+            }
+          }
+        } catch (e) {}
         const statusOf = (id) => getStatus(id);
         if (!devices.length) return;
         const group = document.createElement('div');
@@ -84,8 +97,11 @@ export async function pickModel({ multi = false, selected = [], type = 'chat', o
           const item = document.createElement('button');
           item.className = 'ms-item' + (st === 'online' ? '' : ' dim');
           item.innerHTML = `<span class="ellipsis">🖥️ ${esc(d.name || d.host)}${st === 'online' ? '<span class="tag tag-green" style="font-size:10px">在线</span>' : '<span class="tag tag-gray" style="font-size:10px">离线 · 自动重连</span>'}</span>`;
-          item.onclick = () => {
-            if (st !== 'online') toast('设备离线，连接后自动生效', 'ok');
+          item.onclick = async () => {
+            if (st !== 'online' && d.host) {
+              toast('正在连接设备…');
+              try { const rr = await connectDevice(d, { silent: true }); if (!rr.ok) toast(rr.error || '连接失败', 'err'); } catch (e) {}
+            }
             settle({ providerId: 'backend', model: d.id });
             m2.mask.remove();
           };

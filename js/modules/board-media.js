@@ -156,6 +156,30 @@ export async function renderMediaBoard(page, type) {
       const it = items.find((x) => x.id === b.dataset.shelf);
       if (it) openDetail({ sourceId: it.sourceId, bookUrl: it.bookUrl, seed: it });
     });
+    /* v8.2：长按历史/收藏条目 → 删除（标记 deletedAt，进入回收站） */
+    if (curSub === 'history' || curSub === 'fav') {
+      $$('[data-shelf]', scope).forEach((b) => {
+        let timer = null;
+        b.addEventListener('touchstart', () => { timer = setTimeout(() => { timer = null; lpDelete(b); }, 600); }, { passive: true });
+        b.addEventListener('touchend', () => { if (timer) clearTimeout(timer); });
+        b.addEventListener('touchmove', () => { if (timer) clearTimeout(timer); });
+        b.addEventListener('contextmenu', (ev) => { ev.preventDefault(); lpDelete(b); });
+        async function lpDelete(btn) {
+          const it = items.find((x) => x.id === btn.dataset.shelf);
+          if (!it) return;
+          const { actionSheet } = await import('../ui.js');
+          const v = await actionSheet(esc(it.title || '条目'), [
+            { label: '删除（移入回收站）', value: 'del', icon: 'trash', danger: true },
+          ]);
+          if (v !== 'del') return;
+          const storeName = curSub === 'history' ? 'history' : 'favorites';
+          it.deletedAt = Date.now();
+          await db.put(storeName, it);
+          toast('已移入回收站', 'ok');
+          renderHome();
+        }
+      });
+    }
   }
 
   /* 发现页：按连接器细分切换，选中某个源就加载它的推荐内容 */
@@ -251,7 +275,7 @@ export async function renderMediaBoard(page, type) {
 
     if (curSub === 'history' || curSub === 'fav') {
       const storeName = curSub === 'history' ? 'history' : 'favorites';
-      const items = (await db.all(storeName)).filter((x) => TYPES.includes(x.type))
+      const items = (await db.all(storeName)).filter((x) => TYPES.includes(x.type) && !x.deletedAt)
         .sort((a, b) => (b.lastAt || b.addedAt || 0) - (a.lastAt || a.addedAt || 0));
       if (!items.length) {
         subBody.innerHTML = `<div class="empty" style="margin-top:44px"><div class="empty-ico">${icon(curSub === 'history' ? 'history' : 'heart')}</div><div class="empty-title">${curSub === 'history' ? '暂无阅读历史' : '暂无收藏'}</div></div>`;
@@ -390,6 +414,22 @@ export async function renderMediaBoard(page, type) {
     };
     try {
       await searchAll(kw, { types: isRead ? [...selTypes] : TYPES, page, only: searchScope ? searchScope.id : null, onProgress, signal: ctrl.signal });
+    } catch (e) {}
+    /* v8.2：电脑后端书源搜索（API 型书源由电脑执行，结果合并进列表） */
+    try {
+      const { listDevices, getStatus, backendCall } = await import('./compute.js');
+      const dev = (listDevices() || []).find((d) => getStatus(d.id) === 'online');
+      if (dev) {
+        const srcs = await backendCall(dev.id, 'sources.list');
+        for (const s of (srcs.sources || [])) {
+          if (!s.searchUrl) continue;
+          if (token !== searchState.token) return;
+          const r = await backendCall(dev.id, 'search', { kw, type: s.type || type, sourceId: s.id });
+          if (r.ok && r.items && r.items.length) {
+            onProgress(null, r.items.map((it) => ({ sourceId: s.id, bookUrl: it.url || '', title: it.title || '', author: it.author || '', coverUrl: it.cover || '', type: s.type || type })));
+          }
+        }
+      }
     } catch (e) {}
     if (token !== searchState.token) return;
     searchState.page = page;

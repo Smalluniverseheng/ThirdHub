@@ -1,9 +1,9 @@
 {
-  "version": "8.1",
+  "version": "8.2",
   "type": "recommended",
-  "title": "ThirdHub v8.1",
-  "content": "修复落地页模型跑马灯显示 [object Object]。",
+  "title": "ThirdHub v8.2",
+  "content": "历史版本顺序修复；云端设备自动出现；阅读搜索走后端；阅读历史长按删除进回收站。",
   "downloadUrl": "",
   "releaseDate": "2026-08-23",
-  "releaseNotes": "修复落地页模型显示"
+  "releaseNotes": "云端设备直连/搜索走后端/历史删除"
 }

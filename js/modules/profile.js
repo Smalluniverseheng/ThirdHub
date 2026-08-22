@@ -936,7 +936,7 @@ function showAvatarPicker(body, u) {
 
   /* ================= 历史版本（时间线，仅最新版展开） ================= */
   function showChangelog() {
-    const list = CHANGELOG.slice().reverse();
+    const list = CHANGELOG; /* v8.2：CHANGELOG 已按最新在前排列，不再倒序 */
     const body = el(`<div class="timeline">${list.map((c, idx) => `
       <div class="tl-item${idx === 0 ? ' major open' : ''}">
         <div class="tl-dot"></div>

@@ -18,7 +18,7 @@ function sb() { return getSupabase(); }
 async function needLogin() {
   const u = await currentUser();
   if (u) return u;
-  toast('请先登录后操作（我的 → 登录）', 'err');
+  toast('社区发言需登录账号（免费会员即可，游客不可发言）', 'err');
   return null;
 }
 function relLabel(r) {
@@ -74,7 +74,7 @@ export async function renderCommunity(page) {
     const mine = u && u.id === p.user_id;
     return `<div class="cm-post" data-post="${p.id}">
       <div class="cm-post-head">
-        <span class="cm-avatar">👤</span>
+        <span class="cm-avatar">${p.avatar ? `<img src="${esc(p.avatar)}" style="width:100%;height:100%;border-radius:50%;object-fit:cover">` : '👤'}</span>
         <div><div class="cm-nick">${esc(p.nickname || '书友')}${mine ? ' · <span class="muted" style="font-size:11px">我</span>' : ''}</div>
         <div class="cm-time">${fmtDate(p.created_at, true)}</div></div>
         <span class="cm-cat">${CAT[p.category] || '分享'}</span>
@@ -163,7 +163,7 @@ export async function renderCommunity(page) {
           const sess = sb().auth.getSession();
           const uid = (await sess).data.session ? (await sess).data.session.user.id : u.id;
           const { error } = await sb().from('community_posts').insert({
-            user_id: uid, nickname: u.nickname || u.email || '书友', category: cat, content,
+            user_id: uid, nickname: u.nickname || u.email || '书友', avatar: u.avatar || '', category: cat, content,
             related_type: related ? 'book' : null,
             related_id: related ? related.id : null,
             related_title: related ? related.title : null,
@@ -189,7 +189,7 @@ export async function renderCommunity(page) {
           <div class="cm-detail-scroll">
             <div class="cm-post" style="box-shadow:none">
               <div class="cm-post-head">
-                <span class="cm-avatar">👤</span>
+                <span class="cm-avatar">" + (post.avatar ? "<img src=\"" + esc(post.avatar) + "\" style=\"width:100%;height:100%;border-radius:50%;object-fit:cover\">" : "👤") + "</span>
                 <div><div class="cm-nick">${esc(post.nickname || '书友')}</div>
                 <div class="cm-time">${fmtDate(post.created_at, true)}</div></div>
                 <span class="cm-cat">${CAT[post.category] || '分享'}</span>
@@ -213,7 +213,7 @@ export async function renderCommunity(page) {
           if (error) return;
           clist.innerHTML = (rows || []).map((c) => `
             <div class="cm-comment">
-              <span class="cm-avatar" style="width:30px;height:30px;font-size:14px">👤</span>
+              <span class="cm-avatar" style="width:30px;height:30px;font-size:14px">" + (c.avatar ? "<img src=\"" + esc(c.avatar) + "\" style=\"width:100%;height:100%;border-radius:50%;object-fit:cover\">" : "👤") + "</span>
               <div class="cm-c-body">
                 <div class="cm-c-nick">${esc(c.nickname || '书友')}</div>
                 <div class="cm-c-text">${esc(c.content)}</div>
@@ -232,7 +232,7 @@ export async function renderCommunity(page) {
                 if (!c) return;
                 const row = document.createElement('div');
                 row.className = 'cm-comment';
-                row.innerHTML = `<span class="cm-avatar" style="width:30px;height:30px;font-size:14px">👤</span><div class="cm-c-body"><div class="cm-c-nick">${esc(c.nickname || '书友')}</div><div class="cm-c-text">${esc(c.content)}</div><div class="cm-c-time">刚刚</div></div>`;
+                row.innerHTML = `<span class="cm-avatar" style="width:30px;height:30px;font-size:14px">${c.avatar ? `<img src="${esc(c.avatar)}" style="width:100%;height:100%;border-radius:50%;object-fit:cover">` : '👤'}</span><div class="cm-c-body"><div class="cm-c-nick">${esc(c.nickname || '书友')}</div><div class="cm-c-content">${esc(c.content)}</div></div>`;
                 clist.appendChild(row);
                 const empty = clist.querySelector('.muted');
                 empty && empty.remove();
@@ -248,7 +248,7 @@ export async function renderCommunity(page) {
           if (!content) return;
           const sess = await sb().auth.getSession();
           const uid = sess.data.session ? sess.data.session.user.id : me.id;
-          const { error } = await sb().from('community_comments').insert({ post_id: postId, user_id: uid, nickname: me.nickname || me.email || '书友', content });
+          const { error } = await sb().from('community_comments').insert({ post_id: postId, user_id: uid, avatar: me.avatar || '', nickname: me.nickname || me.email || '书友', content });
           if (error) return toast('评论失败：' + error.message, 'err');
           $('[data-role="cin"]', body).value = '';
         }

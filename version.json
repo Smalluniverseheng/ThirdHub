@@ -1,9 +1,9 @@
 {
-  "version": "8.5",
+  "version": "8.6",
   "type": "recommended",
-  "title": "ThirdHub v8.5",
-  "content": "社区点赞可取消；后端板块新增醒目电脑面板入口。",
+  "title": "ThirdHub v8.6",
+  "content": "社区显示真实头像；发言需登录会员。",
   "downloadUrl": "",
   "releaseDate": "2026-08-23",
-  "releaseNotes": "点赞可取消/电脑面板入口"
+  "releaseNotes": "社区头像/会员发言门槛"
 }

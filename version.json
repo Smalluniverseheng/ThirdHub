@@ -1,9 +1,9 @@
 {
-  "version": "8.0",
+  "version": "8.1",
   "type": "recommended",
-  "title": "ThirdHub v8.0",
-  "content": "修复 AI/我的模块加载失败；清理重复设置入口。",
+  "title": "ThirdHub v8.1",
+  "content": "修复落地页模型跑马灯显示 [object Object]。",
   "downloadUrl": "",
   "releaseDate": "2026-08-23",
-  "releaseNotes": "修复模块加载失败/清理重复入口"
+  "releaseNotes": "修复落地页模型显示"
 }

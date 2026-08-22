@@ -124,6 +124,16 @@ function tryConnect(dev, timeoutMs) {
 }
 
 /* v6.9：局域网优先 —— 有公网中继时先试局域网(短超时),失败自动切公网,节省中转额度 */
+/* v7.8：从云端补拉公网中继（局域网被浏览器拦截时自动走公网） */
+async function ensureRelayFromCloud(deviceId) {
+  try {
+    const { hasCloud, getSupabase } = await import('../supabase.js');
+    if (!hasCloud()) return null;
+    const { data } = await getSupabase().from('th_devices').select('relay').eq('device_id', deviceId).maybeSingle();
+    return (data && data.relay) || null;
+  } catch (e) { return null; }
+}
+
 export async function connectDevice(dev, { silent = false } = {}) {
   const preferLan = dev.relay && dev.host && !String(dev.relay).startsWith('ws://');
   if (preferLan) {
@@ -131,12 +141,33 @@ export async function connectDevice(dev, { silent = false } = {}) {
     const r1 = await tryConnect(lanDev, 5000);
     if (r1.ok) { if (!silent) toast('已连接 ' + (dev.name || dev.host) + '（局域网）'); return r1; }
     if (!silent) toast('局域网直连失败，自动切换公网中继…');
-    const r2 = await tryConnect(dev, 8000);
+    let r2 = await tryConnect(dev, 8000);
+    if (!r2.ok) {
+      const cloudRelay = await ensureRelayFromCloud(dev.id);
+      if (cloudRelay && cloudRelay !== dev.relay) {
+        const dev2 = Object.assign({}, dev, { relay: cloudRelay });
+        try { saveDevices(listDevices().map((x) => x.id === dev.id ? dev2 : x)); } catch (e) {}
+        r2 = await tryConnect(dev2, 10000);
+      }
+    }
     if (r2.ok && !silent) toast('已通过公网中继连接 ' + (dev.name || dev.host));
     return r2;
   }
   const r = await tryConnect(dev, 8000);
   if (r.ok && !silent) toast('已连接 ' + (dev.name || dev.host));
+  /* v7.8：直连失败 → 云端补拉公网中继重试（Chrome 局域网拦截时自动兜底） */
+  if (!r.ok && (dev.paired || dev.auto)) {
+    const cloudRelay = await ensureRelayFromCloud(dev.id);
+    if (cloudRelay && cloudRelay !== dev.relay) {
+      if (!silent) toast('局域网连接失败，正在尝试公网中继…');
+      const dev2 = Object.assign({}, dev, { relay: cloudRelay });
+      try { saveDevices(listDevices().map((x) => x.id === dev.id ? dev2 : x)); } catch (e) {}
+      const r2 = await tryConnect(dev2, 10000);
+      if (r2.ok && !silent) toast('已通过公网中继连接 ' + (dev.name || dev.host));
+      return r2;
+    }
+  }
+  if (!silent) toast('无法连接：' + (r.error || '后端未启动') + (dev.paired ? '（可点云设备卡片「🌐 公网连接」）' : ''), 'err');
   return r;
 }
 

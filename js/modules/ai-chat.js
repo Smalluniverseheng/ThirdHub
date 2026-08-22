@@ -979,14 +979,46 @@ async function saveSession() {
   session.model = currentModel;
   session.mode = currentMode;
   await db.put('chats', JSON.parse(JSON.stringify(session)));
+  cloudSyncChat(session);
+}
+
+/* v7.8：会话云同步（跨设备） */
+async function cloudSyncChat(s) {
+  try {
+    const { hasCloud, getSupabase } = await import('../supabase.js');
+    const { currentUser } = await import('../auth.js');
+    if (!hasCloud()) return;
+    const u = await currentUser();
+    if (!u || !u.id || !s || !s.id) return;
+    await getSupabase().from('th_chats').upsert({
+      id: s.id, user_id: u.id, title: s.title || '',
+      data: { messages: s.messages || [], model: s.model || null, mode: s.mode || null, createdAt: s.createdAt || Date.now(), pinned: !!s.pinned, agentId: s.agentId || '' },
+      updated_at: new Date().toISOString(),
+    });
+  } catch (e) {}
+}
+async function cloudListChats() {
+  try {
+    const { hasCloud, getSupabase } = await import('../supabase.js');
+    const { currentUser } = await import('../auth.js');
+    if (!hasCloud()) return [];
+    const u = await currentUser();
+    if (!u || !u.id) return [];
+    const { data } = await getSupabase().from('th_chats').select('*').order('updated_at', { ascending: false }).limit(200);
+    return (data || []).map((r) => ({ id: r.id, title: r.title || '', updatedAt: new Date(r.updated_at).getTime(), messages: (r.data && r.data.messages) || [], model: (r.data && r.data.model) || null, mode: (r.data && r.data.mode) || null, pinned: !!(r.data && r.data.pinned), cloud: true }));
+  } catch (e) { return []; }
 }
 
 async function renderDrawerSessions(page, box, kw = '') {
   if (!box) return;
   const key = (kw || '').trim().toLowerCase();
+  const cloudList = await cloudListChats().catch(() => []);
+  const localIds = new Set();
   let list = (await db.all('chats'))
-    .filter((s) => !s.deletedAt) // 回收站中的会话不出现在历史列表
-    .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    .filter((s) => !s.deletedAt); // 回收站中的会话不出现在历史列表
+  list.forEach((s) => localIds.add(s.id));
+  for (const c of cloudList) if (!localIds.has(c.id)) list.push(c);
+  list.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   if (key) list = list.filter(s => (s.title || '').toLowerCase().includes(key) ||
     (s.messages || []).some(m => typeof m.content === 'string' && m.content.toLowerCase().includes(key)));
   box.innerHTML = '';
@@ -1124,6 +1156,7 @@ function buildSessionItem(page, s, rerender) {
         if (!t) { toast('名称不能为空'); return; }
         s.title = t;
         await db.put('chats', JSON.parse(JSON.stringify(s)));
+  cloudSyncChat(s);
         m2.close();
         if (s.id === session.id) updateTopbar(page);
         rerender();
@@ -1135,6 +1168,7 @@ function buildSessionItem(page, s, rerender) {
       s.pinned = !s.pinned;
       if (s.pinned) s.pinnedAt = Date.now();
       await db.put('chats', JSON.parse(JSON.stringify(s)));
+  cloudSyncChat(s);
       toast(s.pinned ? '已置顶' : '已取消置顶', 'ok');
       rerender();
     } else if (v === 'del') {
@@ -1212,7 +1246,8 @@ function showSessionManager(page, preselectId = null) {
         renderList();
       };
       $('[data-a="pin"]', body).onclick = async () => {
-        for (const s of sessions) if (selected.has(s.id) && !s.pinned) { s.pinned = true; s.pinnedAt = Date.now(); await db.put('chats', JSON.parse(JSON.stringify(s))); }
+        for (const s of sessions) if (selected.has(s.id) && !s.pinned) { s.pinned = true; s.pinnedAt = Date.now(); await db.put('chats', JSON.parse(JSON.stringify(s)));
+  cloudSyncChat(s); }
         toast('已置顶所选会话', 'ok');
         selected.clear();
         renderList();
@@ -1671,6 +1706,7 @@ function bindLastUserEdit(page, wrap, idx) {
     }
     session.messages = session.messages.slice(0, idx);
     if (session.messages.length) await db.put('chats', JSON.parse(JSON.stringify(session)));
+  cloudSyncChat(session);
     else await db.del('chats', session.id).catch(() => {});
     renderMessages(page);
     ta.focus();

@@ -1,9 +1,9 @@
 {
-  "version": "7.8",
+  "version": "7.9",
   "type": "recommended",
-  "title": "ThirdHub v7.8",
-  "content": "修复关于页「发现新版本」误报与品牌图标未居中。",
+  "title": "ThirdHub v7.9",
+  "content": "密钥默认加密上传云端（跨设备同步）；连接失败自动切公网中继；历史对话云端同步。",
   "downloadUrl": "",
   "releaseDate": "2026-08-23",
-  "releaseNotes": "修复版本误报/图标居中"
+  "releaseNotes": "密钥云端同步/连接自动兜底/历史对话同步"
 }

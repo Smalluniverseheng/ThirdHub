@@ -1705,8 +1705,7 @@ function bindLastUserEdit(page, wrap, idx) {
       });
     }
     session.messages = session.messages.slice(0, idx);
-    if (session.messages.length) await db.put('chats', JSON.parse(JSON.stringify(session)));
-  cloudSyncChat(session);
+    if (session.messages.length) { await db.put('chats', JSON.parse(JSON.stringify(session))); cloudSyncChat(session); }
     else await db.del('chats', session.id).catch(() => {});
     renderMessages(page);
     ta.focus();

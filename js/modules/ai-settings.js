@@ -220,7 +220,6 @@ export function showAdvSettings(page) {
       add('chart', '用量统计', 'Token 总览 · 活跃热图 · 模型榜单', () => subUsage());
       add('wallet', '模型控制台', '各厂商 API Key 余额与用量查询', () => subConsole());
       add('plug', '工具中心', '内置工具与 MCP 工具的暴露开关', () => subTools());
-      add('globe', '模块代理设置', '各模块独立选择直连 / 自有代理 / 云端代理', async () => { const px = await import('./proxy-settings.js'); px.showProxySettings(); });
       add('cpu', '提供商与模型管理', '密钥 · 模型列表 · 专用模型', () => subProviders(page));
       add('cloud', '中转密钥', '第三方中转站通用密钥（多品牌自动匹配）', () => subRelay());
     },

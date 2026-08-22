@@ -1,6 +1,14 @@
 /* ===== ThirdHub changelog.js — 版本更新日志（发版时在末尾追加） ===== */
 export const CHANGELOG = [
   {
+    version: "8.0",
+    date: "2026-08-24",
+    items: [
+      "修复 AI/我的模块加载失败（会话云同步补丁破坏 if-else 语法）",
+      "清理重复设置入口：移除 AI 更多设置里与「我的 → 模块代理设置」重复的代理入口",
+    ],
+  },
+  {
     version: "7.9",
     date: "2026-08-24",
     items: [

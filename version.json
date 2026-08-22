@@ -1,9 +1,9 @@
 {
-  "version": "7.9",
+  "version": "8.0",
   "type": "recommended",
-  "title": "ThirdHub v7.9",
-  "content": "密钥默认加密上传云端（跨设备同步）；连接失败自动切公网中继；历史对话云端同步。",
+  "title": "ThirdHub v8.0",
+  "content": "修复 AI/我的模块加载失败；清理重复设置入口。",
   "downloadUrl": "",
   "releaseDate": "2026-08-23",
-  "releaseNotes": "密钥云端同步/连接自动兜底/历史对话同步"
+  "releaseNotes": "修复模块加载失败/清理重复入口"
 }

@@ -587,7 +587,7 @@ function showAvatarPicker(body, u) {
           const lv = levelById(u ? u.level : 'guest');
           body.innerHTML = `
             <div style="text-align:center;padding:14px 0 6px">
-              <img src="icons/launcher.png" style="width:64px;height:64px;border-radius:18px;box-shadow:var(--shadow-card)">
+              <img src="icons/launcher.png" style="width:64px;height:64px;border-radius:18px;box-shadow:var(--shadow-card);display:block;margin:0 auto">
               <div style="font-size:18px;font-weight:800;margin-top:10px">第三方科技 · ThirdHub</div>
               <div class="muted">v${APP_VERSION} · MIT License</div>
               <div class="muted" style="max-width:320px;margin:8px auto 0;line-height:1.8">全平台智能聚合平台。软件不预置任何内容源，所有内容接入能力由用户自行导入配置后启用。</div>
@@ -691,10 +691,10 @@ function showAvatarPicker(body, u) {
               const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
               if (r.ok) {
                 const vj = await r.json();
-                if (vj && vj.version && vj.version !== '${APP_VERSION}') {
+                if (vj && vj.version && vj.version !== APP_VERSION) {
                   cv.innerHTML = '发现新版本 v' + esc(vj.version) + '！点击查看更新';
                   cv.style.color = 'var(--primary)';
-                } else cv.textContent = '当前已是最新版本 v${APP_VERSION}';
+                } else cv.textContent = '当前已是最新版本 v' + APP_VERSION;
               }
             } catch (e) {}
           })();

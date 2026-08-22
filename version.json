@@ -1,9 +1,9 @@
 {
-  "version": "7.7",
+  "version": "7.8",
   "type": "recommended",
-  "title": "ThirdHub v7.7",
-  "content": "后端模式切模型自动同步后端；对话模型栏只显已配置；修复 OpenCode 模型显示乱码。",
+  "title": "ThirdHub v7.8",
+  "content": "修复关于页「发现新版本」误报与品牌图标未居中。",
   "downloadUrl": "",
   "releaseDate": "2026-08-23",
-  "releaseNotes": "后端切模型同步/模型栏过滤/OpenCode乱码修复"
+  "releaseNotes": "修复版本误报/图标居中"
 }

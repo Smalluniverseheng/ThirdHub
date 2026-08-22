@@ -1,9 +1,9 @@
 {
-  "version": "8.7",
+  "version": "8.8",
   "type": "recommended",
-  "title": "ThirdHub v8.7",
-  "content": "断联自动重连；DSH 历史会话可续聊；空白会话过滤；轨迹渲染补全。",
+  "title": "ThirdHub v8.8",
+  "content": "发布流水线（bump→语法检查→部署→回归→推送一条命令）。",
   "downloadUrl": "",
-  "releaseDate": "2026-08-23",
-  "releaseNotes": "断联自动重连/DSH会话续聊/轨迹补全"
+  "releaseDate": "2026-08-22",
+  "releaseNotes": "发布流水线（bump→语法检查→部署→回"
 }

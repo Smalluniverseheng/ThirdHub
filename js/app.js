@@ -1,5 +1,5 @@
 /* ===== ThirdHub app.js — 应用入口 / 路由 / 初始化 ===== */
-export const APP_VERSION = '9.1';;;;;;;;
+export const APP_VERSION = '9.2';;;;;;;;
 window.__TH_CSS_V = APP_VERSION; /* v2.7：CSS 按需加载的版本戳 */
 
 import { $, $$, icon, toast, loadCss } from './ui.js';
@@ -352,6 +352,7 @@ async function boot() {
     try { const okc = await initCloud(); if (!okc) setTimeout(() => initCloud().catch(() => {}), 4000); } catch (e) { console.warn('cloud 初始化失败', e); setTimeout(() => initCloud().catch(() => {}), 4000); }
     try { await initAuth(); } catch (e) { console.warn('auth 初始化失败', e); }
     try { initSync(); } catch (e) { console.warn('sync 初始化失败', e); }
+    try { const { initApprovalWatcher } = await timedImport('./modules/approvals.js'); initApprovalWatcher(); } catch (e) { console.warn('审批联动初始化失败', e); }
     try { const { initSettingsSync } = await timedImport('./modules/settings-sync.js'); await initSettingsSync(); } catch (e) { console.warn('设置同步失败', e); }
     try { const { registerDevice } = await timedImport('./modules/devices.js'); await registerDevice(); } catch (e) {}
     try { const { pullKeysFromCloud } = await timedImport('./modules/keyvault.js'); await pullKeysFromCloud(); } catch (e) {}

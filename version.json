@@ -1,9 +1,9 @@
 {
-  "version": "9.1",
+  "version": "9.2",
   "type": "recommended",
-  "title": "ThirdHub v9.1",
-  "content": "修复刷新大图标；插件页刷新；AI 对话 UI 视觉优化。",
+  "title": "ThirdHub v9.2",
+  "content": "审批联动：电脑 DSH 审批/提问实时推送到手机，一键远程批准；工作台新增审批页。",
   "downloadUrl": "",
-  "releaseDate": "2026-08-22",
-  "releaseNotes": "闪屏修复/插件刷新/AI界面优化"
+  "releaseDate": "2026-08-24",
+  "releaseNotes": "审批联动/远程批准/审批页"
 }

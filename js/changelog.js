@@ -1,6 +1,15 @@
 /* ===== ThirdHub changelog.js — 版本更新日志（发版时在末尾追加） ===== */
 export const CHANGELOG = [
   {
+    version: "9.2",
+    date: "2026-08-24",
+    items: [
+      "审批联动：电脑端 DSH 审批/提问实时推送手机，悬浮卡片一键允许/拒绝/回答",
+      "DSH 工作台新增「审批」标签（待处理列表 + 最近处理记录 + 实时徽标）",
+      "电脑 Agent v0.3.3：订阅 DSH Web 审批事件流，远程批准直达 /api/respond",
+    ],
+  },
+  {
     version: "9.1",
     date: "2026-08-24",
     items: [

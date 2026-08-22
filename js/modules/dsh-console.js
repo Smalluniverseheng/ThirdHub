@@ -1,6 +1,10 @@
 /* ===== ThirdHub js/modules/dsh-console.js — DSH 工作台（v6.9）：通过 Agent 转发 DSH Web API ===== */
 import { $, $$, el, esc, icon, toast } from '../ui.js';
 import { listDevices, getStatus, dshCall, dshGet, backendCall } from './compute.js';
+import { getApprovalState, onApprovalChange } from './approvals.js';
+
+/* 审批状态快照注入（approvals.js → 本工作台审批页） */
+window.__approvals = getApprovalState;
 
 let _devId = null;
 let _curTab = 'overview';
@@ -18,7 +22,7 @@ async function get(path) {
   return r.data;
 }
 
-function tabName(t) { return { overview: '总览', presets: '模式预设', tasks: '任务看板', sessions: '会话轨迹', plugins: '插件', models: '模型', settings: '设置', storage: '电脑存储' }[t] || t; }
+function tabName(t) { return { overview: '总览', presets: '模式预设', tasks: '任务看板', sessions: '会话轨迹', plugins: '插件', models: '模型', settings: '设置', storage: '电脑存储', approvals: '审批' }[t] || t; }
 
 function shell(page) {
   const dev = (listDevices() || []).find((d) => d.id === _devId);
@@ -32,15 +36,24 @@ function shell(page) {
     </div>
     <div class=\"muted\" style=\"padding:0 16px 10px;font-size:12px\">${esc((dev && dev.name) || '')} · ${st === 'online' ? '🟢 已连接' : '⚪ 离线'} · 数据来自电脑 DSH Web</div>
     <div class=\"row gap4\" style=\"padding:0 12px 12px;flex-wrap:wrap\">
-      ${['overview', 'presets', 'tasks', 'sessions', 'plugins', 'models', 'settings', 'storage'].map((t) => `<button class=\"btn btn-sm${_curTab === t ? ' btn-primary' : ''}\" data-tab=\"${t}\">${tabName(t)}</button>`).join('')}
+      ${['overview', 'presets', 'tasks', 'sessions', 'plugins', 'models', 'settings', 'storage', 'approvals'].map((t) => `<button class=\"btn btn-sm${_curTab === t ? ' btn-primary' : ''}\" data-tab=\"${t}\">${tabName(t)}${t === 'approvals' ? '<span class=\"apr-badge\" style=\"display:none;margin-left:5px\"></span>' : ''}</button>`).join('')}
     </div>
     <div data-role=\"content\" style=\"padding:0 16px 40px\"></div>
   `;
   $('[data-a=\"back\"]', page).onclick = async () => { const m = await import('./compute.js'); m.renderCompute(page); };
   $('[data-a=\"refresh\"]', page).onclick = () => render();
   $$('[data-tab]', page).forEach((b) => b.onclick = () => { _curTab = b.dataset.tab; render(); });
-  function render() { renderTab($('[data-role=\"content\"]', page)); }
+  function render() { renderTab($('[data-role=\"content\"]', page)); refreshAprBadges(); }
   render();
+}
+
+/* 审批标签徽标刷新（v9.2） */
+function refreshAprBadges() {
+  const n = getApprovalState().pending.length;
+  document.querySelectorAll('[data-tab=\"approvals\"] .apr-badge').forEach((b) => {
+    b.textContent = n > 0 ? n : '';
+    b.style.display = n > 0 ? 'inline-block' : 'none';
+  });
 }
 
 async function renderTab(box) {
@@ -54,6 +67,7 @@ async function renderTab(box) {
     else if (_curTab === 'models') await renderModels(box);
     else if (_curTab === 'settings') await renderSettings(box);
     else if (_curTab === 'storage') await renderStorage(box);
+    else if (_curTab === 'approvals') renderApprovals(box);
   } catch (e) {
     box.innerHTML = '<div class="empty"><div class="empty-title">加载失败</div><div class="muted" style="font-size:12px;margin-top:6px">' + esc(e.message || String(e)) + '</div></div>';
   }
@@ -246,7 +260,37 @@ async function renderSettings(box) {
     '<div class="muted" style="font-size:12px;margin-top:10px">设置修改（settings.update）在后续版本开放；当前可在电脑 DSH Web 中修改。</div>';
 }
 
+/* ---------- 审批（v9.2：实时卡片 + 最近处理记录） ---------- */
+function renderApprovals(box) {
+  const m = window.__approvals; // 由 approvals.js 注入的状态快照
+  const st = m ? m() : { pending: [], recent: [] };
+  if (!m) {
+    box.innerHTML = '<div class="empty"><div class="empty-title">审批联动未启动</div><div class="muted" style="font-size:12px;margin-top:6px">请确认前端已加载 approvals 模块（v9.2+）</div></div>';
+    return;
+  }
+  const pendHtml = st.pending.length ? st.pending.map((p) => {
+    const f = p.frame;
+    if (f.type === 'question/requested') {
+      return '<div class="card" style="padding:12px;margin-top:10px;border-left:3px solid #3b5bfd"><div class="row"><b>💬 电脑端提问</b><div class="spacer"></div><span class="tag">待回答</span></div><div class="muted" style="font-size:12px;margin-top:6px">' + esc((f.questions || []).map((q) => q.question).join('；')) + '</div></div>';
+    }
+    return '<div class="card" style="padding:12px;margin-top:10px;border-left:3px solid #ff9f43"><div class="row"><b>🔐 权限审批</b><div class="spacer"></div><span class="tag tag-orange">待审批</span></div><div class="muted" style="font-size:12px;margin-top:6px">工具：' + esc(f.toolName || '未知') + (f.reason ? '；' + esc(f.reason) : '') + '</div><div class="muted" style="font-size:11px;margin-top:4px">弹出悬浮卡片即可操作</div></div>';
+  }).join('') : '<div class="empty" style="margin-top:20px"><div class="empty-title">暂无待处理审批</div><div class="muted" style="font-size:12px">电脑端有审批/提问时会实时弹出卡片</div></div>';
+  const recHtml = st.recent.length ? '<div class="section-title" style="margin-top:18px">最近处理</div>' + st.recent.slice(0, 20).map((r) => {
+    const f = r.frame || {};
+    const label = f.type === 'question/requested' ? '提问' : (f.toolName || '审批');
+    return '<div class="card" style="padding:10px;margin-top:8px"><div class="row"><span style="font-size:13px">' + esc(label) + '</span><div class="spacer"></div><span class="muted" style="font-size:12px">' + esc(r.outcome || '') + '</span></div></div>';
+  }).join('') : '';
+  box.innerHTML = '<div class="section-title">实时审批</div>' + pendHtml + recHtml +
+    '<div class="muted" style="font-size:12px;margin-top:14px">审批事件经电脑 Agent 实时推送（DSH Web /api/events.mux）；允许一次=本次放行，拒绝=本次禁止。</div>';
+}
+
 export async function renderDshConsole(page, devId) {
   _devId = devId;
   shell(page);
+  /* 审批徽标：待处理数实时显示在「审批」标签上 */
+  if (!window.__aprBadgeOn) {
+    window.__aprBadgeOn = true;
+    onApprovalChange(refreshAprBadges);
+  }
+  refreshAprBadges();
 }

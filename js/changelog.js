@@ -1,6 +1,15 @@
 /* ===== ThirdHub changelog.js — 版本更新日志（发版时在末尾追加） ===== */
 export const CHANGELOG = [
   {
+    version: "7.7",
+    date: "2026-08-24",
+    items: [
+      "后端模式交互优化：后端模式下切换模型自动同步到后端设备（不再退回直连）；退出后端用模式面板选非后端模式；后端 Agent 描述精简",
+      "对话界面模型选择器只显示已配置 Key 的厂商（历史/模型设置界面显示全部）",
+      "修复 OpenCode Zen 等对象模型显示 [object Object]/乱码（模型设置页按 id/名称正确渲染）",
+    ],
+  },
+  {
     version: "7.6",
     date: "2026-08-24",
     items: [

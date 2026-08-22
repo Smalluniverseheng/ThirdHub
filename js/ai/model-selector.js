@@ -6,17 +6,19 @@ import { getApiKey, getSyncedModels, getFreeModel, refreshFreeModels } from './a
 import { kvGet, kvSet } from '../store.js';
 
 /* type: 'chat'（默认）| 'image' | 'video' */
-export async function pickModel({ multi = false, selected = [], type = 'chat' } = {}) {
+export async function pickModel({ multi = false, selected = [], type = 'chat', onlyConfigured = false } = {}) {
   await refreshCustomProviders();
   await refreshFreeModels().catch(() => {});
   const freeModels = await getFreeModel();
   /* v5.5：国内厂商优先（deepseek 置顶、kimi 次之），国外靠后 */
-  const ordered = [
+  let ordered = [
     ...PROVIDERS.filter((p) => p.custom),
     ...sortProviders(PROVIDERS.filter((p) => !p.custom && p.id !== 'custom')),
   ];
   const keys = {};
   for (const p of ordered) keys[p.id] = !!(await getApiKey(p.id));
+  /* v7.6：对话界面只显示已配置 Key 的厂商（历史/设置界面传 false 显示全部） */
+  if (onlyConfigured) ordered = ordered.filter((p) => keys[p.id]);
 
   // 各类型可用模型
   const modelsOf = (p) => {

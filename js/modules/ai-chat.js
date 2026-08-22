@@ -79,7 +79,7 @@ const MODES = [
   { id: 'compare', name: '多模型对比', desc: '同一问题多模型并排回答' },
   { id: 'debate',  name: '辩论模式',  desc: '正反双方多轮辩论' },
   { id: 'collab',  name: '协同模式',  desc: '多模型协作修订回答' },
-  { id: 'backend', name: '后端 Agent', desc: '连接电脑 DSH 执行（完整工具/文件/代码）' },
+  { id: 'backend', name: '后端 Agent', desc: '连接后端 Agent DSH' },
 ];
 const WORKSPACES = [
   { id: 'chat',  name: '聊天', ico: 'robot' },
@@ -644,7 +644,7 @@ async function pickModelFlow(page) {
       await kvSet('ai:compare-models', compareModels);
     }
   } else {
-    const picked = await pickModel();
+    const picked = await pickModel({ onlyConfigured: true });
     if (!picked) return;
     /* v7.2：从模型选择器直接选后端设备（替代原「运行模式」面板） */
     if (picked.providerId === 'backend') {
@@ -663,11 +663,17 @@ async function pickModelFlow(page) {
       return;
     }
     currentModel = picked; await kvSet('ai:last-model', picked);
-    /* v7.2：选普通模型 = 切回直连模式（选后端设备才是后端模式） */
-    if (localMode.on) {
-      localMode = { on: false, deviceId: null, modelId: '' };
+    /* v7.6：后端模式下切换模型 → 后端跟随切换（保持后端模式） */
+    if (localMode.on && localMode.deviceId) {
+      localMode.modelId = picked.providerId + ':' + picked.model;
       await kvSet('ai:local-mode', localMode).catch(() => {});
-      toast('已切换到直连模式', 'ok');
+      try {
+        const { getStatus, sendToDevice } = await import('./compute.js');
+        if (getStatus(localMode.deviceId) === 'online') {
+          sendToDevice(localMode.deviceId, { type: 'config', id: 'md-' + Date.now(), payload: { action: 'save', id: localMode.modelId, name: modelDisplayName(picked.providerId, picked.model), baseUrl: '', modelId: picked.model, apiKey: '', active: true } });
+          toast('后端已同步切换模型：' + picked.model, 'ok');
+        }
+      } catch (err) {}
     }
   }
   /* v6.5：后端模式下切换模型 → 设备同步联动 */
@@ -703,6 +709,12 @@ async function pickModeFlow(page) {
     } catch (e) { toast('切换失败：' + e.message, 'err'); }
     updateTopbar(page);
     return;
+  }
+  /* v7.6：选非后端模式 = 退出后端回到直连 */
+  if (localMode.on) {
+    localMode = { on: false, deviceId: null, modelId: '' };
+    await kvSet('ai:local-mode', localMode).catch(() => {});
+    toast('已切换到直连模式', 'ok');
   }
   currentMode = v;
   await kvSet('ai:last-mode', v);
@@ -2251,7 +2263,9 @@ export async function showModelsPage(page = null, focus = null) {
           const fresh = synced.filter(m => !(p.models || []).includes(m) && !(p.deprecated || []).includes(m) && isChatModel(m));
           const main = [...(p.models || []), ...fresh];
           const imgs = p.image || [], vids = p.video || [], dep = p.deprecated || [];
-          const matchKw = (m) => !kw || m.toLowerCase().includes(kw) || p.name.toLowerCase().includes(kw) || p.id.includes(kw);
+          const mName = (m) => (typeof m === 'string' ? m : (m && (m.nick || m.name || m.id || m.model)) || '');
+          const mId = (m) => (typeof m === 'string' ? m : (m && (m.id || m.model)) || '');
+          const matchKw = (m) => !kw || mName(m).toLowerCase().includes(kw) || mId(m).toLowerCase().includes(kw) || p.name.toLowerCase().includes(kw) || p.id.includes(kw);
           if (kw && !main.some(matchKw) && !imgs.some(matchKw) && !vids.some(matchKw) && !dep.some(matchKw)) continue;
 
           const card = el(`<div class="provider-card ${focus === p.id ? 'open' : ''}">
@@ -2271,11 +2285,11 @@ export async function showModelsPage(page = null, focus = null) {
           const row = (m, extraCls = '', tag = '') => {
             const isDep = extraCls.includes('dep');
             /* v3.6：历史模型置灰且不可选择（厂商已下线/停用） */
-            const r = el(`<div class="model-row ${extraCls}"><span class="ellipsis">${esc(m)}</span>${isDep ? '<span class="tag tag-gray">已停用</span>' : tag}</div>`);
+            const r = el(`<div class="model-row ${extraCls}"><span class="ellipsis">${esc(mName(m))}${mId(m) && mId(m) !== mName(m) ? `<span class="muted" style="font-size:11px;margin-left:6px">${esc(mId(m))}</span>` : ''}</span>${isDep ? '<span class="tag tag-gray">已停用</span>' : tag}</div>`);
             if (isDep) { r.onclick = () => toast('该模型已被厂商停用，请选择上方在营模型', 'err'); return r; }
             r.onclick = async () => {
               if (!(await getApiKey(p.id))) { ref.close(); showAISettings(p.id); return; }
-              currentModel = { providerId: p.id, model: m };
+              currentModel = { providerId: p.id, model: mId(m) };
               await kvSet('ai:last-model', currentModel);
               if (currentMode !== 'single') { currentMode = 'single'; kvSet('ai:last-mode', 'single'); }
               if (page) { setWorkspace(page, 'chat'); }

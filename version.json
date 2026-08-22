@@ -1,9 +1,9 @@
 {
-  "version": "7.6",
+  "version": "7.7",
   "type": "recommended",
-  "title": "ThirdHub v7.6",
-  "content": "修复更新日历排序：版本号全量重排连续（补 6.0、修 5.7/5.8、去重 6.1）。",
+  "title": "ThirdHub v7.7",
+  "content": "后端模式切模型自动同步后端；对话模型栏只显已配置；修复 OpenCode 模型显示乱码。",
   "downloadUrl": "",
   "releaseDate": "2026-08-23",
-  "releaseNotes": "修复更新日历排序"
+  "releaseNotes": "后端切模型同步/模型栏过滤/OpenCode乱码修复"
 }

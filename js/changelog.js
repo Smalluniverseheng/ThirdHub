@@ -1,6 +1,13 @@
 /* ===== ThirdHub changelog.js — 版本更新日志（发版时在末尾追加） ===== */
 export const CHANGELOG = [
   {
+    version: '7.4',
+    date: '2026-08-24',
+    items: [
+      '修复云设备页 400 错误：多设备列表迁移到独立表 th_user_devices（原 th_devices 已被后端设备注册占用）',
+    ],
+  },
+  {
     version: '7.3',
     date: '2026-08-24',
     items: [

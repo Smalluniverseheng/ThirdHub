@@ -1,9 +1,9 @@
 {
-  "version": "7.3",
+  "version": "7.4",
   "type": "recommended",
-  "title": "ThirdHub v7.3",
-  "content": "连接器管理新增「同步到电脑」：书源一键托管到电脑后端，电脑端可管理/搜索。",
+  "title": "ThirdHub v7.4",
+  "content": "修复云设备页 400 错误（多设备列表迁移到独立表）。",
   "downloadUrl": "",
   "releaseDate": "2026-08-23",
-  "releaseNotes": "书源同步到电脑"
+  "releaseNotes": "修复云设备页400错误"
 }

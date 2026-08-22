@@ -32,7 +32,7 @@ function shell(page) {
     </div>
     <div class=\"muted\" style=\"padding:0 16px 10px;font-size:12px\">${esc((dev && dev.name) || '')} · ${st === 'online' ? '🟢 已连接' : '⚪ 离线'} · 数据来自电脑 DSH Web</div>
     <div class=\"row gap4\" style=\"padding:0 12px 12px;flex-wrap:wrap\">
-      ${['overview', 'presets', 'tasks', 'sessions', 'plugins', 'models', 'settings'].map((t) => `<button class=\"btn btn-sm${_curTab === t ? ' btn-primary' : ''}\" data-tab=\"${t}\">${tabName(t)}</button>`).join('')}
+      ${['overview', 'presets', 'tasks', 'sessions', 'plugins', 'models', 'settings', 'storage'].map((t) => `<button class=\"btn btn-sm${_curTab === t ? ' btn-primary' : ''}\" data-tab=\"${t}\">${tabName(t)}</button>`).join('')}
     </div>
     <div data-role=\"content\" style=\"padding:0 16px 40px\"></div>
   `;
@@ -53,6 +53,7 @@ async function renderTab(box) {
     else if (_curTab === 'plugins') await renderPlugins(box);
     else if (_curTab === 'models') await renderModels(box);
     else if (_curTab === 'settings') await renderSettings(box);
+    else if (_curTab === 'storage') await renderStorage(box);
   } catch (e) {
     box.innerHTML = '<div class="empty"><div class="empty-title">加载失败</div><div class="muted" style="font-size:12px;margin-top:6px">' + esc(e.message || String(e)) + '</div></div>';
   }
@@ -140,24 +141,34 @@ async function renderSessions(box) {
 async function showTrajectory(box, sid) {
   try {
     const { events } = await call('/api/session.history', { sessionId: sid });
-    const lines = [];
+    const blocks = [];
+    let cur = null;
+    const newA = () => { cur = { type: 'assistant', text: '', reasoning: '', tools: [] }; blocks.push(cur); return cur; };
     for (const e of events || []) {
-      const ev = e.event || e;
-      const t = ev.type || '';
-      const d = ev.data || {};
-      if (t === 'turn/start') lines.push('<div class="muted" style="font-size:12px;margin:10px 0 4px">—— 第 ' + (d.turn || '?') + ' 轮 ——</div>');
-      else if (t === 'user/message') { const c = (d.content || [])[0]; lines.push('<div style="padding:8px 10px;background:var(--bg-card);border-radius:10px;margin:4px 0">👤 ' + esc((c && (c.text || c.content)) || '[内容]') + '</div>'); }
-      else if (t === 'assistant/chunk') { const c = d.chunk || {}; if (c.type === 'text-delta' && c.text) { const last = lines[lines.length - 1] || ''; if (last.startsWith('🤖')) lines[lines.length - 1] = last + esc(c.text); else lines.push('🤖 ' + esc(c.text)); } }
-      else if (t === 'tool/call') { const nm = d.tool || d.name || 'tool'; lines.push('<div class="muted" style="font-size:12px;padding:4px 8px">🔧 调用工具：' + esc(String(nm)) + '</div>'); }
-      else if (t === 'tool/result' || t === 'tool/end') { const nm = d.tool || d.name || 'tool'; lines.push('<div class="muted" style="font-size:12px;padding:4px 8px">✅ 工具完成：' + esc(String(nm)) + '</div>'); }
+      const ev = e.event || e; const t = ev.type || ''; const d = ev.data || {};
+      if (t === 'turn/start') blocks.push({ type: 'turn', turn: d.turn || 1 });
+      else if (t === 'user/message') { const c = (d.content || [])[0]; blocks.push({ type: 'user', text: (c && (c.text || c.content)) || '' }); }
+      else if (t === 'assistant/chunk') {
+        const c = d.chunk || {};
+        if (c.type === 'text-delta' && c.text) { if (!cur || cur.type !== 'assistant') newA(); cur.text += c.text; }
+        else if (c.type === 'reasoning-delta' && c.text) { if (!cur || cur.type !== 'assistant') newA(); cur.reasoning += c.text; }
+      }
+      else if (t === 'tool/call' || t === 'tool/start') { if (!cur || cur.type !== 'assistant') newA(); cur.tools.push({ name: String(d.tool || d.name || '工具'), args: String(d.arguments || d.args || ''), result: '' }); }
+      else if (t === 'tool/result' || t === 'tool/end') { const a = blocks[blocks.length - 1]; if (a && a.type === 'assistant' && a.tools.length) a.tools[a.tools.length - 1].result = String(d.result || d.output || ''); }
     }
+    const html = blocks.map((b) => {
+      if (b.type === 'turn') return '<div class="muted" style="font-size:12px;text-align:center;margin:14px 0 6px">— 第 ' + b.turn + ' 轮 —</div>';
+      if (b.type === 'user') return '<div style="display:flex;justify-content:flex-end;margin:8px 0"><div style="max-width:85%;background:var(--primary);color:#fff;border-radius:14px 14px 4px 14px;padding:9px 12px;font-size:14px;line-height:1.6;word-break:break-word">' + esc(b.text) + '</div></div>';
+      const think = b.reasoning ? '<details style="margin:6px 0"><summary style="cursor:pointer;font-size:12px;color:var(--primary)">🤔 深度思考（' + b.reasoning.length + ' 字）</summary><div style="background:var(--bg-card);border-left:3px solid var(--primary);padding:8px 10px;margin-top:4px;font-size:12.5px;line-height:1.7;white-space:pre-wrap;word-break:break-word">' + esc(b.reasoning) + '</div></details>' : '';
+      const tools = b.tools.map((tl) => '<details style="margin:6px 0"><summary style="cursor:pointer;font-size:12.5px">🔧 ' + esc(tl.name) + (tl.args ? '<span class="muted"> · ' + esc(tl.args.slice(0, 50)) + '</span>' : '') + '</summary><div style="background:var(--bg-card);border-radius:8px;padding:8px 10px;margin-top:4px;font-size:12px;line-height:1.6;word-break:break-all"><div class="muted">参数</div>' + esc(tl.args.slice(0, 300)) + (tl.result ? '<div class="muted" style="margin-top:6px">结果</div>' + esc(tl.result.slice(0, 600)) : '') + '</div></details>').join('');
+      return '<div style="margin:8px 0"><div style="font-size:13px;font-weight:600;color:var(--tx-2)">🤖 助手</div>' + think + tools + '<div style="font-size:14px;line-height:1.7;word-break:break-word;white-space:pre-wrap">' + esc(b.text || '') + '</div></div>';
+    }).join('');
     box.innerHTML = '<div class="row"><button class="btn btn-sm" data-a="back2">← 返回会话列表</button></div>' +
       '<div class="section-title" style="margin-top:10px">轨迹：' + esc(sid) + '</div>' +
-      (lines.length ? lines.join('') : '<div class="empty"><div class="empty-title">无轨迹内容</div></div>');
+      '<div style="padding:4px 2px 20px">' + (html || '<div class="empty"><div class="empty-title">无轨迹内容</div></div>') + '</div>';
     $('[data-a=back2]', box).onclick = () => renderSessions(box);
   } catch (e) { box.innerHTML = '<div class="empty"><div class="empty-title">轨迹加载失败</div><div class="muted">' + esc(e.message) + '</div></div>'; }
 }
-
 /* ---------- 插件 ---------- */
 async function renderPlugins(box) {
   const inv = await call('/api/dynamicCordisRunner/inventory');
@@ -184,6 +195,46 @@ async function renderModels(box) {
       <div class=\"muted\" style=\"font-size:11.5px;margin-top:4px\">${esc((p.models || []).map((m) => (typeof m === 'string' ? m : (m.id || m.model || ''))).join(' · ').slice(0, 220))}</div>
     </div>`).join('') + '</div>';
 }
+
+/* ---------- 电脑存储(书源托管 / 电子书 / 搜索执行) ---------- */
+async function renderStorage(box) {
+  const st = await backendCall(_devId, 'storage.get').catch(() => null);
+  const srcs = await backendCall(_devId, 'sources.list').catch(() => null);
+  const dir = (st && st.dir) || '';
+  const books = (st && st.books) || [];
+  const sources = (srcs && srcs.sources) || [];
+  box.innerHTML = '<div class="section-title">存储位置</div>' +
+    '<div class="row gap8"><input class="input" data-f="dir" value="' + esc(dir) + '" placeholder="如 D:\\Books 或 ~/ThirdHub"><button class="btn btn-primary btn-sm" data-a="setdir">设置</button></div>' +
+    '<div class="muted" style="font-size:12px;margin-top:6px">电子书 / 漫画 / 音频文件将保存到这个目录（电脑本地）。</div>' +
+    '<div class="section-title" style="margin-top:18px">电脑上的书源（' + sources.length + '）</div>' +
+    '<div class="col gap6">' +
+      (sources.length ? sources.map((s) => '<div class="list-item" style="width:100%"><div class="grow" style="min-width:0"><div style="font-size:13px;font-weight:600" class="ellipsis">' + esc(s.name || s.id) + '</div><div class="muted" style="font-size:11px">' + esc(s.type || '') + (s.searchUrl ? ' · 支持后端搜索' : '') + '</div></div><span class="list-arrow" data-delsrc="' + esc(s.id) + '" style="color:var(--danger)">×</span></div>').join('') : '<div class="muted" style="font-size:12px">还没有书源。可在「我的 → 连接器管理」导入后同步到电脑。</div>') +
+    '</div>' +
+    '<div class="section-title" style="margin-top:18px">电脑上的电子书（' + books.length + '）</div>' +
+    '<div class="col gap6">' +
+      (books.length ? books.map((b) => '<div class="list-item" style="width:100%"><div class="grow" style="min-width:0"><div style="font-size:13px;font-weight:600" class="ellipsis">' + esc(b.name) + esc(b.ext) + '</div><div class="muted" style="font-size:11px">' + fmtSize(b.size) + ' · ' + new Date(b.ts).toLocaleString() + '</div></div><span class="list-arrow" data-delbook="' + esc(b.id) + '" style="color:var(--danger)">×</span></div>').join('') : '<div class="muted" style="font-size:12px">还没有存储的文件。</div>') +
+    '</div>' +
+    '<div class="section-title" style="margin-top:18px">后端搜索测试</div>' +
+    '<div class="row gap8"><input class="input" data-f="kw" placeholder="输入关键词，用电脑执行书源搜索"><button class="btn btn-primary btn-sm" data-a="gosearch">电脑搜索</button></div>' +
+    '<div data-v="sr"></div>';
+  $('[data-a=setdir]', box).onclick = async () => { const dir2 = $('[data-f=dir]', box).value.trim(); if (!dir2) return toast('请输入目录', 'err'); const r = await backendCall(_devId, 'storage.setDir', { dir: dir2 }); toast(r.ok ? '存储目录已设置：' + r.dir : (r.error || '失败'), r.ok ? 'ok' : 'err'); };
+  $$('[data-delsrc]', box).forEach((b) => b.onclick = async () => { const r = await backendCall(_devId, 'sources.delete', { id: b.dataset.delsrc }); toast(r.ok ? '已删除' : (r.error || '失败'), r.ok ? 'ok' : 'err'); renderStorage(box); });
+  $$('[data-delbook]', box).forEach((b) => b.onclick = async () => { const r = await backendCall(_devId, 'storage.delete', { id: b.dataset.delbook }); toast(r.ok ? '已删除' : (r.error || '失败'), r.ok ? 'ok' : 'err'); renderStorage(box); });
+  $('[data-a=gosearch]', box).onclick = async () => {
+    const kw = $('[data-f=kw]', box).value.trim();
+    if (!kw) return toast('请输入关键词', 'err');
+    const box2 = $('[data-v=sr]', box);
+    box2.innerHTML = '<div class="muted" style="font-size:12px;margin-top:8px">电脑执行中…（需要书源带有 searchUrl 字段）</div>';
+    const out = [];
+    for (const s of sources) {
+      if (!s.searchUrl) continue;
+      const r = await backendCall(_devId, 'search', { kw, type: s.type || 'novel', sourceId: s.id });
+      if (r.ok) out.push.apply(out, (r.items || []).map((it) => Object.assign({}, it, { from: s.name || s.id })));
+    }
+    box2.innerHTML = out.length ? out.slice(0, 30).map((it) => '<div style="padding:6px 8px;border-bottom:1px solid var(--line);font-size:12.5px">' + esc(it.title) + ' <span class="muted">· ' + esc(it.author || '') + ' · ' + esc(it.from) + '</span></div>').join('') : '<div class="muted" style="font-size:12px;margin-top:8px">没有结果（或书源不支持后端执行）</div>';
+  };
+}
+function fmtSize(n) { if (n == null) return '-'; if (n > 1048576) return (n / 1048576).toFixed(1) + 'MB'; if (n > 1024) return (n / 1024).toFixed(1) + 'KB'; return n + 'B'; }
 
 /* ---------- 设置 ---------- */
 async function renderSettings(box) {

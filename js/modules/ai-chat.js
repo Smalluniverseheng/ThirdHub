@@ -1068,14 +1068,30 @@ async function showDshTrajectoryModal(sid) {
     const { dshCall } = await import('./compute.js');
     const r = await dshCall(localMode.deviceId, '/api/session.history', { sessionId: sid });
     const events = (r && r.data && r.data.result && r.data.result.value && r.data.result.value.events) || [];
-    const lines = [];
+    /* v8.4：富渲染 —— 用户气泡 / 助手 Markdown / 思考折叠块 / 工具卡片 */
+    const blocks = [];
+    let cur = null;
+    const newA = () => { cur = { type: 'assistant', text: '', reasoning: '', tools: [] }; blocks.push(cur); return cur; };
     for (const e of events) {
       const ev = e.event || e; const t = ev.type || ''; const d = ev.data || {};
-      if (t === 'user/message') { const c = (d.content || [])[0]; lines.push('<div style="padding:6px 8px">👤 ' + esc((c && (c.text || c.content)) || '[内容]') + '</div>'); }
-      else if (t === 'assistant/chunk') { const c = d.chunk || {}; if (c.type === 'text-delta' && c.text) { const last = lines[lines.length - 1] || ''; if (last.startsWith('🤖')) lines[lines.length - 1] = last + esc(c.text); else lines.push('🤖 ' + esc(c.text)); } }
-      else if (t === 'tool/call') { lines.push('<div class="muted" style="font-size:12px;padding:3px 8px">🔧 ' + esc(String(d.tool || d.name || '工具')) + '</div>'); }
+      if (t === 'turn/start') blocks.push({ type: 'turn', turn: d.turn || (blocks.length ? 1 : 1) });
+      else if (t === 'user/message') { const c = (d.content || [])[0]; blocks.push({ type: 'user', text: (c && (c.text || c.content)) || '' }); }
+      else if (t === 'assistant/chunk') {
+        const c = d.chunk || {};
+        if (c.type === 'text-delta' && c.text) { if (!cur || cur.type !== 'assistant') newA(); cur.text += c.text; }
+        else if (c.type === 'reasoning-delta' && c.text) { if (!cur || cur.type !== 'assistant') newA(); cur.reasoning += c.text; }
+      }
+      else if (t === 'tool/call' || t === 'tool/start') { if (!cur || cur.type !== 'assistant') newA(); cur.tools.push({ name: String(d.tool || d.name || '工具'), args: String(d.arguments || d.args || ''), result: '' }); }
+      else if (t === 'tool/result' || t === 'tool/end') { const a = blocks[blocks.length - 1]; if (a && a.type === 'assistant' && a.tools.length) a.tools[a.tools.length - 1].result = String(d.result || d.output || ''); }
     }
-    openOverlay({ title: 'DSH 轨迹', build: (b) => { b.innerHTML = lines.length ? lines.join('') : '<div class="empty"><div class="empty-title">暂无轨迹内容</div></div>'; } });
+    const html = blocks.map((b) => {
+      if (b.type === 'turn') return '<div class="muted" style="font-size:12px;text-align:center;margin:14px 0 6px">— 第 ' + b.turn + ' 轮 —</div>';
+      if (b.type === 'user') return '<div style="display:flex;justify-content:flex-end;margin:8px 0"><div style="max-width:85%;background:var(--primary);color:#fff;border-radius:14px 14px 4px 14px;padding:9px 12px;font-size:14px;line-height:1.6;word-break:break-word">' + esc(b.text) + '</div></div>';
+      const think = b.reasoning ? '<details class="dsh-think" style="margin:6px 0"><summary style="cursor:pointer;font-size:12px;color:var(--primary)">🤔 深度思考（' + b.reasoning.length + ' 字）</summary><div style="background:var(--bg-card);border-left:3px solid var(--primary);padding:8px 10px;margin-top:4px;font-size:12.5px;line-height:1.7;white-space:pre-wrap;word-break:break-word">' + esc(b.reasoning) + '</div></details>' : '';
+      const tools = b.tools.map((tl) => '<details class="dsh-tool" style="margin:6px 0"><summary style="cursor:pointer;font-size:12.5px">🔧 ' + esc(tl.name) + (tl.args ? '<span class="muted"> · ' + esc(tl.args.slice(0, 50)) + '</span>' : '') + '</summary><div style="background:var(--bg-card);border-radius:8px;padding:8px 10px;margin-top:4px;font-size:12px;line-height:1.6;word-break:break-all"><div class="muted">参数</div>' + esc(tl.args.slice(0, 300)) + (tl.result ? '<div class="muted" style="margin-top:6px">结果</div>' + esc(tl.result.slice(0, 600)) : '') + '</div></details>').join('');
+      return '<div style="margin:8px 0;max-width:92%"><div style="font-size:13px;font-weight:600;color:var(--tx-2)">🤖 助手</div>' + think + tools + '<div class="md-body" style="font-size:14px;line-height:1.7;word-break:break-word">' + renderMarkdown(b.text || '') + '</div></div>';
+    }).join('');
+    openOverlay({ title: 'DSH 轨迹', build: (b) => { b.style.overflowY = 'auto'; b.innerHTML = '<div style="padding:4px 2px 20px">' + (html || '<div class="empty"><div class="empty-title">暂无轨迹内容</div></div>') + '</div>'; } });
   } catch (e) { toast('轨迹加载失败：' + e.message, 'err'); }
 }
 

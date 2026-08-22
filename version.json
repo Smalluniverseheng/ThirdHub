@@ -1,9 +1,9 @@
 {
-  "version": "8.8",
+  "version": "8.9",
   "type": "recommended",
-  "title": "ThirdHub v8.8",
-  "content": "发布流水线（bump→语法检查→部署→回归→推送一条命令）。",
+  "title": "ThirdHub v8.9",
+  "content": "首屏品牌启动闪屏（冷启动不再黑屏）。",
   "downloadUrl": "",
   "releaseDate": "2026-08-22",
-  "releaseNotes": "发布流水线（bump→语法检查→部署→回"
+  "releaseNotes": "首屏品牌启动闪屏（冷启动不再黑屏）"
 }

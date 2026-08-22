@@ -1,6 +1,20 @@
 /* ===== ThirdHub changelog.js — 版本更新日志（发版时在末尾追加） ===== */
 export const CHANGELOG = [
   {
+    version: "8.9",
+    date: "2026-08-22",
+    items: [
+      "首屏品牌启动闪屏（冷启动不再黑屏）",
+    ],
+  },
+  {
+    version: "8.9",
+    date: "2026-08-22",
+    items: [
+      "首屏品牌启动闪屏（冷启动不再黑屏）",
+    ],
+  },
+  {
     version: "8.8",
     date: "2026-08-22",
     items: [

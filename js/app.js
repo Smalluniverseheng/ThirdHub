@@ -1,5 +1,5 @@
 /* ===== ThirdHub app.js — 应用入口 / 路由 / 初始化 ===== */
-export const APP_VERSION = '8.8';;;;;
+export const APP_VERSION = '8.9';;;;;;;
 window.__TH_CSS_V = APP_VERSION; /* v2.7：CSS 按需加载的版本戳 */
 
 import { $, $$, icon, toast, loadCss } from './ui.js';
@@ -343,6 +343,8 @@ async function boot() {
   await applyNavPos();
   const startTab = (location.hash || '').replace('#', '');
   await switchTab(tabs.includes(startTab) || startTab === 'profile' ? startTab : tabs[0]);
+  /* v8.9：首屏渲染完成 → 淡出启动闪屏（不再黑屏） */
+  try { const sp = document.getElementById('boot-splash'); if (sp) { sp.style.opacity = '0'; setTimeout(() => sp.remove(), 450); } } catch (e) {}
 
   /* 首屏之后的后台任务（不阻塞交互；登录态本地有缓存，云端就绪后自动同步） */
   setTimeout(async () => {

@@ -55,7 +55,7 @@ const sh = (cmd, label, timeout = 300000) => { const r = spawnSync(cmd, { shell:
   console.log('  ✓ ' + jsFiles.length + ' 个 JS 全部通过');
   console.log('=== [3. 部署到 Cloudflare] ===');
   if (fs.existsSync(ROOT + '-staging')) fs.rmSync(ROOT + '-staging', { recursive: true, force: true });
-  const rb = spawnSync('robocopy "' + ROOT + '" "' + ROOT + '-staging" /E /XD node_modules .git thirdhub-agent backend supabase data /XF *.cjs *.tgz .deploy-list.txt cloudflared.exe npm.tgz *.log /NFL /NDL /NJH /NJS /NP', { shell: true, cwd: ROOT, encoding: 'utf8' });
+  const rb = spawnSync('robocopy "' + ROOT + '" "' + ROOT + '-staging" /E /XD node_modules .git thirdhub-agent backend supabase data /XF *.cjs *.tgz .deploy-list.txt cloudflared.exe npm.tgz *.log *.exe *.7z *.zip *.rar *.png /NFL /NDL /NJH /NJS /NP', { shell: true, cwd: ROOT, encoding: 'utf8' });
   if (rb.status > 7) fail('robocopy 退出码 ' + rb.status); /* robocopy 1-7 均为成功 */
   const wr = spawnSync('node', [ROOT + '/node_modules/wrangler/bin/wrangler.js', 'pages', 'deploy', ROOT + '-staging', '--project-name', 'thirdhub', '--branch', 'main'], { cwd: ROOT, encoding: 'utf8', timeout: 600000, env: Object.assign({}, process.env, { CLOUDFLARE_API_TOKEN: process.env.CF_TOKEN || '', CLOUDFLARE_ACCOUNT_ID: '43a379d1850a953981f2835a9d5ed683' }) });
   if (wr.status !== 0) fail('wrangler 退出码 ' + wr.status + '\n' + String(wr.stderr || wr.stdout || '').slice(-500));

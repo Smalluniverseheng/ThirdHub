@@ -1,9 +1,9 @@
 {
-  "version": "8.2",
+  "version": "8.3",
   "type": "recommended",
-  "title": "ThirdHub v8.2",
-  "content": "历史版本顺序修复；云端设备自动出现；阅读搜索走后端；阅读历史长按删除进回收站。",
+  "title": "ThirdHub v8.3",
+  "content": "配对/连接全面支持公网中继，手机浏览器拦截局域网也能连电脑。",
   "downloadUrl": "",
   "releaseDate": "2026-08-23",
-  "releaseNotes": "云端设备直连/搜索走后端/历史删除"
+  "releaseNotes": "配对走公网中继"
 }

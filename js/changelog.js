@@ -1,6 +1,13 @@
 /* ===== ThirdHub changelog.js — 版本更新日志（发版时在末尾追加） ===== */
 export const CHANGELOG = [
   {
+    version: "8.3",
+    date: "2026-08-24",
+    items: [
+      "配对走公网中继：手机浏览器拦截局域网时，配对/连接全部自动走云隧道，不再卡在「配对中」",
+    ],
+  },
+  {
     version: "8.2",
     date: "2026-08-24",
     items: [

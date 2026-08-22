@@ -208,7 +208,8 @@ export async function pairDevice(dev, ip, port) {
       exp: new Date(Date.now() + 10 * 60000).toISOString(),
     });
     if (error) return { ok: false, error: '配对令牌创建失败：' + error.message };
-    const url = 'ws://' + ip + ':' + (port || 9600);
+    /* v8.3：配对优先走公网中继（浏览器拦截局域网时也能配对） */
+    const url = (dev && dev.relay) ? String(dev.relay).trim() : ('ws://' + ip + ':' + (port || 9600));
     return await new Promise((resolve) => {
       let ws = null;
       const timer = setTimeout(() => { try { ws && ws.close(); } catch (e) {} resolve({ ok: false, error: '连接设备超时（请确认与设备在同一局域网）' }); }, 9000);
@@ -264,7 +265,7 @@ async function loadDiscoverBox(box) {
     const did = card.dataset.did;
     const ip = card.dataset.ip;
     b.textContent = '配对中…';
-    const r = await pairDevice({ device_id: did, name: '' }, ip, 9600);
+    const r = await pairDevice({ device_id: did, name: '', relay: card.dataset.relay || '' }, ip, 9600);
     if (r.ok) {
       toast('配对成功！设备已添加', 'ok');
       b.textContent = '已配对';
@@ -286,7 +287,7 @@ async function loadDiscoverBox(box) {
     if (!relay) { toast('该设备未提供公网中继', 'err'); return; }
     let entry = listDevices().find((x) => x.id === did);
     if (!entry) {
-      const r = await pairDevice({ device_id: did, name: '' }, card.dataset.ip, 9600);
+      const r = await pairDevice({ device_id: did, name: '', relay: relay }, card.dataset.ip, 9600);
       if (!r.ok) { toast('配对失败：' + r.error, 'err'); return; }
       entry = listDevices().find((x) => x.id === did);
     }
@@ -303,7 +304,7 @@ async function loadDiscoverBox(box) {
     const ip = card.dataset.ip;
     let entry = listDevices().find((x) => x.id === did);
     if (!entry) {
-      const r = await pairDevice({ device_id: did, name: '' }, ip, 9600);
+      const r = await pairDevice({ device_id: did, name: '', relay: card.dataset.relay || '' }, ip, 9600);
       if (!r.ok) { toast('连接失败：' + r.error, 'err'); return; }
       entry = listDevices().find((x) => x.id === did);
     }

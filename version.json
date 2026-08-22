@@ -1,9 +1,9 @@
 {
-  "version": "8.6",
+  "version": "8.7",
   "type": "recommended",
-  "title": "ThirdHub v8.6",
-  "content": "社区显示真实头像；发言需登录会员。",
+  "title": "ThirdHub v8.7",
+  "content": "断联自动重连；DSH 历史会话可续聊；空白会话过滤；轨迹渲染补全。",
   "downloadUrl": "",
   "releaseDate": "2026-08-23",
-  "releaseNotes": "社区头像/会员发言门槛"
+  "releaseNotes": "断联自动重连/DSH会话续聊/轨迹补全"
 }

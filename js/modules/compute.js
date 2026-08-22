@@ -108,6 +108,8 @@ function tryConnect(dev, timeoutMs) {
     ws.onclose = () => {
       c.status = 'offline';
       emit('compute:status', { id: dev.id, status: 'offline' });
+      /* v8.7：意外断开 → 自动重连 */
+      if (dev.auto || dev.paired) scheduleReconnect(dev.id);
     };
   });
   return Promise.race([authResult, timeout]).then((info) => {
@@ -171,6 +173,36 @@ export async function connectDevice(dev, { silent = false } = {}) {
   return r;
 }
 
+
+/* v8.7：断联自动重连（auto/paired 设备，指数退避） */
+const reconn = new Set();
+function scheduleReconnect(devId) {
+  if (reconn.has(devId)) return;
+  reconn.add(devId);
+  let delay = 2000;
+  const attempt = async () => {
+    const d = listDevices().find((x) => x.id === devId);
+    if (!d || !(d.auto || d.paired)) { reconn.delete(devId); return; }
+    if (getStatus(devId) === 'online') { reconn.delete(devId); return; }
+    const r = await connectDevice(d, { silent: true });
+    if (r.ok) { reconn.delete(devId); try { toast('设备已自动重连', 'ok'); } catch (e) {} return; }
+    delay = Math.min(Math.round(delay * 1.6), 15000);
+    setTimeout(attempt, delay);
+  };
+  setTimeout(attempt, delay);
+}
+/* 模块加载后自动连接已配对/自动设备（页面刷新即重连） */
+let __autoConn = false;
+function autoConnectAll() {
+  if (__autoConn) return;
+  __autoConn = true;
+  setTimeout(() => {
+    (listDevices() || []).filter((d) => d.auto || d.paired).forEach((d) => {
+      if (getStatus(d.id) === 'offline') connectDevice(d, { silent: true });
+    });
+  }, 1500);
+}
+autoConnectAll();
 export function disconnectDevice(deviceId) {
   const c = wsPool.get(deviceId);
   if (c && c.ws) { try { c.ws.close(); } catch (e) {} }

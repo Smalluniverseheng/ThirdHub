@@ -1027,14 +1027,28 @@ async function renderDrawerSessions(page, box, kw = '') {
     try {
       const { dshCall } = await import('./compute.js');
       const r = await dshCall(localMode.deviceId, '/api/session.list', {});
-      const items = (r && r.data && r.data.result && r.data.result.value && r.data.result.value.items) || [];
+      const items = ((r && r.data && r.data.result && r.data.result.value && r.data.result.value.items) || []).filter((s) => {
+        /* v8.7：过滤空白/未对话的会话（DSH 新建未使用的不显示） */
+        if (s.blank) return false;
+        const meta = (s.projections && s.projections.values && s.projections.values.sessionListMetadata) || {};
+        if (meta.blank === false && meta.lastPromptAt == null) return false;
+        return true;
+      });
       if (items.length) {
         const head = el(`<div class="ai-drawer-sec" style="padding:8px 4px 6px;display:flex;align-items:center;gap:6px">${icon('cpu')}<span>DSH 会话（电脑）</span><span class="muted" style="font-size:11px">${items.length}</span></div>`);
         box.appendChild(head);
         items.slice(0, 20).forEach((s) => {
           const title = (s.projections && s.projections.values && s.projections.values.title) || s.sessionId;
           const item = el(`<button class="ai-session"><span class="ai-session-ico">${icon('cpu')}</span><span class="ai-session-info"><span class="ai-session-title ellipsis">${esc(title)}</span><span class="ai-session-date">${s.running ? '🟢 运行中 · ' : ''}${esc((s.projections && s.projections.values && s.projections.values.agentPreset) || 'DSH')}</span></span></button>`);
-          item.onclick = async () => showDshTrajectoryModal(s.sessionId);
+          item.onclick = async () => {
+            const { actionSheet } = await import('../ui.js');
+            const v = await actionSheet((s.projections && s.projections.values && s.projections.values.title) || s.sessionId, [
+              { label: '继续对话', value: 'cont', icon: 'chat' },
+              { label: '查看完整轨迹', value: 'traj', icon: 'cpu' },
+            ]);
+            if (v === 'cont') await continueDshSession(s.sessionId);
+            else if (v === 'traj') showDshTrajectoryModal(s.sessionId);
+          };
           box.appendChild(item);
         });
       }
@@ -1063,6 +1077,37 @@ async function renderDrawerSessions(page, box, kw = '') {
 }
 
 /* v7.1：DSH 会话轨迹弹层 */
+/* v8.7：继续 DSH 会话 —— 把电脑上的会话消息加载到对话页，新消息带同一 sessionId 续上下文 */
+async function continueDshSession(sid) {
+  try {
+    const { dshCall } = await import('./compute.js');
+    const r = await dshCall(localMode.deviceId, '/api/session.history', { sessionId: sid });
+    const events = (r && r.data && r.data.result && r.data.result.value && r.data.result.value.events) || [];
+    const messages = [];
+    let lastRole = null;
+    for (const e of events) {
+      const ev = e.event || e; const t = ev.type || ''; const d = ev.data || {};
+      if (t === 'user/message') {
+        const c = (d.content || [])[0];
+        const txt = (c && (c.text || c.content)) || '';
+        if (txt) { messages.push({ role: 'user', content: txt, ts: ev.time || Date.now() }); lastRole = 'user'; }
+      } else if (t === 'assistant/chunk') {
+        const c = d.chunk || {};
+        if (c.type === 'text-delta' && c.text) {
+          if (lastRole === 'assistant' && messages.length) messages[messages.length - 1].content += c.text;
+          else { messages.push({ role: 'assistant', content: c.text, ts: ev.time || Date.now() }); lastRole = 'assistant'; }
+        }
+      }
+    }
+    if (!messages.length) { toast('该会话没有可续聊的消息', 'err'); return; }
+    session = { id: sid, title: sid.slice(0, 24), messages, model: currentModel, mode: currentMode, createdAt: Date.now(), updatedAt: Date.now(), dsh: true };
+    try { await db.put('chats', JSON.parse(JSON.stringify(session))); } catch (e) {}
+    closeDrawer();
+    renderMessages(document.getElementById('page-ai'));
+    toast('已加载 DSH 会话，直接发消息即可续聊', 'ok');
+  } catch (e) { toast('续聊失败：' + e.message, 'err'); }
+}
+
 async function showDshTrajectoryModal(sid) {
   try {
     const { dshCall } = await import('./compute.js');
@@ -1070,11 +1115,14 @@ async function showDshTrajectoryModal(sid) {
     const events = (r && r.data && r.data.result && r.data.result.value && r.data.result.value.events) || [];
     /* v8.4：富渲染 —— 用户气泡 / 助手 Markdown / 思考折叠块 / 工具卡片 */
     const blocks = [];
+    let headInfo = { model: '', preset: '' };
     let cur = null;
     const newA = () => { cur = { type: 'assistant', text: '', reasoning: '', tools: [] }; blocks.push(cur); return cur; };
     for (const e of events) {
       const ev = e.event || e; const t = ev.type || ''; const d = ev.data || {};
-      if (t === 'turn/start') blocks.push({ type: 'turn', turn: d.turn || (blocks.length ? 1 : 1) });
+      if (t === 'turn/start') blocks.push({ type: 'turn', turn: d.turn || (blocks.length ? 1 : 1), time: ev.time || null });
+      else if (t === 'request/context') { if (!headInfo.model) headInfo.model = String(d.model || d.provider || ''); }
+      else if (t === 'permission/preset') { if (!headInfo.preset) headInfo.preset = String(d.preset || ''); }
       else if (t === 'user/message') { const c = (d.content || [])[0]; blocks.push({ type: 'user', text: (c && (c.text || c.content)) || '' }); }
       else if (t === 'assistant/chunk') {
         const c = d.chunk || {};
@@ -1085,13 +1133,14 @@ async function showDshTrajectoryModal(sid) {
       else if (t === 'tool/result' || t === 'tool/end') { const a = blocks[blocks.length - 1]; if (a && a.type === 'assistant' && a.tools.length) a.tools[a.tools.length - 1].result = String(d.result || d.output || ''); }
     }
     const html = blocks.map((b) => {
-      if (b.type === 'turn') return '<div class="muted" style="font-size:12px;text-align:center;margin:14px 0 6px">— 第 ' + b.turn + ' 轮 —</div>';
+      if (b.type === 'turn') return '<div class="muted" style="font-size:12px;text-align:center;margin:14px 0 6px">— 第 ' + b.turn + ' 轮' + (b.time ? ' · ' + new Date(b.time).toLocaleTimeString() : '') + ' —</div>';
       if (b.type === 'user') return '<div style="display:flex;justify-content:flex-end;margin:8px 0"><div style="max-width:85%;background:var(--primary);color:#fff;border-radius:14px 14px 4px 14px;padding:9px 12px;font-size:14px;line-height:1.6;word-break:break-word">' + esc(b.text) + '</div></div>';
       const think = b.reasoning ? '<details class="dsh-think" style="margin:6px 0"><summary style="cursor:pointer;font-size:12px;color:var(--primary)">🤔 深度思考（' + b.reasoning.length + ' 字）</summary><div style="background:var(--bg-card);border-left:3px solid var(--primary);padding:8px 10px;margin-top:4px;font-size:12.5px;line-height:1.7;white-space:pre-wrap;word-break:break-word">' + esc(b.reasoning) + '</div></details>' : '';
-      const tools = b.tools.map((tl) => '<details class="dsh-tool" style="margin:6px 0"><summary style="cursor:pointer;font-size:12.5px">🔧 ' + esc(tl.name) + (tl.args ? '<span class="muted"> · ' + esc(tl.args.slice(0, 50)) + '</span>' : '') + '</summary><div style="background:var(--bg-card);border-radius:8px;padding:8px 10px;margin-top:4px;font-size:12px;line-height:1.6;word-break:break-all"><div class="muted">参数</div>' + esc(tl.args.slice(0, 300)) + (tl.result ? '<div class="muted" style="margin-top:6px">结果</div>' + esc(tl.result.slice(0, 600)) : '') + '</div></details>').join('');
+      const tools = b.tools.map((tl) => '<details class="dsh-tool" style="margin:6px 0"><summary style="cursor:pointer;font-size:12.5px">🔧 ' + esc(tl.name) + (tl.args ? '<span class="muted"> · ' + esc(tl.args.slice(0, 50)) + '</span>' : '') + '</summary><div style="background:var(--bg-card);border-radius:8px;padding:8px 10px;margin-top:4px;font-size:12px;line-height:1.6;word-break:break-all"><div class="muted">参数</div>' + esc(tl.args.slice(0, 800)) + (tl.result ? '<div class="muted" style="margin-top:6px">结果</div>' + esc(tl.result.slice(0, 2000)) : '') + '</div></details>').join('');
       return '<div style="margin:8px 0;max-width:92%"><div style="font-size:13px;font-weight:600;color:var(--tx-2)">🤖 助手</div>' + think + tools + '<div class="md-body" style="font-size:14px;line-height:1.7;word-break:break-word">' + renderMarkdown(b.text || '') + '</div></div>';
     }).join('');
-    openOverlay({ title: 'DSH 轨迹', build: (b) => { b.style.overflowY = 'auto'; b.innerHTML = '<div style="padding:4px 2px 20px">' + (html || '<div class="empty"><div class="empty-title">暂无轨迹内容</div></div>') + '</div>'; } });
+    const headBar = (headInfo.model || headInfo.preset) ? '<div style="display:flex;gap:6px;flex-wrap:wrap;padding:6px 2px 10px">' + (headInfo.model ? '<span class="tag" style="font-size:11px">模型: ' + esc(headInfo.model) + '</span>' : '') + (headInfo.preset ? '<span class="tag" style="font-size:11px">预设: ' + esc(headInfo.preset) + '</span>' : '') + '</div>' : '';
+    openOverlay({ title: 'DSH 轨迹', build: (b) => { b.style.overflowY = 'auto'; b.innerHTML = '<div style="padding:4px 2px 20px">' + headBar + (html || '<div class="empty"><div class="empty-title">暂无轨迹内容</div></div>') + '</div>'; } });
   } catch (e) { toast('轨迹加载失败：' + e.message, 'err'); }
 }
 

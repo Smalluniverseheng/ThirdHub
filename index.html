@@ -11,10 +11,17 @@
 <link rel="icon" href="favicon.ico" sizes="any">
 <link rel="icon" href="icons/icon-192.png" type="image/png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-<link rel="stylesheet" href="css/base.css?v=9.0">
-<link rel="stylesheet" href="css/theme.css?v=9.0">
-<link rel="stylesheet" href="css/layout.css?v=9.0">
-<link rel="stylesheet" href="css/adapt.css?v=9.0">
+<link rel="stylesheet" href="css/base.css?v=9.1">
+<link rel="stylesheet" href="css/theme.css?v=9.1">
+<link rel="stylesheet" href="css/layout.css?v=9.1">
+<link rel="stylesheet" href="css/adapt.css?v=9.1">
+<style>
+  /* v9.1 启动闪屏:限制图标尺寸,淡出过渡(修复刷新时巨大图标) */
+  #boot-splash{position:fixed;inset:0;background:var(--bg,#0f1115);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;transition:opacity .35s ease}
+  #boot-splash .bs-logo{width:96px;height:96px;border-radius:22px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.35)}
+  #boot-splash .bs-logo img{width:100%;height:100%;object-fit:cover;display:block}
+  #boot-splash .bs-name{font-size:15px;font-weight:700;color:#e8eaf0;letter-spacing:.5px}
+</style>
 </head>
 <body data-theme="dark"><div id="boot-splash"><div class="bs-logo"><img src="icons/launcher.png" alt="ThirdHub"></div><div class="bs-name">ThirdHub</div><div class="bs-sub">第三方科技 · 一个入口</div><div class="bs-spin"></div></div>
 
@@ -36,6 +43,6 @@
 <!-- Toast 根节点 -->
 <div id="toast-root"></div>
 
-<script type="module" src="js/app.js?v=9.0"></script>
+<script type="module" src="js/app.js?v=9.1"></script>
 </body>
 </html>

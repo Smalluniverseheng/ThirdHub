@@ -1,7 +1,7 @@
 {
-  "version": "9.0",
+  "version": "9.1",
   "type": "recommended",
-  "title": "ThirdHub v9.0",
+  "title": "ThirdHub v9.1",
   "content": "修复更新日历重复条目（8.9/8.8 条目去重）。",
   "downloadUrl": "",
   "releaseDate": "2026-08-22",

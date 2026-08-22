@@ -174,7 +174,7 @@ async function renderPlugins(box) {
   const inv = await call('/api/dynamicCordisRunner/inventory');
   const plugins = (inv && inv.plugins) || (inv && inv.items) || [];
   if (!plugins.length) { box.innerHTML = '<div class="empty"><div class="empty-title">插件清单为空</div><div class="muted" style="font-size:12px">' + esc(JSON.stringify(inv).slice(0, 200)) + '</div></div>'; return; }
-  box.innerHTML = '<div class="section-title">已加载插件（' + plugins.length + '）</div><div class="col gap6">' +
+  box.innerHTML = '<div class="row"><div class="section-title" style="margin:0">已加载插件（' + plugins.length + '）</div><div class="spacer"></div><button class="btn btn-sm" data-a="prefresh">' + icon('refresh') + ' 刷新</button></div><div class="col gap6" style="margin-top:10px">' +
     plugins.map((p) => `<div class=\"list-item\" style=\"width:100%\">
       <div class=\"grow\" style=\"min-width:0\">
         <div style=\"font-size:13px;font-weight:600\" class=\"ellipsis\">${esc(p.name || p.id || '')} <span class=\"muted\" style=\"font-size:11px\">${esc(p.version || '')}</span></div>
@@ -182,6 +182,7 @@ async function renderPlugins(box) {
       </div>
       <span class=\"tag ${p.enabled === false ? 'tag-gray' : 'tag-green'}\">${p.enabled === false ? '已停用' : '启用'}</span>
     </div>`).join('') + '</div>';
+  $('[data-a=prefresh]', box).onclick = () => renderPlugins(box);
 }
 
 /* ---------- 模型 ---------- */
